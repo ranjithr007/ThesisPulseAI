@@ -113,7 +113,11 @@ BEGIN TRY
             CONSTRAINT [ck_schema_migrations_sequence]
                 CHECK ([migration_sequence] > 0),
             CONSTRAINT [ck_schema_migrations_checksum]
-                CHECK ([script_checksum] NOT LIKE '%[^0-9A-Fa-f]%'),
+                CHECK
+                (
+                    LEN(RTRIM([script_checksum])) = 64
+                    AND [script_checksum] NOT LIKE '%[^0-9A-Fa-f]%'
+                ),
             CONSTRAINT [ck_schema_migrations_environment]
                 CHECK ([environment] IN ('LOCAL', 'DEVELOPMENT', 'TEST', 'PAPER', 'SHADOW', 'RESTRICTED_LIVE', 'LIVE')),
             CONSTRAINT [ck_schema_migrations_duration_ms]
@@ -158,7 +162,11 @@ BEGIN TRY
             CONSTRAINT [ck_migration_runs_sequence]
                 CHECK ([migration_sequence] > 0),
             CONSTRAINT [ck_migration_runs_checksum]
-                CHECK ([script_checksum] NOT LIKE '%[^0-9A-Fa-f]%'),
+                CHECK
+                (
+                    LEN(RTRIM([script_checksum])) = 64
+                    AND [script_checksum] NOT LIKE '%[^0-9A-Fa-f]%'
+                ),
             CONSTRAINT [ck_migration_runs_environment]
                 CHECK ([environment] IN ('LOCAL', 'DEVELOPMENT', 'TEST', 'PAPER', 'SHADOW', 'RESTRICTED_LIVE', 'LIVE')),
             CONSTRAINT [ck_migration_runs_outcome]

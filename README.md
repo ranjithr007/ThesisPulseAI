@@ -28,5 +28,6 @@ Phase 0 — Product and Architecture Baseline.
 See:
 
 - `docs/phase-0/PHASE-0-BASELINE.md` for workstreams and exit gates;
+- `docs/phase-0/PRODUCT-DECISIONS-SUMMARY.md` for the accepted market, timeframe, and instrument rollout scope;
 - `docs/adr/` for versioned architecture decisions;
 - `contracts/` for cross-service schemas.

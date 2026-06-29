@@ -139,7 +139,7 @@ public sealed class MarketDataOrchestrator(
                 operation,
                 result.Received,
                 result.Created + result.Updated,
-                Duplicates: 0,
+                0,
                 result.Skipped);
             return result;
         }

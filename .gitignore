@@ -14,3 +14,10 @@
 /.vs/ThesisPulseAI/FileContentIndex
 /.vs/ThesisPulseAI/FileContentIndex/01972770-7783-47a9-866d-309b28f1ce9e.vsidx
 /.vs/ThesisPulseAI/FileContentIndex/fcc55a93-a661-4d96-887e-c0b41c85879d.vsidx
+/tests/contracts/dotnet/bin/Debug/net8.0
+/tests/contracts/dotnet/obj/Debug/net8.0
+/tests/contracts/dotnet/obj/project.assets.json
+/tests/contracts/dotnet/obj/project.nuget.cache
+/tests/contracts/dotnet/obj/ThesisPulse.ContractTests.csproj.nuget.dgspec.json
+/tests/contracts/dotnet/obj/ThesisPulse.ContractTests.csproj.nuget.g.props
+/tests/contracts/dotnet/obj/ThesisPulse.ContractTests.csproj.nuget.g.targets

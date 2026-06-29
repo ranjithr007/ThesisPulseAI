@@ -8,23 +8,31 @@ public sealed class InMemoryInboxStore : IInboxStore
         _receipts = new();
 
     public Task<bool> TryBeginProcessingAsync(
-        Guid messageId,
+        InboxMessage message,
         string consumer,
-        DateTimeOffset receivedAtUtc,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(message);
         ArgumentException.ThrowIfNullOrWhiteSpace(consumer);
 
+        if (message.ReceivedAtUtc < message.Metadata.OccurredAtUtc)
+        {
+            throw new ArgumentException(
+                "Inbox received time cannot be earlier than the message occurrence time.",
+                nameof(message));
+        }
+
         var receipt = new InboxReceipt(
-            MessageId: messageId,
+            MessageId: message.Metadata.MessageId,
             Consumer: consumer,
             Status: InboxReceiptStatus.Processing,
-            ReceivedAtUtc: receivedAtUtc,
+            ReceivedAtUtc: message.ReceivedAtUtc,
             ProcessedAtUtc: null,
             LastError: null);
 
-        return Task.FromResult(_receipts.TryAdd((messageId, consumer), receipt));
+        return Task.FromResult(
+            _receipts.TryAdd((message.Metadata.MessageId, consumer), receipt));
     }
 
     public Task MarkProcessedAsync(

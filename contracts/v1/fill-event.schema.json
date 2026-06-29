@@ -61,7 +61,13 @@
     "metadata": {"type": "object", "additionalProperties": true}
   },
   "anyOf": [
-    {"required": ["broker_fill_id"]},
-    {"required": ["fill_fingerprint"]}
+    {
+      "required": ["broker_fill_id"],
+      "properties": {"broker_fill_id": {"type": "string", "minLength": 1}}
+    },
+    {
+      "required": ["fill_fingerprint"],
+      "properties": {"fill_fingerprint": {"type": "string", "minLength": 1}}
+    }
   ]
 }

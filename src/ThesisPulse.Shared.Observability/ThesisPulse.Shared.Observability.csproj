@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ThesisPulse.Shared.Observability</RootNamespace>
+    <AssemblyName>ThesisPulse.Shared.Observability</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\ThesisPulse.Shared.Contracts\ThesisPulse.Shared.Contracts.csproj" />
+    <ProjectReference Include="..\ThesisPulse.Shared.Infrastructure\ThesisPulse.Shared.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

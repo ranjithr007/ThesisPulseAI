@@ -13,8 +13,11 @@ This directory is the single migration authority for the shared ThesisPulse AI S
 - Canonical timestamps use UTC `datetime2(7)` columns.
 - Scripts that create filtered indexes declare the required SQL Server session options explicitly.
 - Signals and theses never authorize execution; independent risk decisions and trade plans are mandatory.
-- Approved quantity, risk and protective stops may only become stricter downstream.
-- Losses and failed theses create governed evidence only; they cannot directly mutate live production settings.
+- Approved quantity, risk, price tolerance and protective stops may only become stricter downstream.
+- Execution intent is persisted before broker contact.
+- Unknown post-submission outcomes require reconciliation; blind retries are prohibited.
+- Order and fill events are append-only; current order state is a projection.
+- Broker credentials and access tokens are never stored in operational contracts or payload archives.
 
 ## Structure
 
@@ -51,45 +54,51 @@ Verification: `database/verification/V0002__verify_reference_tables.sql`
 
 ### V0003 — market data, candles and quality state
 
-Creates market sources, ingestion batches, immutable source observations, normalized candle revisions, ingestion cursors and canonical quality assessments.
+Creates market sources, immutable observations, normalized candle revisions, ingestion cursors and quality assessments.
 
 Verification: `database/verification/V0003__verify_market_data_tables.sql`
 
 ### V0004 — intelligence outputs and canonical signals
 
-Creates engine registration and runs, immutable outputs, input/evidence lineage, canonical signals, fusion lineage and append-only signal status events.
+Creates engine registration and runs, immutable outputs, evidence lineage, canonical signals and signal status history.
 
 Verification: `database/verification/V0004__verify_intelligence_and_signal_tables.sql`
 
 ### V0005 — theses and falsification lifecycle
 
-Creates immutable theses, related-signal lineage, normalized evidence, assumptions, scenarios, invalidation definitions/events, status history and governed failure fingerprints.
+Creates immutable theses, related-signal lineage, evidence, assumptions, scenarios, invalidation events and failure fingerprints.
 
 Verification: `database/verification/V0005__verify_thesis_tables.sql`
 
 ### V0006 — risk decisions and trade plans
 
-Creates:
-
-- `risk.risk_policies`
-- `risk.risk_policy_mandatory_rules`
-- `risk.risk_policy_status_events`
-- `risk.active_policy_assignments`
-- `risk.capital_snapshots`
-- `risk.portfolio_snapshots`
-- `risk.portfolio_snapshot_positions`
-- `risk.portfolio_snapshot_exposures`
-- `risk.risk_decisions`
-- `risk.risk_decision_reason_codes`
-- `risk.risk_decision_targets`
-- `risk.risk_decision_limit_checks`
-- `risk.trade_plans`
-- `risk.trade_plan_targets`
-- `risk.trade_plan_status_events`
-
-V0006 preserves immutable policy definitions, active-scope assignment, exact capital and portfolio evidence, requested-versus-approved risk and quantity, every limit check, mandatory stop protection and the maximum execution envelope. Hard-limit policy definitions must permit risk-reducing exits.
+Creates immutable risk policies, active assignments, capital and portfolio snapshots, deterministic decisions, limit evidence and trade plans.
 
 Verification: `database/verification/V0006__verify_risk_and_trade_plan_tables.sql`
+
+### V0007 — execution, orders, fills and reconciliation
+
+Creates:
+
+- `broker.broker_accounts`
+- `execution.order_transition_policies`
+- `execution.order_transition_rules`
+- `execution.execution_commands`
+- `execution.execution_command_events`
+- `execution.execution_command_states`
+- `execution.orders`
+- `execution.order_events`
+- `execution.order_event_quarantines`
+- `execution.fills`
+- `broker.broker_requests`
+- `execution.reconciliation_runs`
+- `execution.reconciliation_observations`
+- `execution.reconciliation_discrepancies`
+- `execution.reconciliation_resolutions`
+
+V0007 enforces environment/account-scoped command idempotency, unique client and broker identities, command-type field rules, optimistic order versions, append-only order events, broker-sequence evidence, idempotent fill identities, unknown-outcome reconciliation and exit-safe discrepancy handling.
+
+Verification: `database/verification/V0007__verify_execution_and_reconciliation_tables.sql`
 
 ## LocalDB execution
 
@@ -104,104 +113,46 @@ The database must already exist. `-b` returns a non-zero exit code for SQL error
 ### V0001
 
 ```powershell
-sqlcmd `
-  -S "(localdb)\MSSQLLocalDB" `
-  -d "ThesisPulseAI" `
-  -E `
-  -b `
-  -I `
-  -i ".\database\migrations\V0001__create_schemas_and_migration_metadata.sql"
-
-sqlcmd `
-  -S "(localdb)\MSSQLLocalDB" `
-  -d "ThesisPulseAI" `
-  -E `
-  -b `
-  -I `
-  -i ".\database\verification\V0001__verify_schemas_and_migration_metadata.sql"
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d "ThesisPulseAI" -E -b -I -i ".\database\migrations\V0001__create_schemas_and_migration_metadata.sql"
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d "ThesisPulseAI" -E -b -I -i ".\database\verification\V0001__verify_schemas_and_migration_metadata.sql"
 ```
 
 ### V0002
 
 ```powershell
-sqlcmd `
-  -S "(localdb)\MSSQLLocalDB" `
-  -d "ThesisPulseAI" `
-  -E `
-  -b `
-  -I `
-  -i ".\database\migrations\V0002__create_reference_tables.sql"
-
-sqlcmd `
-  -S "(localdb)\MSSQLLocalDB" `
-  -d "ThesisPulseAI" `
-  -E `
-  -b `
-  -I `
-  -i ".\database\verification\V0002__verify_reference_tables.sql"
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d "ThesisPulseAI" -E -b -I -i ".\database\migrations\V0002__create_reference_tables.sql"
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d "ThesisPulseAI" -E -b -I -i ".\database\verification\V0002__verify_reference_tables.sql"
 ```
 
 ### V0003
 
 ```powershell
-sqlcmd `
-  -S "(localdb)\MSSQLLocalDB" `
-  -d "ThesisPulseAI" `
-  -E `
-  -b `
-  -I `
-  -i ".\database\migrations\V0003__create_market_data_tables.sql"
-
-sqlcmd `
-  -S "(localdb)\MSSQLLocalDB" `
-  -d "ThesisPulseAI" `
-  -E `
-  -b `
-  -I `
-  -i ".\database\verification\V0003__verify_market_data_tables.sql"
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d "ThesisPulseAI" -E -b -I -i ".\database\migrations\V0003__create_market_data_tables.sql"
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d "ThesisPulseAI" -E -b -I -i ".\database\verification\V0003__verify_market_data_tables.sql"
 ```
 
 ### V0004
 
 ```powershell
-sqlcmd `
-  -S "(localdb)\MSSQLLocalDB" `
-  -d "ThesisPulseAI" `
-  -E `
-  -b `
-  -I `
-  -i ".\database\migrations\V0004__create_intelligence_and_signal_tables.sql"
-
-sqlcmd `
-  -S "(localdb)\MSSQLLocalDB" `
-  -d "ThesisPulseAI" `
-  -E `
-  -b `
-  -I `
-  -i ".\database\verification\V0004__verify_intelligence_and_signal_tables.sql"
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d "ThesisPulseAI" -E -b -I -i ".\database\migrations\V0004__create_intelligence_and_signal_tables.sql"
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d "ThesisPulseAI" -E -b -I -i ".\database\verification\V0004__verify_intelligence_and_signal_tables.sql"
 ```
 
 ### V0005
 
 ```powershell
-sqlcmd `
-  -S "(localdb)\MSSQLLocalDB" `
-  -d "ThesisPulseAI" `
-  -E `
-  -b `
-  -I `
-  -i ".\database\migrations\V0005__create_thesis_tables.sql"
-
-sqlcmd `
-  -S "(localdb)\MSSQLLocalDB" `
-  -d "ThesisPulseAI" `
-  -E `
-  -b `
-  -I `
-  -i ".\database\verification\V0005__verify_thesis_tables.sql"
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d "ThesisPulseAI" -E -b -I -i ".\database\migrations\V0005__create_thesis_tables.sql"
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d "ThesisPulseAI" -E -b -I -i ".\database\verification\V0005__verify_thesis_tables.sql"
 ```
 
 ### V0006
+
+```powershell
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d "ThesisPulseAI" -E -b -I -i ".\database\migrations\V0006__create_risk_and_trade_plan_tables.sql"
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d "ThesisPulseAI" -E -b -I -i ".\database\verification\V0006__verify_risk_and_trade_plan_tables.sql"
+```
+
+### V0007
 
 ```powershell
 sqlcmd `
@@ -210,7 +161,7 @@ sqlcmd `
   -E `
   -b `
   -I `
-  -i ".\database\migrations\V0006__create_risk_and_trade_plan_tables.sql"
+  -i ".\database\migrations\V0007__create_execution_and_reconciliation_tables.sql"
 
 sqlcmd `
   -S "(localdb)\MSSQLLocalDB" `
@@ -218,15 +169,15 @@ sqlcmd `
   -E `
   -b `
   -I `
-  -i ".\database\verification\V0006__verify_risk_and_trade_plan_tables.sql"
+  -i ".\database\verification\V0007__verify_execution_and_reconciliation_tables.sql"
 ```
 
-Expected V0006 result:
+Expected V0007 result:
 
 ```text
 verification_status  migration_version  verified_table_count
 -------------------  -----------------  --------------------
-PASS                 V0006              15
+PASS                 V0007              15
 ```
 
 Run each new migration and its verification script a second time to confirm repeat execution succeeds without duplicate objects.
@@ -239,13 +190,9 @@ Run each new migration and its verification script a second time to confirm repe
 4. intelligence engine outputs and signals;
 5. theses, evidence, scenarios, invalidation and failure fingerprints;
 6. risk policies, snapshots, decisions and trade plans;
-7. execution commands, orders, events and fills;
+7. execution commands, orders, events, fills and reconciliation;
 8. portfolio positions, exposure and P&L ledgers;
 9. inbox, outbox, jobs, audit events, incidents and kill switches.
-
-## Required migration header
-
-Each script documents purpose, dependencies, runtime impact, locking, compatibility, data movement, verification and recovery.
 
 ## Planned migrator
 
@@ -255,16 +202,15 @@ Until it is implemented, local scripts are executed explicitly with `sqlcmd` or 
 
 ## Verification expectations
 
-Every migration set must be verified against an empty database, the previous supported version, representative data and least-privilege .NET and Python runtime principals. Verification includes objects, trusted constraints, indexes, checksums, model mapping, repeat execution and end-to-end lineage.
+Every migration set must be verified against an empty database, the previous supported version, representative data and least-privilege .NET and Python runtime principals. Verification includes objects, trusted constraints, indexes, checksums, repeat execution and end-to-end lineage.
 
 ## Related decisions
 
 - `docs/adr/ADR-0006-capital-and-risk-limits.md`
 - `docs/adr/ADR-0008-sql-server-schema-and-naming-conventions.md`
 - `docs/adr/ADR-0009-database-migration-ownership.md`
-- `docs/adr/ADR-0010-timestamp-timezone-and-exchange-calendar.md`
-- `docs/adr/ADR-0011-canonical-engine-output-and-signal-contracts.md`
 - `docs/adr/ADR-0012-thesis-risk-decision-and-trade-plan-contracts.md`
-- `docs/adr/ADR-0016-live-loss-learning-and-promotion-governance.md`
+- `docs/adr/ADR-0013-upstox-broker-adapter-boundary.md`
+- `docs/adr/ADR-0014-order-idempotency-and-execution-lifecycle.md`
+- `docs/adr/ADR-0017-audit-traceability-and-decision-lineage.md`
 - `docs/adr/ADR-0019-failure-handling-and-kill-switch-policy.md`
-- `docs/adr/ADR-0020-market-data-quality-freshness-and-stale-data-policy.md`

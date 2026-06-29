@@ -13,6 +13,13 @@ public sealed class InMemoryOutboxStore : IOutboxStore
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(message);
 
+        if (message.Status != OutboxMessageStatus.Pending)
+        {
+            throw new ArgumentException(
+                "New outbox messages must start in Pending status.",
+                nameof(message));
+        }
+
         if (!_messages.TryAdd(message.Metadata.MessageId, message))
         {
             throw new InvalidOperationException(
@@ -36,7 +43,8 @@ public sealed class InMemoryOutboxStore : IOutboxStore
         }
 
         IReadOnlyCollection<OutboxMessage> messages = _messages.Values
-            .Where(message => message.Status is not OutboxMessageStatus.Published)
+            .Where(message => message.Status is
+                OutboxMessageStatus.Pending or OutboxMessageStatus.Failed)
             .OrderBy(message => message.Metadata.OccurredAtUtc)
             .Take(maximumCount)
             .ToArray();
@@ -51,6 +59,12 @@ public sealed class InMemoryOutboxStore : IOutboxStore
     {
         cancellationToken.ThrowIfCancellationRequested();
         var current = GetRequired(messageId);
+
+        if (current.Status is OutboxMessageStatus.Published or OutboxMessageStatus.DeadLetter)
+        {
+            throw new InvalidOperationException(
+                $"Outbox message '{messageId}' is already terminal.");
+        }
 
         _messages[messageId] = current with
         {
@@ -71,6 +85,12 @@ public sealed class InMemoryOutboxStore : IOutboxStore
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(error);
         var current = GetRequired(messageId);
+
+        if (current.Status is OutboxMessageStatus.Published or OutboxMessageStatus.DeadLetter)
+        {
+            throw new InvalidOperationException(
+                $"Outbox message '{messageId}' is already terminal.");
+        }
 
         _messages[messageId] = current with
         {

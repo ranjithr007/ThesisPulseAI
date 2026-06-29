@@ -7,6 +7,7 @@ public enum OutboxMessageStatus
     Pending = 0,
     Published = 1,
     Failed = 2,
+    DeadLetter = 3,
 }
 
 public sealed record OutboxMessage(

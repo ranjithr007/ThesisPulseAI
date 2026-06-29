@@ -3,9 +3,8 @@ namespace ThesisPulse.Shared.Infrastructure.Messaging;
 public interface IInboxStore
 {
     Task<bool> TryBeginProcessingAsync(
-        Guid messageId,
+        InboxMessage message,
         string consumer,
-        DateTimeOffset receivedAtUtc,
         CancellationToken cancellationToken = default);
 
     Task MarkProcessedAsync(

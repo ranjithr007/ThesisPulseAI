@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thesispulse.ai/contracts/v1/risk-policy.schema.json",
+  "title": "ThesisPulse AI Risk Policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "risk_policy_id",
+    "risk_policy_version",
+    "status",
+    "environment",
+    "scope",
+    "effective_from_utc",
+    "limits",
+    "soft_limit_response",
+    "hard_limit_response",
+    "consecutive_loss_response",
+    "created_at_utc",
+    "created_by",
+    "checksum"
+  ],
+  "properties": {
+    "contract_version": {"type": "string", "const": "1.0.0"},
+    "risk_policy_id": {"type": "string", "format": "uuid"},
+    "risk_policy_version": {"type": "string", "minLength": 1, "maxLength": 100},
+    "status": {"type": "string", "enum": ["DRAFT", "APPROVED", "ACTIVE", "SUSPENDED", "RETIRED", "REJECTED"]},
+    "environment": {"type": "string", "enum": ["PAPER", "SHADOW", "RESTRICTED_LIVE", "LIVE"]},
+    "parent_policy_id": {"type": ["string", "null"], "format": "uuid"},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_type", "scope_id"],
+      "properties": {
+        "scope_type": {"type": "string", "enum": ["GLOBAL", "ENVIRONMENT", "BROKER_ACCOUNT", "STRATEGY", "INSTRUMENT", "SECTOR", "PRODUCT_TYPE", "SESSION", "MODEL_VERSION"]},
+        "scope_id": {"type": "string", "minLength": 1, "maxLength": 200}
+      }
+    },
+    "effective_from_utc": {"type": "string", "format": "date-time"},
+    "effective_to_utc": {"type": ["string", "null"], "format": "date-time"},
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "standard_risk_per_trade_fraction",
+        "maximum_risk_per_trade_fraction",
+        "maximum_total_open_risk_fraction",
+        "daily_soft_loss_fraction",
+        "daily_hard_loss_fraction",
+        "weekly_loss_fraction",
+        "maximum_strategy_drawdown_fraction",
+        "maximum_portfolio_drawdown_fraction",
+        "consecutive_loss_pause_count",
+        "maximum_trades_per_symbol_per_session"
+      ],
+      "properties": {
+        "standard_risk_per_trade_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "maximum_risk_per_trade_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "maximum_total_open_risk_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "daily_soft_loss_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "daily_hard_loss_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "weekly_loss_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "maximum_strategy_drawdown_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "maximum_portfolio_drawdown_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "consecutive_loss_pause_count": {"type": "integer", "minimum": 1},
+        "maximum_trades_per_symbol_per_session": {"type": "integer", "minimum": 1},
+        "maximum_sector_exposure_fraction": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "maximum_correlated_exposure_fraction": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "maximum_margin_utilization_fraction": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "maximum_single_instrument_notional_fraction": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "maximum_gross_exposure_fraction": {"type": ["number", "null"], "minimum": 0},
+        "maximum_net_exposure_fraction": {"type": ["number", "null"]}
+      }
+    },
+    "soft_limit_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operating_mode", "risk_multiplier", "maximum_concurrent_new_positions"],
+      "properties": {
+        "operating_mode": {"type": "string", "enum": ["RESTRICTED", "CLOSE_ONLY", "PAUSED"]},
+        "risk_multiplier": {"type": "number", "minimum": 0, "maximum": 1},
+        "maximum_concurrent_new_positions": {"type": "integer", "minimum": 0},
+        "requires_operator_approval": {"type": "boolean"}
+      }
+    },
+    "hard_limit_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operating_mode", "allow_risk_reducing_exits"],
+      "properties": {
+        "operating_mode": {"type": "string", "enum": ["CLOSE_ONLY", "PAUSED", "HALTED"]},
+        "allow_risk_reducing_exits": {"type": "boolean"},
+        "requires_reconciliation_before_reset": {"type": "boolean"},
+        "requires_operator_approval_to_reset": {"type": "boolean"}
+      }
+    },
+    "consecutive_loss_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operating_mode", "trigger_outcome_attribution", "minimum_cooling_off_minutes"],
+      "properties": {
+        "operating_mode": {"type": "string", "enum": ["PAUSED", "RESTRICTED", "CLOSE_ONLY"]},
+        "trigger_outcome_attribution": {"type": "boolean"},
+        "minimum_cooling_off_minutes": {"type": "integer", "minimum": 0},
+        "requires_health_check": {"type": "boolean"},
+        "requires_operator_approval": {"type": "boolean"}
+      }
+    },
+    "mandatory_rules": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 200}
+    },
+    "created_at_utc": {"type": "string", "format": "date-time"},
+    "created_by": {"type": "string", "minLength": 1, "maxLength": 200},
+    "approved_at_utc": {"type": ["string", "null"], "format": "date-time"},
+    "approved_by": {"type": ["string", "null"], "maxLength": 200},
+    "checksum": {"type": "string", "minLength": 16, "maxLength": 256},
+    "metadata": {"type": "object", "additionalProperties": true}
+  }
+}

@@ -58,6 +58,11 @@ public static class MarketDataEndpointExtensions
                 jobs = state.GetSnapshots(),
             }));
 
+        endpoints.MapGet(
+            "/api/v1/live-feed/health",
+            (IUpstoxLiveFeedHealthState healthState) =>
+                Results.Ok(healthState.GetSnapshot()));
+
         endpoints.MapPost(
             "/internal/v1/instruments/synchronize",
             async (

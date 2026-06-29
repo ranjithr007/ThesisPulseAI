@@ -16,6 +16,20 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThesisPulse.Shared.Observab
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThesisPulse.Trading.Api", "src\ThesisPulse.Trading.Api\ThesisPulse.Trading.Api.csproj", "{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE001}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThesisPulse.MarketData.Service", "src\ThesisPulse.MarketData.Service\ThesisPulse.MarketData.Service.csproj", "{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE005}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThesisPulse.Signal.Service", "src\ThesisPulse.Signal.Service\ThesisPulse.Signal.Service.csproj", "{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE006}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThesisPulse.Thesis.Service", "src\ThesisPulse.Thesis.Service\ThesisPulse.Thesis.Service.csproj", "{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE007}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThesisPulse.Risk.Service", "src\ThesisPulse.Risk.Service\ThesisPulse.Risk.Service.csproj", "{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE008}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThesisPulse.Execution.Service", "src\ThesisPulse.Execution.Service\ThesisPulse.Execution.Service.csproj", "{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE009}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThesisPulse.Portfolio.Service", "src\ThesisPulse.Portfolio.Service\ThesisPulse.Portfolio.Service.csproj", "{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE010}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThesisPulse.Operations.Service", "src\ThesisPulse.Operations.Service\ThesisPulse.Operations.Service.csproj", "{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE011}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -50,5 +64,33 @@ Global
 		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE004}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE004}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE004}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE005}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE005}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE005}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE005}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE006}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE006}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE006}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE006}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE007}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE007}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE007}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE007}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE008}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE008}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE008}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE008}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE009}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE009}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE009}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE009}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE010}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE010}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE010}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE010}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE011}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE011}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE011}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE011}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

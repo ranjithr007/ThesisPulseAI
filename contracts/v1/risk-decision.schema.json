@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thesispulse.ai/contracts/v1/risk-decision.schema.json",
+  "title": "ThesisPulse AI Risk Decision v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "message_id",
+    "correlation_id",
+    "causation_id",
+    "environment",
+    "source_service",
+    "source_version",
+    "generated_at_utc",
+    "risk_decision_id",
+    "signal_id",
+    "thesis_id",
+    "instrument_id",
+    "decision",
+    "reason_codes",
+    "risk_policy_version",
+    "capital_snapshot_id",
+    "portfolio_snapshot_id",
+    "requested_risk",
+    "approved_risk",
+    "requested_qty",
+    "approved_qty",
+    "entry_price",
+    "stop_loss_price",
+    "target_prices",
+    "current_limits",
+    "evaluated_at_utc",
+    "valid_until_utc"
+  ],
+  "properties": {
+    "contract_version": {"type": "string", "const": "1.0.0"},
+    "message_id": {"type": "string", "format": "uuid"},
+    "correlation_id": {"type": "string", "format": "uuid"},
+    "causation_id": {"type": ["string", "null"], "format": "uuid"},
+    "environment": {"type": "string", "enum": ["PAPER", "SHADOW", "LIVE"]},
+    "source_service": {"type": "string", "minLength": 1, "maxLength": 100},
+    "source_version": {"type": "string", "minLength": 1, "maxLength": 50},
+    "generated_at_utc": {"type": "string", "format": "date-time"},
+    "risk_decision_id": {"type": "string", "format": "uuid"},
+    "signal_id": {"type": "string", "format": "uuid"},
+    "thesis_id": {"type": "string", "format": "uuid"},
+    "instrument_id": {"type": "string", "minLength": 1, "maxLength": 100},
+    "decision": {"type": "string", "enum": ["APPROVE", "REJECT", "RESTRICT"]},
+    "reason_codes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 100}
+    },
+    "risk_policy_version": {"type": "string", "minLength": 1, "maxLength": 50},
+    "capital_snapshot_id": {"type": "string", "format": "uuid"},
+    "portfolio_snapshot_id": {"type": "string", "format": "uuid"},
+    "requested_risk": {"$ref": "#/$defs/risk_amount"},
+    "approved_risk": {"$ref": "#/$defs/risk_amount"},
+    "requested_qty": {"type": "number", "minimum": 0},
+    "approved_qty": {"type": "number", "minimum": 0},
+    "entry_price": {"type": "number", "exclusiveMinimum": 0},
+    "stop_loss_price": {"type": "number", "exclusiveMinimum": 0},
+    "target_prices": {
+      "type": "array",
+      "items": {"type": "number", "exclusiveMinimum": 0},
+      "uniqueItems": true
+    },
+    "estimated_margin_amount": {"type": ["number", "null"], "minimum": 0},
+    "estimated_fees_amount": {"type": ["number", "null"], "minimum": 0},
+    "estimated_slippage_amount": {"type": ["number", "null"], "minimum": 0},
+    "risk_reward_ratio": {"type": ["number", "null"], "minimum": 0},
+    "current_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "daily_pnl_amount",
+        "weekly_pnl_amount",
+        "strategy_drawdown_fraction",
+        "portfolio_drawdown_fraction",
+        "total_open_risk_fraction",
+        "consecutive_losses"
+      ],
+      "properties": {
+        "daily_pnl_amount": {"type": "number"},
+        "weekly_pnl_amount": {"type": "number"},
+        "strategy_drawdown_fraction": {"type": "number", "minimum": 0},
+        "portfolio_drawdown_fraction": {"type": "number", "minimum": 0},
+        "total_open_risk_fraction": {"type": "number", "minimum": 0},
+        "consecutive_losses": {"type": "integer", "minimum": 0},
+        "available_capital_amount": {"type": ["number", "null"], "minimum": 0},
+        "available_margin_amount": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "exposure": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gross_exposure_amount": {"type": "number", "minimum": 0},
+        "net_exposure_amount": {"type": "number"},
+        "instrument_exposure_amount": {"type": "number", "minimum": 0},
+        "sector_exposure_amount": {"type": ["number", "null"], "minimum": 0},
+        "correlated_exposure_amount": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "evaluated_at_utc": {"type": "string", "format": "date-time"},
+    "valid_until_utc": {"type": "string", "format": "date-time"},
+    "metadata": {"type": "object", "additionalProperties": true}
+  },
+  "$defs": {
+    "risk_amount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fraction", "amount"],
+      "properties": {
+        "fraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "amount": {"type": "number", "minimum": 0}
+      }
+    }
+  }
+}

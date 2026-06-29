@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thesispulse.ai/contracts/v1/trade-plan.schema.json",
+  "title": "ThesisPulse AI Trade Plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "message_id",
+    "correlation_id",
+    "causation_id",
+    "environment",
+    "source_service",
+    "source_version",
+    "generated_at_utc",
+    "trade_plan_id",
+    "risk_decision_id",
+    "thesis_id",
+    "signal_id",
+    "instrument_id",
+    "side",
+    "position_intent",
+    "entry",
+    "approved_qty",
+    "stop_loss",
+    "targets",
+    "maximum_slippage_fraction",
+    "time_in_force",
+    "execution_policy_version",
+    "status",
+    "valid_until_utc"
+  ],
+  "properties": {
+    "contract_version": {"type": "string", "const": "1.0.0"},
+    "message_id": {"type": "string", "format": "uuid"},
+    "correlation_id": {"type": "string", "format": "uuid"},
+    "causation_id": {"type": ["string", "null"], "format": "uuid"},
+    "environment": {"type": "string", "enum": ["PAPER", "SHADOW", "LIVE"]},
+    "source_service": {"type": "string", "minLength": 1, "maxLength": 100},
+    "source_version": {"type": "string", "minLength": 1, "maxLength": 50},
+    "generated_at_utc": {"type": "string", "format": "date-time"},
+    "trade_plan_id": {"type": "string", "format": "uuid"},
+    "risk_decision_id": {"type": "string", "format": "uuid"},
+    "thesis_id": {"type": "string", "format": "uuid"},
+    "signal_id": {"type": "string", "format": "uuid"},
+    "instrument_id": {"type": "string", "minLength": 1, "maxLength": 100},
+    "side": {"type": "string", "enum": ["BUY", "SELL"]},
+    "position_intent": {"type": "string", "enum": ["INTRADAY", "DELIVERY", "CARRY_FORWARD"]},
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order_type", "reference_price"],
+      "properties": {
+        "order_type": {"type": "string", "enum": ["MARKET", "LIMIT", "STOP_MARKET", "STOP_LIMIT"]},
+        "reference_price": {"type": "number", "exclusiveMinimum": 0},
+        "limit_price": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "trigger_price": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "minimum_acceptable_price": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "maximum_acceptable_price": {"type": ["number", "null"], "exclusiveMinimum": 0}
+      }
+    },
+    "approved_qty": {"type": "number", "exclusiveMinimum": 0},
+    "minimum_execution_qty": {"type": ["number", "null"], "minimum": 0},
+    "allow_partial_fill": {"type": "boolean", "default": true},
+    "stop_loss": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["price", "order_type", "is_mandatory"],
+      "properties": {
+        "price": {"type": "number", "exclusiveMinimum": 0},
+        "order_type": {"type": "string", "enum": ["STOP_MARKET", "STOP_LIMIT", "SYNTHETIC"]},
+        "limit_price": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "is_mandatory": {"type": "boolean", "const": true}
+      }
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sequence", "price", "quantity_fraction"],
+        "properties": {
+          "sequence": {"type": "integer", "minimum": 1},
+          "price": {"type": "number", "exclusiveMinimum": 0},
+          "quantity_fraction": {"type": "number", "exclusiveMinimum": 0, "maximum": 1}
+        }
+      }
+    },
+    "maximum_slippage_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+    "time_in_force": {"type": "string", "enum": ["DAY", "IOC"]},
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trade_date": {"type": "string", "format": "date"},
+        "not_before_utc": {"type": ["string", "null"], "format": "date-time"},
+        "new_entry_cutoff_utc": {"type": ["string", "null"], "format": "date-time"},
+        "mandatory_exit_by_utc": {"type": ["string", "null"], "format": "date-time"}
+      }
+    },
+    "exit_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allow_trailing_stop": {"type": "boolean"},
+        "allow_break_even_move": {"type": "boolean"},
+        "allow_time_exit": {"type": "boolean"},
+        "allow_signal_exit": {"type": "boolean"},
+        "policy_version": {"type": ["string", "null"], "maxLength": 50}
+      }
+    },
+    "execution_policy_version": {"type": "string", "minLength": 1, "maxLength": 50},
+    "status": {"type": "string", "enum": ["CREATED", "READY", "REJECTED", "EXPIRED", "SUPERSEDED", "SUBMITTED", "COMPLETED", "CANCELLED"]},
+    "status_reasons": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 200},
+      "uniqueItems": true
+    },
+    "valid_until_utc": {"type": "string", "format": "date-time"},
+    "supersedes_trade_plan_id": {"type": ["string", "null"], "format": "uuid"},
+    "metadata": {"type": "object", "additionalProperties": true}
+  }
+}

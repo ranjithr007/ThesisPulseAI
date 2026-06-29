@@ -32,38 +32,15 @@ database/
 V<zero-padded-sequence>__<lower_snake_case_description>.sql
 ```
 
-Example:
-
-```text
-V0001__create_schemas_and_migration_metadata.sql
-V0002__create_reference_tables.sql
-V0003__create_market_tables.sql
-```
-
 ## Implemented migrations
 
 ### V0001 — schemas and migration metadata
 
-Creates these business schemas:
+Creates all business schemas plus:
 
-- `reference`
-- `market`
-- `intelligence`
-- `thesis`
-- `risk`
-- `execution`
-- `portfolio`
-- `broker`
-- `ml`
-- `backtest`
-- `operations`
-- `audit`
-
-Creates:
-
-- `operations.database_metadata` — singleton database identity and baseline version;
-- `operations.schema_migrations` — authoritative successfully applied migration ledger;
-- `operations.migration_runs` — migration attempts, outcomes, duration and error context.
+- `operations.database_metadata`
+- `operations.schema_migrations`
+- `operations.migration_runs`
 
 Verification:
 
@@ -71,22 +48,39 @@ Verification:
 database/verification/V0001__verify_schemas_and_migration_metadata.sql
 ```
 
-## Run V0001 locally
+### V0002 — reference tables
 
-Run from the repository root. Replace the server and database values with your local SQL Server configuration.
+Creates:
 
-### SQL Server Express with Windows authentication
+- `reference.exchanges`
+- `reference.exchange_calendars`
+- `reference.calendar_days`
+- `reference.trading_sessions`
+- `reference.instruments`
+- `reference.universe_versions`
+- `reference.universe_members`
+- `reference.brokers`
+- `reference.broker_instrument_mappings`
 
-```powershell
-sqlcmd `
-  -S ".\SQLEXPRESS" `
-  -d "ThesisPulseAI" `
-  -E `
-  -b `
-  -i ".\database\migrations\V0001__create_schemas_and_migration_metadata.sql"
+V0002 is data-neutral. Exchange, instrument, calendar, universe and broker mapping records are added later through reviewed reference seed versions.
+
+Verification:
+
+```text
+database/verification/V0002__verify_reference_tables.sql
 ```
 
-### SQL Server LocalDB
+## LocalDB execution
+
+Run commands from the repository root:
+
+```powershell
+cd "D:\00 Projects\ThesisPulseAI"
+```
+
+The database must already exist.
+
+### Run V0001
 
 ```powershell
 sqlcmd `
@@ -97,32 +91,50 @@ sqlcmd `
   -i ".\database\migrations\V0001__create_schemas_and_migration_metadata.sql"
 ```
 
-The database must already exist. The command returns a non-zero exit code when SQL Server reports an error because `-b` is enabled.
-
-## Verify V0001
+### Verify V0001
 
 ```powershell
 sqlcmd `
-  -S ".\SQLEXPRESS" `
+  -S "(localdb)\MSSQLLocalDB" `
   -d "ThesisPulseAI" `
   -E `
   -b `
   -i ".\database\verification\V0001__verify_schemas_and_migration_metadata.sql"
 ```
 
-Expected result:
+### Run V0002
 
-```text
-verification_status  migration_version
--------------------  -----------------
-PASS                 V0001
+```powershell
+sqlcmd `
+  -S "(localdb)\MSSQLLocalDB" `
+  -d "ThesisPulseAI" `
+  -E `
+  -b `
+  -i ".\database\migrations\V0002__create_reference_tables.sql"
 ```
 
-Run the migration a second time, followed by verification, to confirm that local repeat execution does not create duplicate objects or metadata rows.
+### Verify V0002
+
+```powershell
+sqlcmd `
+  -S "(localdb)\MSSQLLocalDB" `
+  -d "ThesisPulseAI" `
+  -E `
+  -b `
+  -i ".\database\verification\V0002__verify_reference_tables.sql"
+```
+
+Expected V0002 result:
+
+```text
+verification_status  migration_version  verified_table_count
+-------------------  -----------------  --------------------
+PASS                 V0002              9
+```
+
+Run V0002 and its verification script a second time to confirm repeat execution succeeds without duplicate objects.
 
 ## Initial migration sequence
-
-The migration history will establish:
 
 1. database schemas and migration metadata;
 2. reference instruments, exchanges, calendars, sessions, universes and broker mappings;

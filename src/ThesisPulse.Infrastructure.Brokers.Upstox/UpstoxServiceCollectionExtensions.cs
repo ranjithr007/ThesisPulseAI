@@ -1,0 +1,67 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using ThesisPulse.Shared.Infrastructure.MarketData;
+
+namespace ThesisPulse.Infrastructure.Brokers.Upstox;
+
+public static class UpstoxServiceCollectionExtensions
+{
+    public static IServiceCollection AddUpstoxMarketDataAdapter(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        var apiBaseUrl = configuration["Upstox:ApiBaseUrl"]
+            ?? "https://api.upstox.com";
+        var instrumentMasterUrl = configuration["Upstox:InstrumentMasterUrl"]
+            ?? "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz";
+
+        if (!Uri.TryCreate(apiBaseUrl, UriKind.Absolute, out var apiBaseUri))
+        {
+            throw new InvalidOperationException("Upstox API base URL must be absolute.");
+        }
+
+        if (!Uri.TryCreate(
+                instrumentMasterUrl,
+                UriKind.Absolute,
+                out var instrumentMasterUri))
+        {
+            throw new InvalidOperationException(
+                "Upstox instrument master URL must be absolute.");
+        }
+
+        var options = new UpstoxMarketDataOptions
+        {
+            Enabled = configuration.GetValue("Upstox:Enabled", false),
+            ApiBaseUrl = apiBaseUri,
+            InstrumentMasterUrl = instrumentMasterUri,
+            HistoricalPathTemplate = configuration["Upstox:HistoricalPathTemplate"]
+                ?? "/v3/historical-candle/{instrumentKey}/{unit}/{interval}/{toDate}/{fromDate}",
+            MarketFeedAuthorizePath = configuration["Upstox:MarketFeedAuthorizePath"]
+                ?? "/v3/feed/market-data-feed/authorize",
+            AccessToken = configuration["Upstox:AccessToken"],
+            TickSizeDivisor = configuration.GetValue("Upstox:TickSizeDivisor", 100m),
+            RequestTimeoutSeconds = configuration.GetValue(
+                "Upstox:RequestTimeoutSeconds",
+                30),
+            MaximumInstrumentCount = configuration.GetValue(
+                "Upstox:MaximumInstrumentCount",
+                500_000),
+        };
+        options.Validate();
+
+        services.AddSingleton(options);
+        services.AddSingleton<IUpstoxCredentialProvider, ConfigurationUpstoxCredentialProvider>();
+        services.AddSingleton<IUpstoxLiveFeedNormalizer, UpstoxLiveFeedNormalizer>();
+        services.AddHttpClient<IMarketDataProvider, UpstoxMarketDataProvider>(client =>
+        {
+            client.BaseAddress = apiBaseUri;
+            client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "ThesisPulseAI-MarketData/0.1.0");
+        });
+        return services;
+    }
+}

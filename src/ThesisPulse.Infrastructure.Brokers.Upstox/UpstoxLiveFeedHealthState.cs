@@ -84,6 +84,7 @@ public sealed class UpstoxLiveFeedHealthState : IUpstoxLiveFeedHealthState
         {
             Status = "AUTHORIZING",
             Connected = false,
+            ConnectedAtUtc = null,
             ConnectionAttempt = attempt,
             NextRetryAtUtc = null,
         });

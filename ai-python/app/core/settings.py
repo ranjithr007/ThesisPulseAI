@@ -20,7 +20,9 @@ def load_settings() -> Settings:
     ).lower() == "true"
 
     if environment != "PAPER" or live_execution_enabled:
-        raise RuntimeError("Phase 1 Python platform must run in PAPER mode with live execution disabled")
+        raise RuntimeError(
+            "Phase 1 Python platform must run in PAPER mode with live execution disabled"
+        )
 
     return Settings(
         configuration_version=os.getenv(

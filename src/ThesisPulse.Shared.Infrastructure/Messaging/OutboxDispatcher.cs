@@ -1,3 +1,5 @@
+using ThesisPulse.Shared.Infrastructure.Time;
+
 namespace ThesisPulse.Shared.Infrastructure.Messaging;
 
 public sealed record OutboxDispatchResult(
@@ -8,7 +10,7 @@ public sealed record OutboxDispatchResult(
 public sealed class OutboxDispatcher(
     IOutboxStore outboxStore,
     IDispatchTarget dispatchTarget,
-    Time.IClock clock)
+    IClock clock)
 {
     public async Task<OutboxDispatchResult> DispatchAsync(
         int maximumCount,

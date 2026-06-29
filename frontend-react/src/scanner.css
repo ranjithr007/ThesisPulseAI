@@ -1,0 +1,173 @@
+.scanner-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.scanner-header h2 {
+  margin: 0.35rem 0;
+  font-size: clamp(2rem, 4vw, 3.5rem);
+}
+
+.scanner-header p:last-child {
+  margin: 0;
+  color: #9fb0c3;
+}
+
+.scanner-count {
+  padding: 0.65rem 0.9rem;
+  border: 1px solid #155e75;
+  border-radius: 999px;
+  color: #a5f3fc;
+  background: rgba(8, 145, 178, 0.12);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.scanner-filters {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid #203248;
+  border-radius: 0.85rem;
+  background: rgba(9, 23, 40, 0.82);
+}
+
+.scanner-filters label {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 12rem;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.scanner-filters select {
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #29415d;
+  border-radius: 0.55rem;
+  color: #e7eef8;
+  background: #0d1d30;
+}
+
+.signal-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #203248;
+  border-radius: 1rem;
+  background: rgba(9, 23, 40, 0.9);
+}
+
+.signal-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.signal-table th,
+.signal-table td {
+  padding: 0.95rem 1rem;
+  border-bottom: 1px solid #1c2b3e;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.signal-table th {
+  color: #8fa4ba;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.signal-table td {
+  color: #dbe7f4;
+  font-size: 0.88rem;
+}
+
+.signal-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.signal-table small {
+  display: block;
+  max-width: 13rem;
+  margin-top: 0.25rem;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+}
+
+.direction,
+.signal-status {
+  display: inline-flex;
+  padding: 0.28rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.direction.long,
+.signal-status.validated,
+.signal-status.consumed {
+  color: #bbf7d0;
+  background: rgba(22, 163, 74, 0.18);
+}
+
+.direction.short,
+.signal-status.rejected,
+.signal-status.expired {
+  color: #fecaca;
+  background: rgba(220, 38, 38, 0.18);
+}
+
+.signal-status.candidate {
+  color: #bae6fd;
+  background: rgba(2, 132, 199, 0.18);
+}
+
+.signal-status.superseded {
+  color: #e9d5ff;
+  background: rgba(147, 51, 234, 0.18);
+}
+
+.connection-status.connecting .status-dot,
+.connection-status.reconnecting .status-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 0.8rem rgba(245, 158, 11, 0.75);
+}
+
+.connection-status.disconnected .status-dot {
+  background: #ef4444;
+  box-shadow: 0 0 0.8rem rgba(239, 68, 68, 0.75);
+}
+
+.stream-error {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #991b1b;
+  border-radius: 0.7rem;
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.25);
+}
+
+.empty-state {
+  padding: 3rem !important;
+  color: #71839a !important;
+  text-align: center !important;
+}
+
+@media (max-width: 700px) {
+  .scanner-header,
+  .scanner-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scanner-filters label {
+    min-width: 0;
+  }
+}

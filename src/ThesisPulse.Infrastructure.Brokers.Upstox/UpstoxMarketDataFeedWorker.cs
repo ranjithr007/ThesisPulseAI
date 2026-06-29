@@ -32,59 +32,72 @@ public sealed class UpstoxMarketDataFeedWorker(
         var reconnectCount = 0;
         var consecutiveFailures = 0;
 
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            connectionAttempt++;
-            DateTimeOffset? connectedAtUtc = null;
-
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                connectedAtUtc = await RunConnectionAsync(
-                    connectionAttempt,
-                    stoppingToken);
+                connectionAttempt++;
 
-                if (!stoppingToken.IsCancellationRequested)
+                try
                 {
-                    throw new WebSocketException(
-                        "Upstox WebSocket receive loop ended unexpectedly.");
-                }
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception exception)
-            {
-                reconnectCount++;
+                    await RunConnectionAsync(connectionAttempt, stoppingToken);
 
-                if (connectedAtUtc.HasValue &&
-                    timeProvider.GetUtcNow() - connectedAtUtc.Value >=
-                    TimeSpan.FromSeconds(options.StableConnectionResetSeconds))
+                    if (!stoppingToken.IsCancellationRequested)
+                    {
+                        throw new WebSocketException(
+                            "Upstox WebSocket receive loop ended unexpectedly.");
+                    }
+                }
+                catch (OperationCanceledException) when (
+                    stoppingToken.IsCancellationRequested)
                 {
-                    consecutiveFailures = 0;
+                    break;
                 }
+                catch (Exception exception)
+                {
+                    reconnectCount++;
+                    var connectionSnapshot = healthState.GetSnapshot();
 
-                consecutiveFailures++;
-                var delay = CalculateReconnectDelay(consecutiveFailures);
-                var nextRetryAtUtc = timeProvider.GetUtcNow().Add(delay);
-                healthState.Reconnecting(
-                    exception.Message,
-                    nextRetryAtUtc,
-                    reconnectCount);
+                    if (connectionSnapshot.ConnectedAtUtc.HasValue &&
+                        timeProvider.GetUtcNow() -
+                        connectionSnapshot.ConnectedAtUtc.Value >=
+                        TimeSpan.FromSeconds(options.StableConnectionResetSeconds))
+                    {
+                        consecutiveFailures = 0;
+                    }
 
-                logger.LogWarning(
-                    exception,
-                    "Upstox live feed disconnected. Reconnecting in {DelayMs} ms.",
-                    delay.TotalMilliseconds);
+                    consecutiveFailures++;
+                    var delay = CalculateReconnectDelay(consecutiveFailures);
+                    var nextRetryAtUtc = timeProvider.GetUtcNow().Add(delay);
+                    healthState.Reconnecting(
+                        exception.Message,
+                        nextRetryAtUtc,
+                        reconnectCount);
 
-                await Task.Delay(delay, stoppingToken);
+                    logger.LogWarning(
+                        exception,
+                        "Upstox live feed disconnected. Reconnecting in {DelayMs} ms.",
+                        delay.TotalMilliseconds);
+
+                    try
+                    {
+                        await Task.Delay(delay, stoppingToken);
+                    }
+                    catch (OperationCanceledException) when (
+                        stoppingToken.IsCancellationRequested)
+                    {
+                        break;
+                    }
+                }
             }
         }
-
-        healthState.Stopped(timeProvider.GetUtcNow());
+        finally
+        {
+            healthState.Stopped(timeProvider.GetUtcNow());
+        }
     }
 
-    private async Task<DateTimeOffset> RunConnectionAsync(
+    private async Task RunConnectionAsync(
         int connectionAttempt,
         CancellationToken stoppingToken)
     {
@@ -109,9 +122,7 @@ public sealed class UpstoxMarketDataFeedWorker(
             await connection.ConnectAsync(authorizedUri, connectTimeout.Token);
         }
 
-        var connectedAtUtc = timeProvider.GetUtcNow();
-        healthState.Connected(connectedAtUtc);
-
+        healthState.Connected(timeProvider.GetUtcNow());
         var subscription = await subscriptionProvider.GetSubscriptionAsync(stoppingToken);
         var command = commandBuilder.BuildSubscribe(subscription);
         await connection.SendAsync(
@@ -128,11 +139,32 @@ public sealed class UpstoxMarketDataFeedWorker(
             subscription.Mode,
             subscription.Version);
 
-        await ReceiveLoopAsync(
-            connection,
-            Guid.NewGuid().ToString("D"),
-            stoppingToken);
-        return connectedAtUtc;
+        try
+        {
+            await ReceiveLoopAsync(
+                connection,
+                Guid.NewGuid().ToString("D"),
+                stoppingToken);
+        }
+        finally
+        {
+            if (connection.State is WebSocketState.Open or WebSocketState.CloseReceived)
+            {
+                try
+                {
+                    await connection.CloseAsync(
+                        WebSocketCloseStatus.NormalClosure,
+                        "ThesisPulse Market Data worker stopping connection",
+                        CancellationToken.None);
+                }
+                catch (Exception exception)
+                {
+                    logger.LogDebug(
+                        exception,
+                        "Upstox WebSocket close handshake did not complete cleanly.");
+                }
+            }
+        }
     }
 
     private async Task ReceiveLoopAsync(
@@ -249,7 +281,8 @@ public sealed class UpstoxMarketDataFeedWorker(
         {
             var text = Encoding.UTF8.GetString(payload);
             throw new InvalidDataException(
-                $"Upstox returned an unexpected text frame: {text[..Math.Min(text.Length, 500)]}");
+                $"Upstox returned an unexpected text frame: " +
+                text[..Math.Min(text.Length, 500)]);
         }
 
         if (messageType != WebSocketMessageType.Binary || payload.Length == 0)

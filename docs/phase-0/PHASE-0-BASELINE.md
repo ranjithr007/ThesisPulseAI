@@ -17,7 +17,9 @@
 - Lifecycle: `Signal -> Thesis -> Risk Decision -> Trade Plan -> Execution Command -> Order Events -> Fill Events -> Position/P&L Events`.
 - Live outcomes create governed learning candidates; they never mutate production directly.
 - Audit and decision lineage are immutable and queryable end to end.
+- Durable messages use at-least-once delivery with transactional outbox and idempotent inbox processing.
 - Failure controls block new exposure while preserving approved exits.
+- The most restrictive applicable operational control wins.
 - Stale or invalid mandatory market data cannot create new exposure or risk-eligible valuations.
 - Risk ceilings are defined by accepted policy `risk-policy-1.0.0`.
 - Broker submission is idempotent and unknown outcomes require reconciliation.
@@ -52,7 +54,11 @@
 - [x] Author V0008 portfolios, positions, lots, cash/exposure ledgers, valuations and P&L.
 - [x] Add V0008 structural verification script.
 - [ ] Execute V0008 locally twice and confirm verification passes.
-- [ ] Initial durable transport implementation.
+- [x] Author V0009 durable transport, jobs, controls, incidents, alerts and audit storage.
+- [x] Add V0009 structural verification script.
+- [ ] Execute V0009 locally twice and confirm verification passes.
+- [x] Complete the initial V0001–V0009 shared SQL Server storage design.
+- [ ] Implement the initial durable transport services.
 
 ### Risk and environments
 
@@ -68,6 +74,7 @@
 - [ ] Strategy-specific measurable promotion thresholds.
 - [x] Close-only, pause, halt and recovery operating modes.
 - [x] Emergency exit and kill-switch architecture policy.
+- [x] Implement operational-control, approval and effective-scope storage.
 - [ ] Restricted-live capital allocation.
 
 ### Canonical contracts
@@ -111,6 +118,12 @@
 - [x] Implement current cash/exposure projections and append-only ledgers.
 - [x] Implement valuation marks, position valuations and immutable P&L snapshots.
 - [x] Implement broker-position observations and append-only reconciliation resolution.
+- [x] Implement durable inbox/outbox and transport-attempt storage.
+- [x] Implement scheduled-job, leased-run and run-event storage.
+- [x] Implement incident, incident-event and entity-link storage.
+- [x] Implement immutable operational-control activations, approvals and current-state projections.
+- [x] Implement alert aggregation and delivery-attempt storage.
+- [x] Implement hash-linked audit-event and entity-lineage storage.
 - [x] Model, engine, feature and configuration versioning policy.
 - [x] Immutable deployment manifests and deterministic rollback.
 - [x] Live-loss attribution and candidate-learning governance.
@@ -127,6 +140,7 @@
 - [x] Implement SQL Server risk and trade-plan storage foundation.
 - [x] Implement SQL Server execution and reconciliation storage foundation.
 - [x] Implement SQL Server portfolio and P&L storage foundation.
+- [x] Implement SQL Server operational and audit storage foundation.
 - [ ] Add reviewed exchange, calendar, universe, broker, account and portfolio seeds.
 - [ ] Seed approved risk and order-transition policies.
 - [ ] Implement market-data ingestion and candle-normalization services.
@@ -138,6 +152,11 @@
 - [ ] Implement immutable capital and portfolio snapshot writers.
 - [ ] Implement deterministic risk evaluation and trade-plan services.
 - [ ] Implement command idempotency, durable outbox and order projection services.
+- [ ] Implement idempotent inbox processing and dead-letter workflow.
+- [ ] Implement SQL-backed scheduler, leases, heartbeat and recovery workers.
+- [ ] Implement operational-control evaluator and effective-scope projector.
+- [ ] Implement kill-switch APIs, authorization and reset approvals.
+- [ ] Implement incident, alert-delivery and audit hash-chain services.
 - [ ] Implement fake and Upstox broker adapters.
 - [ ] Implement transactional fill, lot, cash and exposure processor.
 - [ ] Implement mark-to-market and portfolio P&L workers.
@@ -145,7 +164,6 @@
 - [ ] Implement execution and position reconciliation schedulers and operator workflows.
 - [ ] Implement model registry and deployment manifest storage.
 - [ ] Implement learning-candidate validation jobs.
-- [ ] Implement SQL Server operational and audit tables.
 - [ ] Implement secret manager and production service identities.
 
 ## ADR register
@@ -180,16 +198,18 @@
 - [ ] Seed and activate the accepted policy in SQL Server.
 - [ ] Live allow-list, capital allocation and measurable promotion gates approved.
 - [ ] Sector, correlation, margin and notional exposure extensions approved.
-- [ ] V0001 through V0008 succeed on a clean database and pass repeat execution.
+- [ ] V0001 through V0009 succeed on a clean database and pass repeat execution.
 - [ ] All contracts validate locally in .NET and Python; CI automation is deferred.
 - [x] Architecture prevents Upstox types from entering domain and application layers.
 - [ ] Runtime tests prove the broker adapter boundary.
 - [x] Contract rules require complete signal-to-execution lineage.
-- [x] Database storage enforces core command, order-event, fill and position-event uniqueness.
-- [ ] Runtime tests prove no duplicate broker, position, cash or P&L side effects across retries.
+- [x] Database storage enforces core command, order-event, fill, position-event and message uniqueness.
+- [x] Database storage supports scoped operating modes, accountable reset approval and immutable audit evidence.
+- [ ] Runtime tests prove no duplicate broker, position, cash, P&L or message side effects across retries.
 - [ ] Runtime tests prove partial-fill, reversal, lot closure and broker-position reconciliation.
+- [ ] Runtime tests prove kill-switch precedence, close-only behavior, lease recovery and independent reset approval.
 - [x] Model, engine and configuration versions are required for reproducibility.
 - [x] Live-loss learning governance is accepted.
 - [x] End-to-end audit and lineage requirements are accepted.
 - [x] Security, failure, kill-switch and stale-data policies are accepted.
-- [ ] One implemented lifecycle is traceable with correlation and causation IDs through P&L.
+- [ ] One implemented lifecycle is traceable with correlation and causation IDs through P&L and operational controls.

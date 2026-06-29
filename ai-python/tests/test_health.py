@@ -21,3 +21,14 @@ def test_info_is_locked_to_paper_mode() -> None:
     assert payload["environment"] == "PAPER"
     assert payload["liveExecutionEnabled"] is False
     assert payload["contractVersion"] == "v1"
+
+
+def test_mock_signal_uses_versioned_paper_metadata() -> None:
+    response = client.post("/api/v1/signals/mock", json={})
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["metadata"]["eventType"] == "signal.generated.v1"
+    assert payload["metadata"]["contractVersion"] == "1.0.0"
+    assert payload["metadata"]["environment"] == "PAPER"
+    assert payload["payload"]["primaryTimeframe"] == "5m"

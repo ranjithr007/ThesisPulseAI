@@ -4,6 +4,7 @@
     <AssemblyName>ThesisPulse.Shared.Infrastructure</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="$(SolutionDir)src/ThesisPulse.Shared.Contracts/ThesisPulse.Shared.Contracts.csproj" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
   </ItemGroup>

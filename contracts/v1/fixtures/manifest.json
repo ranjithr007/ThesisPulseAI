@@ -1,0 +1,53 @@
+{
+  "fixture_version": "1.0.0",
+  "cases": [
+    {
+      "name": "signal-minimum-valid",
+      "schema": "signal.schema.json",
+      "fixture": "valid/signal-minimum.json",
+      "expected_valid": true
+    },
+    {
+      "name": "signal-unknown-field-invalid",
+      "schema": "signal.schema.json",
+      "fixture": "invalid/signal-unknown-field.json",
+      "expected_valid": false
+    },
+    {
+      "name": "execution-place-valid",
+      "schema": "execution-command.schema.json",
+      "fixture": "valid/execution-place.json",
+      "expected_valid": true
+    },
+    {
+      "name": "execution-place-missing-quantity-invalid",
+      "schema": "execution-command.schema.json",
+      "fixture": "invalid/execution-place-missing-quantity.json",
+      "expected_valid": false
+    },
+    {
+      "name": "fill-with-broker-id-valid",
+      "schema": "fill-event.schema.json",
+      "fixture": "valid/fill-with-broker-id.json",
+      "expected_valid": true
+    },
+    {
+      "name": "fill-without-identity-invalid",
+      "schema": "fill-event.schema.json",
+      "fixture": "invalid/fill-without-identity.json",
+      "expected_valid": false
+    },
+    {
+      "name": "risk-policy-baseline-valid",
+      "schema": "risk-policy.schema.json",
+      "fixture": "valid/risk-policy-baseline.json",
+      "expected_valid": true
+    },
+    {
+      "name": "risk-policy-extra-property-invalid",
+      "schema": "risk-policy.schema.json",
+      "fixture": "invalid/risk-policy-extra-property.json",
+      "expected_valid": false
+    }
+  ]
+}

@@ -70,8 +70,10 @@
 - [x] Data-quality-assessment schema.
 - [x] Risk-policy schema.
 - [x] Semantic validation rules for decision and execution lifecycles.
-- [ ] Shared valid and invalid fixtures.
-- [ ] Equivalent .NET and Python validation tests.
+- [x] Initial shared valid and invalid fixture manifest.
+- [x] Equivalent .NET and Python schema-validation runners.
+- [ ] Expand fixtures to every contract and semantic rule.
+- [ ] Execute both runners in CI and confirm equivalent results.
 
 ### Execution and governance
 
@@ -126,7 +128,7 @@
 - [ ] Live allow-list, capital allocation and measurable promotion gates approved.
 - [ ] Sector, correlation, margin and notional exposure extensions approved.
 - [ ] Initial SQL Server migration succeeds on a clean database.
-- [ ] All contracts validate in .NET and Python.
+- [ ] All contracts validate in .NET and Python CI.
 - [x] Architecture prevents Upstox types from entering domain and application layers.
 - [ ] Runtime tests prove the broker adapter boundary.
 - [x] Contract rules require complete signal-to-execution lineage.

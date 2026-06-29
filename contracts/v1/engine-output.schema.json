@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thesispulse.ai/contracts/v1/engine-output.schema.json",
+  "title": "ThesisPulse AI Engine Output v1",
+  "description": "Canonical output produced by a Python intelligence engine and consumed by downstream ThesisPulse AI services.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "message_id",
+    "correlation_id",
+    "causation_id",
+    "environment",
+    "source_service",
+    "source_version",
+    "generated_at_utc",
+    "engine_output_id",
+    "engine_name",
+    "engine_version",
+    "instrument_id",
+    "timeframe",
+    "as_of_utc",
+    "direction",
+    "score",
+    "confidence",
+    "data_quality",
+    "is_stale",
+    "expires_at_utc",
+    "evidence",
+    "warnings"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "message_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "causation_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "environment": {
+      "type": "string",
+      "enum": ["PAPER", "SHADOW", "LIVE"]
+    },
+    "source_service": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "source_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "engine_output_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "engine_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "engine_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "instrument_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "timeframe": {
+      "type": "string",
+      "enum": ["1m", "5m", "15m", "1h", "1d"]
+    },
+    "as_of_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["STRONG_LONG", "LONG", "NEUTRAL", "SHORT", "STRONG_SHORT", "NO_SIGNAL"]
+    },
+    "score": {
+      "type": "number",
+      "minimum": -1,
+      "maximum": 1
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "data_quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "completeness", "freshness_ms"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["VALID", "DEGRADED", "INVALID"]
+        },
+        "completeness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "freshness_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "missing_fields": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "is_stale": {
+      "type": "boolean"
+    },
+    "features_used": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "version"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "version": {"type": "string", "minLength": 1},
+          "value": {
+            "type": ["number", "string", "boolean", "null"]
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message", "impact"],
+        "properties": {
+          "code": {"type": "string", "minLength": 1, "maxLength": 100},
+          "message": {"type": "string", "minLength": 1, "maxLength": 1000},
+          "impact": {
+            "type": "string",
+            "enum": ["SUPPORTS_LONG", "SUPPORTS_SHORT", "CONTRADICTS", "NEUTRAL"]
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": {"type": "string", "minLength": 1, "maxLength": 100},
+          "message": {"type": "string", "minLength": 1, "maxLength": 1000}
+        }
+      }
+    },
+    "expires_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

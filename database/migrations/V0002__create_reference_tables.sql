@@ -19,6 +19,17 @@ Recovery plan:
   Roll forward with a later migration. Destructive rollback is limited to disposable local databases.
 */
 
+-- SQL Server requires these session options when filtered indexes are created
+-- and when rows covered by those indexes are later modified.
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET NUMERIC_ROUNDABORT OFF;
+GO
+
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
 

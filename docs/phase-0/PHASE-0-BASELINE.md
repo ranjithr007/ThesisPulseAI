@@ -16,6 +16,9 @@
 - Shared database changes use one script-based migration authority.
 - Lifecycle: `Signal -> Thesis -> Risk Decision -> Trade Plan -> Execution Command -> Order Events -> Fill Events`.
 - Live outcomes create governed learning candidates; they never mutate production directly.
+- Audit and decision lineage are immutable and queryable end to end.
+- Failure controls block new exposure while preserving approved exits.
+- Stale or invalid mandatory market data cannot create new exposure.
 
 ## Workstream status
 
@@ -45,7 +48,8 @@
 - [ ] Sector and correlation limits.
 - [x] Promotion sequence from offline to scaled live.
 - [ ] Strategy-specific measurable promotion thresholds.
-- [ ] Emergency close-only and exit policy.
+- [x] Close-only, pause, halt and recovery operating modes.
+- [x] Emergency exit and kill-switch architecture policy.
 
 ### Canonical contracts
 
@@ -59,6 +63,8 @@
 - [x] Fill-event schema.
 - [x] Deployment-manifest schema.
 - [x] Learning-candidate schema.
+- [x] Operational-control schema.
+- [x] Data-quality-assessment schema.
 - [x] Semantic validation rules for decision and execution lifecycles.
 - [ ] Shared valid and invalid fixtures.
 - [ ] Equivalent .NET and Python validation tests.
@@ -73,13 +79,16 @@
 - [x] Immutable deployment manifests and deterministic rollback.
 - [x] Live-loss attribution and candidate-learning governance.
 - [x] Champion-challenger and staged promotion policy.
+- [x] Audit and decision-lineage policy.
+- [x] Security, credential and secret-management policy.
+- [x] Failure handling, operating modes and kill-switch policy.
+- [x] Market-data quality, freshness and stale-data policy.
 - [ ] Implement model registry and deployment manifest storage.
 - [ ] Implement learning-candidate workflow and validation jobs.
-- [ ] Implement SQL Server execution tables and constraints.
+- [ ] Implement SQL Server operational and audit tables.
 - [ ] Implement fake and Upstox broker adapters.
-- [ ] Implement reconciliation worker.
-- [ ] Security and secret-management policy.
-- [ ] Audit, failure handling and kill switches.
+- [ ] Implement reconciliation and operational-control workers.
+- [ ] Implement secret manager and production service identities.
 
 ## ADR register
 
@@ -101,11 +110,14 @@
 | 0014 | Order idempotency and execution lifecycle | Accepted |
 | 0015 | Model, engine and configuration versioning | Accepted |
 | 0016 | Live-loss learning and promotion governance | Accepted |
-| 0017–0020 | Audit, security, failure handling and data quality | Not started |
+| 0017 | Audit, traceability and decision lineage | Accepted |
+| 0018 | Security, credentials and secret management | Accepted |
+| 0019 | Failure handling and kill-switch policy | Accepted |
+| 0020 | Market-data quality and freshness policy | Accepted |
 
 ## Exit gate
 
-- [ ] All critical ADRs accepted.
+- [x] All architecture ADRs except the proposed risk-limit values are accepted.
 - [ ] Risk policy approved and versioned.
 - [ ] Live allow-list and measurable promotion gates approved.
 - [ ] Initial SQL Server migration succeeds on a clean database.
@@ -117,4 +129,6 @@
 - [ ] Runtime and database constraints enforce duplicate prevention.
 - [x] Model, engine and configuration versions are required for reproducibility.
 - [x] Live-loss learning governance is accepted.
-- [ ] One complete lifecycle is traceable with correlation and causation IDs.
+- [x] End-to-end audit and lineage requirements are accepted.
+- [x] Security, failure, kill-switch and stale-data policies are accepted.
+- [ ] One implemented lifecycle is traceable with correlation and causation IDs.

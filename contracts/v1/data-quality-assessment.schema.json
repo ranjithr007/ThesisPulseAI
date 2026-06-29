@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thesispulse.ai/contracts/v1/data-quality-assessment.schema.json",
+  "title": "ThesisPulse AI Data Quality Assessment v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "assessment_id",
+    "environment",
+    "instrument_id",
+    "data_type",
+    "source",
+    "evaluated_at_utc",
+    "freshness_basis_utc",
+    "age_milliseconds",
+    "maximum_age_milliseconds",
+    "quality_status",
+    "is_usable_for_new_exposure",
+    "policy_version"
+  ],
+  "properties": {
+    "contract_version": {"type": "string", "const": "1.0.0"},
+    "assessment_id": {"type": "string", "format": "uuid"},
+    "environment": {"type": "string", "enum": ["PAPER", "SHADOW", "LIVE"]},
+    "instrument_id": {"type": "string", "minLength": 1, "maxLength": 100},
+    "data_type": {"type": "string", "minLength": 1, "maxLength": 100},
+    "timeframe": {"type": ["string", "null"], "maxLength": 20},
+    "source": {"type": "string", "minLength": 1, "maxLength": 100},
+    "source_version": {"type": ["string", "null"], "maxLength": 100},
+    "evaluated_at_utc": {"type": "string", "format": "date-time"},
+    "freshness_basis_utc": {"type": "string", "format": "date-time"},
+    "age_milliseconds": {"type": "integer", "minimum": 0},
+    "maximum_age_milliseconds": {"type": "integer", "minimum": 0},
+    "quality_status": {"type": "string", "enum": ["VALID", "DEGRADED", "STALE", "INCOMPLETE", "DUPLICATE", "OUT_OF_ORDER", "CONFLICTED", "INVALID", "UNKNOWN"]},
+    "reason_codes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 100}
+    },
+    "is_usable_for_new_exposure": {"type": "boolean"},
+    "is_usable_for_exit": {"type": "boolean", "default": false},
+    "revision": {"type": ["integer", "null"], "minimum": 0},
+    "sequence_gap_count": {"type": ["integer", "null"], "minimum": 0},
+    "policy_version": {"type": "string", "minLength": 1, "maxLength": 100},
+    "correlation_id": {"type": ["string", "null"], "format": "uuid"},
+    "metadata": {"type": "object", "additionalProperties": true}
+  }
+}

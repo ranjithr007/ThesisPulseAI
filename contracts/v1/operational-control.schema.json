@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thesispulse.ai/contracts/v1/operational-control.schema.json",
+  "title": "ThesisPulse AI Operational Control v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "control_id",
+    "control_type",
+    "scope_type",
+    "scope_id",
+    "operating_mode",
+    "reason_code",
+    "activated_at_utc",
+    "activated_by",
+    "policy_version",
+    "status"
+  ],
+  "properties": {
+    "contract_version": {"type": "string", "const": "1.0.0"},
+    "control_id": {"type": "string", "format": "uuid"},
+    "control_type": {"type": "string", "enum": ["KILL_SWITCH", "PAUSE", "CLOSE_ONLY", "RESTRICTION", "RECOVERY"]},
+    "scope_type": {"type": "string", "enum": ["PLATFORM", "ENVIRONMENT", "BROKER_ACCOUNT", "STRATEGY", "MODEL", "ENGINE", "INSTRUMENT", "INSTRUMENT_CLASS", "SEGMENT", "ACTION_TYPE"]},
+    "scope_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "operating_mode": {"type": "string", "enum": ["NORMAL", "RESTRICTED", "CLOSE_ONLY", "PAUSED", "HALTED", "RECOVERY"]},
+    "reason_code": {"type": "string", "minLength": 1, "maxLength": 100},
+    "reason_message": {"type": ["string", "null"], "maxLength": 4000},
+    "trigger_source": {"type": ["string", "null"], "enum": ["AUTOMATIC", "OPERATOR", "RISK_POLICY", "DATA_QUALITY", "BROKER", "SECURITY", "RECONCILIATION", null]},
+    "activated_at_utc": {"type": "string", "format": "date-time"},
+    "activated_by": {"type": "string", "minLength": 1, "maxLength": 200},
+    "expires_at_utc": {"type": ["string", "null"], "format": "date-time"},
+    "reset_requires_approval": {"type": "boolean", "default": true},
+    "reset_at_utc": {"type": ["string", "null"], "format": "date-time"},
+    "reset_by": {"type": ["string", "null"], "maxLength": 200},
+    "reset_reason": {"type": ["string", "null"], "maxLength": 4000},
+    "policy_version": {"type": "string", "minLength": 1, "maxLength": 100},
+    "status": {"type": "string", "enum": ["ACTIVE", "EXPIRED", "RESET", "SUPERSEDED"]},
+    "correlation_id": {"type": ["string", "null"], "format": "uuid"},
+    "incident_id": {"type": ["string", "null"], "format": "uuid"},
+    "metadata": {"type": "object", "additionalProperties": true}
+  }
+}

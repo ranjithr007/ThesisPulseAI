@@ -24,6 +24,8 @@ public static class SignalStoreServiceCollectionExtensions
                 provider.GetRequiredService<InMemorySignalStore>());
             services.AddSingleton<ISignalStatusStore>(provider =>
                 provider.GetRequiredService<InMemorySignalStore>());
+            services.AddSingleton<IDueSignalMaintenanceStore>(provider =>
+                provider.GetRequiredService<InMemorySignalStore>());
             return services;
         }
 
@@ -56,6 +58,7 @@ public static class SignalStoreServiceCollectionExtensions
         services.AddSingleton(options);
         services.AddSingleton<ISignalStore, SqlServerSignalStore>();
         services.AddSingleton<ISignalStatusStore, SqlServerSignalStatusStore>();
+        services.AddSingleton<IDueSignalMaintenanceStore, SqlServerDueSignalMaintenanceStore>();
         return services;
     }
 }

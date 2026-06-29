@@ -19,7 +19,11 @@ public static class SignalStoreServiceCollectionExtensions
 
         if (provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase))
         {
-            services.AddSingleton<ISignalStore, InMemorySignalStore>();
+            services.AddSingleton<InMemorySignalStore>();
+            services.AddSingleton<ISignalStore>(provider =>
+                provider.GetRequiredService<InMemorySignalStore>());
+            services.AddSingleton<ISignalStatusStore>(provider =>
+                provider.GetRequiredService<InMemorySignalStore>());
             return services;
         }
 
@@ -51,6 +55,7 @@ public static class SignalStoreServiceCollectionExtensions
         options.Validate();
         services.AddSingleton(options);
         services.AddSingleton<ISignalStore, SqlServerSignalStore>();
+        services.AddSingleton<ISignalStatusStore, SqlServerSignalStatusStore>();
         return services;
     }
 }

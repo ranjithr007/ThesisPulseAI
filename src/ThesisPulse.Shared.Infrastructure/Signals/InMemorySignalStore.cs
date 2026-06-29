@@ -3,11 +3,14 @@ using ThesisPulse.Shared.Contracts.Signals.V1;
 
 namespace ThesisPulse.Shared.Infrastructure.Signals;
 
-public sealed class InMemorySignalStore : ISignalStore
+public sealed class InMemorySignalStore : ISignalStore, ISignalStatusStore
 {
     private readonly object _sync = new();
     private readonly Dictionary<Guid, StoredSignal> _signalsByMessage = new();
     private readonly Dictionary<Guid, StoredSignal> _signalsBySignal = new();
+    private readonly Dictionary<Guid, SignalTransitionResult> _transitions = new();
+    private readonly Dictionary<Guid, int> _statusSequences = new();
+    private readonly Dictionary<Guid, DateTimeOffset> _lastStatusTimes = new();
 
     public Task<SignalSaveResult> SaveAsync(
         EventEnvelope<SignalGeneratedV1> envelope,
@@ -35,11 +38,118 @@ public sealed class InMemorySignalStore : ISignalStore
             var stored = Map(envelope);
             _signalsByMessage.Add(stored.MessageId, stored);
             _signalsBySignal.Add(stored.SignalUid, stored);
+            _statusSequences.Add(stored.SignalUid, 0);
+            _lastStatusTimes.Add(stored.SignalUid, envelope.Payload.GeneratedAtUtc);
 
             return Task.FromResult(new SignalSaveResult(
                 SignalSaveOutcome.Created,
                 stored.SignalUid,
                 stored.SignalId));
+        }
+    }
+
+    public Task<SignalTransitionResult> TransitionStatusAsync(
+        Guid signalUid,
+        SignalStatusTransitionV1 transition,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(transition);
+
+        lock (_sync)
+        {
+            if (_transitions.TryGetValue(transition.TransitionUid, out var duplicate))
+            {
+                return Task.FromResult(duplicate.SignalUid == signalUid
+                    ? duplicate with { Outcome = SignalTransitionOutcome.Duplicate }
+                    : Rejected(
+                        transition,
+                        signalUid,
+                        "transitionUid is already assigned to another signal"));
+            }
+
+            if (!_signalsBySignal.TryGetValue(signalUid, out var current))
+            {
+                return Task.FromResult(new SignalTransitionResult(
+                    SignalTransitionOutcome.NotFound,
+                    transition.TransitionUid,
+                    signalUid,
+                    SignalId: null,
+                    PreviousStatus: null,
+                    CurrentStatus: null,
+                    EventSequence: null,
+                    Reason: "Signal was not found."));
+            }
+
+            var validationError = SignalStatusTransitionRules.Validate(
+                current.Status,
+                transition);
+
+            if (validationError is not null)
+            {
+                return Task.FromResult(Rejected(
+                    transition,
+                    signalUid,
+                    validationError,
+                    current));
+            }
+
+            if (transition.OccurredAtUtc < _lastStatusTimes[signalUid])
+            {
+                return Task.FromResult(Rejected(
+                    transition,
+                    signalUid,
+                    "occurredAtUtc cannot be earlier than the latest status event",
+                    current));
+            }
+
+            if (transition.RelatedSignalUid.HasValue &&
+                (transition.RelatedSignalUid.Value == signalUid ||
+                 !_signalsBySignal.ContainsKey(transition.RelatedSignalUid.Value)))
+            {
+                return Task.FromResult(Rejected(
+                    transition,
+                    signalUid,
+                    "relatedSignalUid must reference a different existing signal",
+                    current));
+            }
+
+            var nextSequence = _statusSequences[signalUid] + 1;
+            var updated = current with
+            {
+                Status = transition.TargetStatus.ToUpperInvariant(),
+            };
+
+            _signalsBySignal[signalUid] = updated;
+            _signalsByMessage[current.MessageId] = updated;
+            _statusSequences[signalUid] = nextSequence;
+            _lastStatusTimes[signalUid] = transition.OccurredAtUtc;
+
+            var result = new SignalTransitionResult(
+                SignalTransitionOutcome.Applied,
+                transition.TransitionUid,
+                signalUid,
+                updated.SignalId,
+                current.Status,
+                updated.Status,
+                nextSequence,
+                Reason: null);
+
+            _transitions.Add(transition.TransitionUid, result);
+            return Task.FromResult(result);
+        }
+    }
+
+    public Task<StoredSignal?> GetAsync(
+        Guid signalUid,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        lock (_sync)
+        {
+            _signalsBySignal.TryGetValue(signalUid, out var signal);
+            return Task.FromResult(signal);
         }
     }
 
@@ -65,6 +175,21 @@ public sealed class InMemorySignalStore : ISignalStore
         }
     }
 
+    private SignalTransitionResult Rejected(
+        SignalStatusTransitionV1 transition,
+        Guid signalUid,
+        string reason,
+        StoredSignal? current = null) =>
+        new(
+            SignalTransitionOutcome.Rejected,
+            transition.TransitionUid,
+            signalUid,
+            current?.SignalId,
+            current?.Status,
+            current?.Status,
+            current is null ? null : _statusSequences[current.SignalUid],
+            reason);
+
     private static SignalSaveResult ToDuplicate(StoredSignal signal) =>
         new(SignalSaveOutcome.Duplicate, signal.SignalUid, signal.SignalId);
 
@@ -80,7 +205,7 @@ public sealed class InMemorySignalStore : ISignalStore
             PrimaryTimeframe: envelope.Payload.PrimaryTimeframe,
             Strength: envelope.Payload.Strength,
             Confidence: envelope.Payload.Confidence,
-            Status: "CANDIDATE",
+            Status: SignalStatusV1.Candidate,
             GeneratedAtUtc: envelope.Payload.GeneratedAtUtc,
             ValidUntilUtc: envelope.Payload.ValidUntilUtc,
             Producer: envelope.Metadata.Producer,

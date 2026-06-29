@@ -10,6 +10,7 @@ builder.Configuration["Platform:ConfigurationVersion"] ??= "platform-foundation-
 builder.Services.AddThesisPulsePlatformFoundation();
 builder.Services.AddThesisPulseMessaging(builder.Configuration, serviceName);
 builder.Services.AddThesisPulseSignalStore(builder.Configuration, serviceName);
+builder.Services.AddSignalStreamPublisher(builder.Configuration);
 builder.Services.AddSingleton<SignalIntakeCoordinator>();
 builder.Services.AddProblemDetails();
 
@@ -24,7 +25,8 @@ app.MapGet("/api/v1/status", (IConfiguration configuration) => Results.Ok(new
     mode = "FOUNDATION",
     environment = "PAPER",
     signalIntakeEnabled = true,
-    signalPublishingEnabled = false,
+    signalStatusTransitionsEnabled = true,
+    signalPublishingEnabled = configuration.GetValue("SignalRealtime:Enabled", false),
     signalPersistence = configuration["SignalPersistence:Provider"] ?? "InMemory",
     messagingProvider = configuration["Messaging:Provider"] ?? "InMemory",
     creatorEngineCode = configuration["SignalPersistence:CreatorEngineCode"]

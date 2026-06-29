@@ -9,10 +9,28 @@ public enum SignalSaveOutcome
     Duplicate = 1,
 }
 
+public enum SignalTransitionOutcome
+{
+    Applied = 0,
+    Duplicate = 1,
+    Rejected = 2,
+    NotFound = 3,
+}
+
 public sealed record SignalSaveResult(
     SignalSaveOutcome Outcome,
     Guid SignalUid,
     long? SignalId);
+
+public sealed record SignalTransitionResult(
+    SignalTransitionOutcome Outcome,
+    Guid TransitionUid,
+    Guid SignalUid,
+    long? SignalId,
+    string? PreviousStatus,
+    string? CurrentStatus,
+    int? EventSequence,
+    string? Reason);
 
 public sealed record StoredSignal(
     long? SignalId,
@@ -39,5 +57,17 @@ public interface ISignalStore
 
     Task<IReadOnlyCollection<StoredSignal>> GetLatestAsync(
         int maximumCount,
+        CancellationToken cancellationToken = default);
+}
+
+public interface ISignalStatusStore
+{
+    Task<SignalTransitionResult> TransitionStatusAsync(
+        Guid signalUid,
+        SignalStatusTransitionV1 transition,
+        CancellationToken cancellationToken = default);
+
+    Task<StoredSignal?> GetAsync(
+        Guid signalUid,
         CancellationToken cancellationToken = default);
 }

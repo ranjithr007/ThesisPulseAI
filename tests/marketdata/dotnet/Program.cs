@@ -138,6 +138,8 @@ RunAsync("instrument sync remains non-tradeable", async () =>
     AssertFalse(instrument.IsShortAllowed, "Synchronization must not grant short permission.");
 });
 
+LiveFeedTestSuite.Run(failures);
+
 if (failures.Count > 0)
 {
     Console.Error.WriteLine($"{failures.Count} Market Data test(s) failed.");

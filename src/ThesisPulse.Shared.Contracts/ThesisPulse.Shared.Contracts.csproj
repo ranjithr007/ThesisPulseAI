@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ThesisPulse.Shared.Contracts</RootNamespace>
+    <AssemblyName>ThesisPulse.Shared.Contracts</AssemblyName>
+  </PropertyGroup>
+</Project>

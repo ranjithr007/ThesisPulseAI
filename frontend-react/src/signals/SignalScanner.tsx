@@ -34,15 +34,13 @@ function formatTime(value: string | null): string {
   }
 
   const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "medium",
-    timeZone: "Asia/Kolkata",
-  }).format(parsed);
+  return Number.isNaN(parsed)
+    ? value
+    : new Intl.DateTimeFormat("en-IN", {
+        dateStyle: "medium",
+        timeStyle: "medium",
+        timeZone: "Asia/Kolkata",
+      }).format(parsed);
 }
 
 function formatRemaining(validUntilUtc: string): string {
@@ -53,12 +51,9 @@ function formatRemaining(validUntilUtc: string): string {
   }
 
   const remainingMinutes = Math.ceil(remainingMilliseconds / 60_000);
-  if (remainingMinutes < 60) {
-    return `${remainingMinutes}m remaining`;
-  }
-
-  const remainingHours = Math.ceil(remainingMinutes / 60);
-  return `${remainingHours}h remaining`;
+  return remainingMinutes < 60
+    ? `${remainingMinutes}m remaining`
+    : `${Math.ceil(remainingMinutes / 60)}h remaining`;
 }
 
 function connectionLabel(state: SignalConnectionState): string {
@@ -76,7 +71,7 @@ function connectionLabel(state: SignalConnectionState): string {
   }
 }
 
-function signalMatchesFilters(
+function matchesFilters(
   signal: SignalSummary,
   filters: SignalScannerFilters,
 ): boolean {
@@ -96,39 +91,27 @@ function signalMatchesFilters(
 }
 
 export function SignalScanner() {
-  const {
-    signals,
-    connectionState,
-    lastEventAtUtc,
-    lastSnapshotAtUtc,
-    error,
-    refresh,
-  } = useSignalScanner();
+  const scanner = useSignalScanner();
   const [filters, setFilters] = useState(initialFilters);
-
   const filteredSignals = useMemo(
-    () => signals.filter((signal) => signalMatchesFilters(signal, filters)),
-    [filters, signals],
+    () => scanner.signals.filter((signal) => matchesFilters(signal, filters)),
+    [filters, scanner.signals],
   );
-
   const timeframes = useMemo(
     () =>
-      Array.from(new Set(signals.map((signal) => signal.primaryTimeframe))).sort(),
-    [signals],
+      Array.from(
+        new Set(scanner.signals.map((signal) => signal.primaryTimeframe)),
+      ).sort(),
+    [scanner.signals],
   );
-
   const counts = useMemo(() => {
     const result = new Map<SignalStatus, number>();
-    for (const status of statusOrder) {
-      result.set(status, 0);
-    }
-
-    for (const signal of signals) {
-      result.set(signal.status, (result.get(signal.status) ?? 0) + 1);
-    }
-
+    statusOrder.forEach((status) => result.set(status, 0));
+    scanner.signals.forEach((signal) =>
+      result.set(signal.status, (result.get(signal.status) ?? 0) + 1),
+    );
     return result;
-  }, [signals]);
+  }, [scanner.signals]);
 
   return (
     <section className="signal-scanner" aria-labelledby="signal-scanner-title">
@@ -141,50 +124,41 @@ export function SignalScanner() {
             and automatic expiry visibility.
           </p>
         </div>
-
         <div className="scanner-actions">
           <div
-            className={`connection-pill ${connectionState.toLowerCase()}`}
+            className={`connection-pill ${scanner.connectionState.toLowerCase()}`}
             role="status"
           >
             <span className="status-dot" aria-hidden="true" />
             <div>
-              <strong>{connectionLabel(connectionState)}</strong>
+              <strong>{connectionLabel(scanner.connectionState)}</strong>
               <span>
-                Last event: {formatTime(lastEventAtUtc ?? lastSnapshotAtUtc)}
+                Last event: {formatTime(scanner.lastEventAtUtc ?? scanner.lastSnapshotAtUtc)}
               </span>
             </div>
           </div>
-          <button className="refresh-button" type="button" onClick={() => void refresh()}>
+          <button
+            className="refresh-button"
+            type="button"
+            onClick={() => void scanner.refresh()}
+          >
             Refresh snapshot
           </button>
         </div>
       </div>
 
-      {error ? (
+      {scanner.error ? (
         <div className="scanner-alert" role="alert">
           <strong>Live update warning</strong>
-          <span>{error}</span>
+          <span>{scanner.error}</span>
         </div>
       ) : null}
 
       <div className="signal-metrics" aria-label="Signal lifecycle counts">
-        <article>
-          <span>Total signals</span>
-          <strong>{signals.length}</strong>
-        </article>
-        <article>
-          <span>Validated</span>
-          <strong>{counts.get("VALIDATED") ?? 0}</strong>
-        </article>
-        <article>
-          <span>Candidates</span>
-          <strong>{counts.get("CANDIDATE") ?? 0}</strong>
-        </article>
-        <article>
-          <span>Expired</span>
-          <strong>{counts.get("EXPIRED") ?? 0}</strong>
-        </article>
+        <article><span>Total signals</span><strong>{scanner.signals.length}</strong></article>
+        <article><span>Validated</span><strong>{counts.get("VALIDATED") ?? 0}</strong></article>
+        <article><span>Candidates</span><strong>{counts.get("CANDIDATE") ?? 0}</strong></article>
+        <article><span>Expired</span><strong>{counts.get("EXPIRED") ?? 0}</strong></article>
       </div>
 
       <div className="scanner-filters" aria-label="Signal filters">
@@ -195,14 +169,10 @@ export function SignalScanner() {
             value={filters.search}
             placeholder="Instrument or strategy"
             onChange={(event) =>
-              setFilters((current) => ({
-                ...current,
-                search: event.target.value,
-              }))
+              setFilters((current) => ({ ...current, search: event.target.value }))
             }
           />
         </label>
-
         <label>
           <span>Direction</span>
           <select
@@ -219,7 +189,6 @@ export function SignalScanner() {
             <option value="SHORT">Short</option>
           </select>
         </label>
-
         <label>
           <span>Status</span>
           <select
@@ -233,29 +202,21 @@ export function SignalScanner() {
           >
             <option value="ALL">All statuses</option>
             {statusOrder.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
+              <option key={status} value={status}>{status}</option>
             ))}
           </select>
         </label>
-
         <label>
           <span>Timeframe</span>
           <select
             value={filters.timeframe}
             onChange={(event) =>
-              setFilters((current) => ({
-                ...current,
-                timeframe: event.target.value,
-              }))
+              setFilters((current) => ({ ...current, timeframe: event.target.value }))
             }
           >
             <option value="ALL">All timeframes</option>
             {timeframes.map((timeframe) => (
-              <option key={timeframe} value={timeframe}>
-                {timeframe}
-              </option>
+              <option key={timeframe} value={timeframe}>{timeframe}</option>
             ))}
           </select>
         </label>
@@ -265,54 +226,29 @@ export function SignalScanner() {
         <table className="signal-table">
           <thead>
             <tr>
-              <th>Instrument</th>
-              <th>Direction</th>
-              <th>Status</th>
-              <th>Timeframe</th>
-              <th>Strength</th>
-              <th>Confidence</th>
-              <th>Validity</th>
-              <th>Strategy</th>
+              <th>Instrument</th><th>Direction</th><th>Status</th><th>Timeframe</th>
+              <th>Strength</th><th>Confidence</th><th>Validity</th><th>Strategy</th>
             </tr>
           </thead>
           <tbody>
             {filteredSignals.map((signal) => (
               <tr key={signal.signalUid}>
                 <td>
-                  <strong>{signal.instrumentKey}</strong>
+                  <a
+                    className="instrument-link"
+                    href={`#/signals/${encodeURIComponent(signal.signalUid)}`}
+                  >
+                    {signal.instrumentKey}
+                  </a>
                   <span>{formatTime(signal.generatedAtUtc)}</span>
                 </td>
-                <td>
-                  <span className={`direction-badge ${signal.direction.toLowerCase()}`}>
-                    {signal.direction}
-                  </span>
-                </td>
-                <td>
-                  <span className={`status-badge ${signal.status.toLowerCase()}`}>
-                    {signal.status}
-                  </span>
-                </td>
+                <td><span className={`direction-badge ${signal.direction.toLowerCase()}`}>{signal.direction}</span></td>
+                <td><span className={`status-badge ${signal.status.toLowerCase()}`}>{signal.status}</span></td>
                 <td>{signal.primaryTimeframe}</td>
-                <td>
-                  <div className="score-cell">
-                    <span>{formatPercentage(signal.strength)}</span>
-                    <meter min="0" max="1" value={signal.strength} />
-                  </div>
-                </td>
-                <td>
-                  <div className="score-cell">
-                    <span>{formatPercentage(signal.confidence)}</span>
-                    <meter min="0" max="1" value={signal.confidence} />
-                  </div>
-                </td>
-                <td>
-                  <strong>{formatRemaining(signal.validUntilUtc)}</strong>
-                  <span>{formatTime(signal.validUntilUtc)}</span>
-                </td>
-                <td>
-                  <strong>{signal.strategyCode}</strong>
-                  <span>v{signal.strategyVersion}</span>
-                </td>
+                <td><div className="score-cell"><span>{formatPercentage(signal.strength)}</span><meter min="0" max="1" value={signal.strength} /></div></td>
+                <td><div className="score-cell"><span>{formatPercentage(signal.confidence)}</span><meter min="0" max="1" value={signal.confidence} /></div></td>
+                <td><strong>{formatRemaining(signal.validUntilUtc)}</strong><span>{formatTime(signal.validUntilUtc)}</span></td>
+                <td><strong>{signal.strategyCode}</strong><span>v{signal.strategyVersion}</span></td>
               </tr>
             ))}
           </tbody>
@@ -321,10 +257,7 @@ export function SignalScanner() {
         {filteredSignals.length === 0 ? (
           <div className="empty-state">
             <strong>No matching signals</strong>
-            <span>
-              The scanner will update automatically when Signal Service publishes a
-              new PAPER signal.
-            </span>
+            <span>The scanner will update automatically when a PAPER signal is published.</span>
           </div>
         ) : null}
       </div>

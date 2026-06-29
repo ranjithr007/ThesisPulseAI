@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import "./styles.css";
 import "./signals/signal-scanner.css";
+import "./pages.css";
 
 const rootElement = document.getElementById("root");
 

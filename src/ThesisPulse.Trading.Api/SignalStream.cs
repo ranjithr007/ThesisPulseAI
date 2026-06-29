@@ -6,7 +6,9 @@ using ThesisPulse.Shared.Contracts.Signals.V1;
 
 namespace ThesisPulse.Trading.Api;
 
-public sealed class SignalStreamHub : Hub;
+public sealed class SignalStreamHub : Hub
+{
+}
 
 public sealed record TradingSignalStreamOptions
 {
@@ -23,6 +25,7 @@ public sealed class SignalStreamBuffer(TradingSignalStreamOptions options)
 
     public void Add(SignalStreamEventV1 streamEvent)
     {
+        ArgumentNullException.ThrowIfNull(streamEvent);
         _events.Enqueue(streamEvent);
 
         while (_events.Count > options.BufferCapacity &&
@@ -51,6 +54,9 @@ public static class SignalStreamServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+
         var enabled = configuration.GetValue("SignalStream:IngestionEnabled", false);
         var apiKey = configuration["SignalStream:InternalApiKey"];
         var capacity = configuration.GetValue("SignalStream:BufferCapacity", 100);
@@ -168,8 +174,7 @@ public static class SignalStreamEndpointExtensions
             return false;
         }
 
-        var suppliedKey = suppliedValues.ToString();
-        var suppliedBytes = Encoding.UTF8.GetBytes(suppliedKey);
+        var suppliedBytes = Encoding.UTF8.GetBytes(suppliedValues.ToString());
         var expectedBytes = Encoding.UTF8.GetBytes(expectedKey);
 
         return suppliedBytes.Length == expectedBytes.Length &&
@@ -191,14 +196,16 @@ public static class SignalStreamEndpointExtensions
             errors.Add("signalUid must not be empty");
         }
 
-        if (!streamEvent.EventType.Equals(
+        if (!string.Equals(
+                streamEvent.EventType,
                 SignalStreamContractV1.EventType,
                 StringComparison.OrdinalIgnoreCase))
         {
             errors.Add($"eventType must be {SignalStreamContractV1.EventType}");
         }
 
-        if (!streamEvent.ContractVersion.Equals(
+        if (!string.Equals(
+                streamEvent.ContractVersion,
                 SignalStreamContractV1.ContractVersion,
                 StringComparison.OrdinalIgnoreCase))
         {

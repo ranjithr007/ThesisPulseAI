@@ -59,8 +59,9 @@ public sealed class UpstoxLiveFeedHealthState : IUpstoxLiveFeedHealthState
         {
             return _snapshot with
             {
-                SegmentStatuses = new Dictionary<string, string>(
-                    _snapshot.SegmentStatuses,
+                SegmentStatuses = _snapshot.SegmentStatuses.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value,
                     StringComparer.OrdinalIgnoreCase),
             };
         }
@@ -125,8 +126,9 @@ public sealed class UpstoxLiveFeedHealthState : IUpstoxLiveFeedHealthState
         Update(snapshot =>
         {
             var statuses = segmentStatuses.Count > 0
-                ? new Dictionary<string, string>(
-                    segmentStatuses,
+                ? segmentStatuses.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value,
                     StringComparer.OrdinalIgnoreCase)
                 : snapshot.SegmentStatuses;
             var hasOpenSegment = statuses.Values.Any(IsOpenStatus);

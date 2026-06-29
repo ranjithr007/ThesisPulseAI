@@ -8,6 +8,7 @@ var manifestPath = Path.Combine(fixturesRoot, "manifest.json");
 
 using var manifestDocument = JsonDocument.Parse(File.ReadAllText(manifestPath));
 var failures = new List<string>();
+var schemaCache = new Dictionary<string, JsonSchema>(StringComparer.OrdinalIgnoreCase);
 var caseCount = 0;
 
 foreach (var testCase in manifestDocument.RootElement.GetProperty("cases").EnumerateArray())
@@ -24,12 +25,15 @@ foreach (var testCase in manifestDocument.RootElement.GetProperty("cases").Enume
     var schemaPath = Path.Combine(contractsRoot, schemaFile);
     var fixturePath = Path.Combine(fixturesRoot, fixtureFile);
 
-    var schema = JsonSchema.FromText(File.ReadAllText(schemaPath));
+    if (!schemaCache.TryGetValue(schemaPath, out var schema))
+    {
+        schema = JsonSchema.FromText(File.ReadAllText(schemaPath));
+        schemaCache.Add(schemaPath, schema);
+    }
 
     JsonElement instance;
     using (var fixtureDocument = JsonDocument.Parse(File.ReadAllText(fixturePath)))
     {
-        // Clone the root so it remains valid after fixtureDocument is disposed.
         instance = fixtureDocument.RootElement.Clone();
     }
 
@@ -41,8 +45,6 @@ foreach (var testCase in manifestDocument.RootElement.GetProperty("cases").Enume
 
     if (result.IsValid != expectedValid)
     {
-        // EvaluationResults.ToJsonDocument() is not available in JsonSchema.Net 9.2.2.
-        // ToString() is version-safe and still provides diagnostic context.
         var detail = result.ToString() ?? "Validation result did not match the expected outcome.";
         failures.Add($"{name}: {detail}");
         Console.WriteLine($"FAIL {name}: {detail}");

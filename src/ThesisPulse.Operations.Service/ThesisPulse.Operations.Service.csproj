@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>ThesisPulse.Operations.Service</RootNamespace>
+    <AssemblyName>ThesisPulse.Operations.Service</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ThesisPulse.Shared.Contracts\ThesisPulse.Shared.Contracts.csproj" />
+    <ProjectReference Include="..\ThesisPulse.Shared.Observability\ThesisPulse.Shared.Observability.csproj" />
+  </ItemGroup>
+</Project>

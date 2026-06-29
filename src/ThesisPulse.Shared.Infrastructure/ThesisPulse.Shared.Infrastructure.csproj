@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ThesisPulse.Shared.Infrastructure</RootNamespace>
+    <AssemblyName>ThesisPulse.Shared.Infrastructure</AssemblyName>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>ThesisPulse.Trading.Api</RootNamespace>
+    <AssemblyName>ThesisPulse.Trading.Api</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ThesisPulse.Shared.Contracts\ThesisPulse.Shared.Contracts.csproj" />
+    <ProjectReference Include="..\ThesisPulse.Shared.Infrastructure\ThesisPulse.Shared.Infrastructure.csproj" />
+    <ProjectReference Include="..\ThesisPulse.Shared.Observability\ThesisPulse.Shared.Observability.csproj" />
+  </ItemGroup>
+</Project>

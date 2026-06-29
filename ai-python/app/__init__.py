@@ -1,0 +1,1 @@
+"""ThesisPulse AI application package."""

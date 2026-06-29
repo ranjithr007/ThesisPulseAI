@@ -44,9 +44,10 @@
 - [x] Author and locally verify V0002 versioned reference tables.
 - [x] Author and locally verify V0003 market observations, candles, ingestion state and quality assessments.
 - [x] Author and locally verify V0004 engine registry, outputs, evidence and canonical signals.
-- [x] Author V0005 immutable theses, evidence, scenarios, invalidation events and failure fingerprints.
-- [x] Add V0005 structural verification script.
-- [ ] Execute V0005 locally twice and confirm verification passes.
+- [x] Author and locally verify V0005 immutable theses and falsification lifecycle.
+- [x] Author V0006 immutable risk policies, snapshots, decisions, checks and trade plans.
+- [x] Add V0006 structural verification script.
+- [ ] Execute V0006 locally twice and confirm verification passes.
 - [ ] Initial durable transport implementation.
 
 ### Risk and environments
@@ -54,6 +55,10 @@
 - [x] Paper, shadow and live boundaries.
 - [x] Accept ADR-0006 starting risk limits.
 - [x] Add a versioned risk-policy contract.
+- [x] Implement immutable risk-policy storage and active-scope assignment.
+- [x] Implement immutable capital and portfolio snapshot storage.
+- [x] Implement risk-decision and trade-plan storage controls.
+- [ ] Seed and approve `risk-policy-1.0.0` in SQL Server.
 - [ ] Sector and correlation limits.
 - [x] Promotion sequence from offline to scaled live.
 - [ ] Strategy-specific measurable promotion thresholds.
@@ -102,15 +107,19 @@
 - [x] Implement SQL Server market-data and data-quality storage foundation.
 - [x] Implement SQL Server engine-output and canonical-signal storage foundation.
 - [x] Implement SQL Server thesis and falsification-lifecycle storage foundation.
+- [x] Implement SQL Server risk and trade-plan storage foundation.
 - [ ] Add reviewed exchange, calendar, universe and broker reference seeds.
 - [ ] Implement market-data ingestion and candle-normalization services.
 - [ ] Implement engine registry seeds and intelligence persistence adapters.
 - [ ] Implement fusion and signal-creation service with engine-authority validation.
 - [ ] Implement thesis creation, validation, expiry and invalidation workers.
 - [ ] Implement failure-fingerprint review to learning-candidate workflow.
+- [ ] Implement active risk-policy resolver and parent-ceiling validation.
+- [ ] Implement immutable capital and portfolio snapshot writers.
+- [ ] Implement deterministic risk evaluation and trade-plan services.
 - [ ] Implement model registry and deployment manifest storage.
 - [ ] Implement learning-candidate validation jobs.
-- [ ] Implement SQL Server operational and audit business tables.
+- [ ] Implement SQL Server execution, portfolio, operational and audit tables.
 - [ ] Implement fake and Upstox broker adapters.
 - [ ] Implement reconciliation and operational-control workers.
 - [ ] Implement secret manager and production service identities.
@@ -143,16 +152,17 @@
 ## Exit gate
 
 - [x] All architecture ADRs are accepted.
-- [x] Initial risk policy is approved and versioned.
+- [x] Initial risk policy is approved and versioned as a contract.
+- [ ] Seed and activate the accepted policy in SQL Server.
 - [ ] Live allow-list, capital allocation and measurable promotion gates approved.
 - [ ] Sector, correlation, margin and notional exposure extensions approved.
-- [ ] V0001 through V0005 succeed on a clean database and pass repeat execution.
+- [ ] V0001 through V0006 succeed on a clean database and pass repeat execution.
 - [ ] All contracts validate locally in .NET and Python; CI automation is deferred.
 - [x] Architecture prevents Upstox types from entering domain and application layers.
 - [ ] Runtime tests prove the broker adapter boundary.
 - [x] Contract rules require complete signal-to-execution lineage.
 - [x] Duplicate prevention and reconciliation policies are accepted.
-- [ ] Runtime and database constraints enforce duplicate prevention across the lifecycle.
+- [ ] Runtime and database constraints enforce duplicate prevention across execution lifecycle.
 - [x] Model, engine and configuration versions are required for reproducibility.
 - [x] Live-loss learning governance is accepted.
 - [x] End-to-end audit and lineage requirements are accepted.

@@ -14,13 +14,14 @@
 - Upstox remains behind a canonical broker adapter.
 - UTC is canonical; Indian sessions use `Asia/Kolkata` and a versioned calendar.
 - Shared database changes use one script-based migration authority.
-- Lifecycle: `Signal -> Thesis -> Risk Decision -> Trade Plan -> Execution Command -> Order Events -> Fill Events`.
+- Lifecycle: `Signal -> Thesis -> Risk Decision -> Trade Plan -> Execution Command -> Order Events -> Fill Events -> Position/P&L Events`.
 - Live outcomes create governed learning candidates; they never mutate production directly.
 - Audit and decision lineage are immutable and queryable end to end.
 - Failure controls block new exposure while preserving approved exits.
-- Stale or invalid mandatory market data cannot create new exposure.
+- Stale or invalid mandatory market data cannot create new exposure or risk-eligible valuations.
 - Risk ceilings are defined by accepted policy `risk-policy-1.0.0`.
 - Broker submission is idempotent and unknown outcomes require reconciliation.
+- Portfolio state is derived from accepted fills; broker positions remain reconciliation evidence.
 
 ## Workstream status
 
@@ -47,9 +48,10 @@
 - [x] Author and locally verify V0004 engine registry, outputs, evidence and canonical signals.
 - [x] Author and locally verify V0005 immutable theses and falsification lifecycle.
 - [x] Author and locally verify V0006 risk policies, snapshots, decisions and trade plans.
-- [x] Author V0007 execution commands, orders, events, fills and reconciliation evidence.
-- [x] Add V0007 structural verification script.
-- [ ] Execute V0007 locally twice and confirm verification passes.
+- [x] Author and locally verify V0007 execution commands, orders, events, fills and reconciliation evidence.
+- [x] Author V0008 portfolios, positions, lots, cash/exposure ledgers, valuations and P&L.
+- [x] Add V0008 structural verification script.
+- [ ] Execute V0008 locally twice and confirm verification passes.
 - [ ] Initial durable transport implementation.
 
 ### Risk and environments
@@ -86,11 +88,12 @@
 - [x] Semantic validation rules for decision and execution lifecycles.
 - [x] Initial shared valid and invalid fixture manifest.
 - [x] Equivalent .NET and Python schema-validation runners.
+- [ ] Define canonical portfolio, position-event and P&L snapshot contracts if they cross service boundaries.
 - [ ] Expand fixtures to every contract and semantic rule.
 - [ ] Confirm equivalent local .NET and Python results.
 - [ ] Add automated CI validation later; CI is intentionally deferred during local development.
 
-### Execution and governance
+### Execution, portfolio and governance
 
 - [x] Canonical broker interface and mapping boundary.
 - [x] Order state machine and idempotency policy.
@@ -102,6 +105,12 @@
 - [x] Implement append-only order events and event quarantine storage.
 - [x] Implement idempotent fill storage using broker IDs or fingerprints.
 - [x] Implement redacted broker-request and reconciliation evidence storage.
+- [x] Implement current position projections with optimistic versions.
+- [x] Implement idempotent fill-to-position event storage.
+- [x] Implement lot opening, closure and realized-P&L storage.
+- [x] Implement current cash/exposure projections and append-only ledgers.
+- [x] Implement valuation marks, position valuations and immutable P&L snapshots.
+- [x] Implement broker-position observations and append-only reconciliation resolution.
 - [x] Model, engine, feature and configuration versioning policy.
 - [x] Immutable deployment manifests and deterministic rollback.
 - [x] Live-loss attribution and candidate-learning governance.
@@ -117,8 +126,9 @@
 - [x] Implement SQL Server thesis and falsification-lifecycle storage foundation.
 - [x] Implement SQL Server risk and trade-plan storage foundation.
 - [x] Implement SQL Server execution and reconciliation storage foundation.
-- [ ] Add reviewed exchange, calendar, universe, broker and broker-account seeds.
-- [ ] Seed an approved order-transition policy.
+- [x] Implement SQL Server portfolio and P&L storage foundation.
+- [ ] Add reviewed exchange, calendar, universe, broker, account and portfolio seeds.
+- [ ] Seed approved risk and order-transition policies.
 - [ ] Implement market-data ingestion and candle-normalization services.
 - [ ] Implement engine registry seeds and intelligence persistence adapters.
 - [ ] Implement fusion and signal-creation service with engine-authority validation.
@@ -129,11 +139,13 @@
 - [ ] Implement deterministic risk evaluation and trade-plan services.
 - [ ] Implement command idempotency, durable outbox and order projection services.
 - [ ] Implement fake and Upstox broker adapters.
-- [ ] Implement fill processor and protective-order sizing from actual fills.
-- [ ] Implement reconciliation scheduler and operator-resolution workflow.
+- [ ] Implement transactional fill, lot, cash and exposure processor.
+- [ ] Implement mark-to-market and portfolio P&L workers.
+- [ ] Implement protective-exit synchronization using actual filled quantity.
+- [ ] Implement execution and position reconciliation schedulers and operator workflows.
 - [ ] Implement model registry and deployment manifest storage.
 - [ ] Implement learning-candidate validation jobs.
-- [ ] Implement SQL Server portfolio, operational and audit tables.
+- [ ] Implement SQL Server operational and audit tables.
 - [ ] Implement secret manager and production service identities.
 
 ## ADR register
@@ -168,15 +180,16 @@
 - [ ] Seed and activate the accepted policy in SQL Server.
 - [ ] Live allow-list, capital allocation and measurable promotion gates approved.
 - [ ] Sector, correlation, margin and notional exposure extensions approved.
-- [ ] V0001 through V0007 succeed on a clean database and pass repeat execution.
+- [ ] V0001 through V0008 succeed on a clean database and pass repeat execution.
 - [ ] All contracts validate locally in .NET and Python; CI automation is deferred.
 - [x] Architecture prevents Upstox types from entering domain and application layers.
 - [ ] Runtime tests prove the broker adapter boundary.
 - [x] Contract rules require complete signal-to-execution lineage.
-- [x] Database storage enforces core command, order-event and fill uniqueness.
-- [ ] Runtime tests prove no duplicate broker side effects across retries and unknown outcomes.
+- [x] Database storage enforces core command, order-event, fill and position-event uniqueness.
+- [ ] Runtime tests prove no duplicate broker, position, cash or P&L side effects across retries.
+- [ ] Runtime tests prove partial-fill, reversal, lot closure and broker-position reconciliation.
 - [x] Model, engine and configuration versions are required for reproducibility.
 - [x] Live-loss learning governance is accepted.
 - [x] End-to-end audit and lineage requirements are accepted.
 - [x] Security, failure, kill-switch and stale-data policies are accepted.
-- [ ] One implemented lifecycle is traceable with correlation and causation IDs.
+- [ ] One implemented lifecycle is traceable with correlation and causation IDs through P&L.

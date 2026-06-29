@@ -58,6 +58,12 @@
 - [x] Add V0009 structural verification script.
 - [ ] Execute V0009 locally twice and confirm verification passes.
 - [x] Complete the initial V0001–V0009 shared SQL Server storage design.
+- [x] Add the dedicated `ThesisPulse.DatabaseMigrator` .NET console project.
+- [x] Add exclusive SQL Server migration locking, ordered discovery and immutable checksum validation.
+- [x] Add migration-run and authoritative applied-history persistence.
+- [x] Add dependency-free parser and migration-discovery tests.
+- [ ] Build the .NET solution locally and run all migrator tests.
+- [ ] Bootstrap V0001–V0009 into `operations.schema_migrations` and prove the second run executes zero scripts.
 - [ ] Implement the initial durable transport services.
 
 ### Risk and environments
@@ -124,6 +130,7 @@
 - [x] Implement immutable operational-control activations, approvals and current-state projections.
 - [x] Implement alert aggregation and delivery-attempt storage.
 - [x] Implement hash-linked audit-event and entity-lineage storage.
+- [x] Implement the repository-controlled .NET migration runner.
 - [x] Model, engine, feature and configuration versioning policy.
 - [x] Immutable deployment manifests and deterministic rollback.
 - [x] Live-loss attribution and candidate-learning governance.
@@ -199,12 +206,15 @@
 - [ ] Live allow-list, capital allocation and measurable promotion gates approved.
 - [ ] Sector, correlation, margin and notional exposure extensions approved.
 - [ ] V0001 through V0009 succeed on a clean database and pass repeat execution.
+- [ ] `ThesisPulseAI.sln` builds and all local .NET/Python validation runners pass.
+- [ ] The migrator registers V0001–V0009 and a repeat run executes zero scripts.
 - [ ] All contracts validate locally in .NET and Python; CI automation is deferred.
 - [x] Architecture prevents Upstox types from entering domain and application layers.
 - [ ] Runtime tests prove the broker adapter boundary.
 - [x] Contract rules require complete signal-to-execution lineage.
 - [x] Database storage enforces core command, order-event, fill, position-event and message uniqueness.
 - [x] Database storage supports scoped operating modes, accountable reset approval and immutable audit evidence.
+- [x] Migration tooling enforces one ordered history, exclusive execution and applied-script immutability.
 - [ ] Runtime tests prove no duplicate broker, position, cash, P&L or message side effects across retries.
 - [ ] Runtime tests prove partial-fill, reversal, lot closure and broker-position reconciliation.
 - [ ] Runtime tests prove kill-switch precedence, close-only behavior, lease recovery and independent reset approval.

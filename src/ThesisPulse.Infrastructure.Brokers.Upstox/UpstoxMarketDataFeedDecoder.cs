@@ -1,6 +1,7 @@
 using System.Text;
 using Google.Protobuf;
 using ThesisPulse.Infrastructure.Brokers.Upstox.Protobuf;
+using Protobuf = ThesisPulse.Infrastructure.Brokers.Upstox.Protobuf;
 
 namespace ThesisPulse.Infrastructure.Brokers.Upstox;
 

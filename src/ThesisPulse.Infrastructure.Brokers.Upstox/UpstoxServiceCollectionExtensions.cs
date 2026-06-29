@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using ThesisPulse.Shared.Infrastructure.MarketData;
 
 namespace ThesisPulse.Infrastructure.Brokers.Upstox;
@@ -52,16 +53,74 @@ public static class UpstoxServiceCollectionExtensions
         };
         options.Validate();
 
+        var instrumentKeys = configuration
+            .GetSection("Upstox:LiveFeed:InstrumentKeys")
+            .GetChildren()
+            .Select(item => item.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Cast<string>()
+            .ToArray();
+        var liveFeedOptions = new UpstoxLiveFeedOptions
+        {
+            Enabled = configuration.GetValue("Upstox:LiveFeed:Enabled", false),
+            Mode = configuration["Upstox:LiveFeed:Mode"]
+                ?? UpstoxLiveFeedModes.Full,
+            InstrumentKeys = instrumentKeys,
+            ConnectTimeoutSeconds = configuration.GetValue(
+                "Upstox:LiveFeed:ConnectTimeoutSeconds",
+                20),
+            MessageSilenceTimeoutSeconds = configuration.GetValue(
+                "Upstox:LiveFeed:MessageSilenceTimeoutSeconds",
+                45),
+            ClosedMarketMessageSilenceTimeoutSeconds = configuration.GetValue(
+                "Upstox:LiveFeed:ClosedMarketMessageSilenceTimeoutSeconds",
+                300),
+            KeepAliveSeconds = configuration.GetValue(
+                "Upstox:LiveFeed:KeepAliveSeconds",
+                20),
+            InitialReconnectDelayMilliseconds = configuration.GetValue(
+                "Upstox:LiveFeed:InitialReconnectDelayMilliseconds",
+                1_000),
+            MaximumReconnectDelayMilliseconds = configuration.GetValue(
+                "Upstox:LiveFeed:MaximumReconnectDelayMilliseconds",
+                60_000),
+            StableConnectionResetSeconds = configuration.GetValue(
+                "Upstox:LiveFeed:StableConnectionResetSeconds",
+                60),
+            ReceiveBufferBytes = configuration.GetValue(
+                "Upstox:LiveFeed:ReceiveBufferBytes",
+                64 * 1024),
+            MaximumMessageBytes = configuration.GetValue(
+                "Upstox:LiveFeed:MaximumMessageBytes",
+                4 * 1024 * 1024),
+        };
+        liveFeedOptions.Validate(options.Enabled);
+
         services.AddSingleton(options);
+        services.AddSingleton(liveFeedOptions);
+        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IUpstoxCredentialProvider, ConfigurationUpstoxCredentialProvider>();
         services.AddSingleton<IUpstoxLiveFeedNormalizer, UpstoxLiveFeedNormalizer>();
+        services.AddSingleton<IUpstoxMarketDataFeedDecoder, UpstoxMarketDataFeedDecoder>();
+        services.AddSingleton<IUpstoxSubscriptionProvider, ConfigurationUpstoxSubscriptionProvider>();
+        services.AddSingleton<IUpstoxSubscriptionCommandBuilder, UpstoxSubscriptionCommandBuilder>();
+        services.AddSingleton<IUpstoxWebSocketConnectionFactory, UpstoxWebSocketConnectionFactory>();
+        services.AddSingleton<UpstoxLiveFeedHealthState>();
+        services.AddSingleton<IUpstoxLiveFeedHealthState>(serviceProvider =>
+            serviceProvider.GetRequiredService<UpstoxLiveFeedHealthState>());
         services.AddHttpClient<IMarketDataProvider, UpstoxMarketDataProvider>(client =>
         {
             client.BaseAddress = apiBaseUri;
             client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
             client.DefaultRequestHeaders.UserAgent.ParseAdd(
-                "ThesisPulseAI-MarketData/0.1.0");
+                "ThesisPulseAI-MarketData/0.2.0");
         });
+
+        if (liveFeedOptions.Enabled)
+        {
+            services.AddHostedService<UpstoxMarketDataFeedWorker>();
+        }
+
         return services;
     }
 }

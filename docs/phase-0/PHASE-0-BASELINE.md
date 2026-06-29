@@ -23,6 +23,9 @@
 - Broker-specific models remain behind an Upstox adapter.
 - No AI engine can directly execute an order.
 - No live loss can directly mutate production rules, models, weights, or risk limits.
+- Cross-runtime integration uses versioned contracts, internal REST, and durable outbox/inbox processing.
+- One centralized script-based migration authority owns the shared SQL Server schema.
+- All canonical timestamps are stored in UTC; Indian trading sessions use `Asia/Kolkata` and a versioned exchange calendar.
 
 ## Workstreams
 
@@ -32,7 +35,7 @@
 - [ ] Approve the first liquid-equity live allow-list.
 - [x] Approve cash, futures, and options rollout sequence.
 - [x] Define primary and confirmation timeframe responsibilities.
-- [ ] Define trading-session and holiday-calendar behavior.
+- [x] Define trading-session and exchange-calendar behavior.
 - [x] Define initial overnight and derivatives-scope restrictions.
 - [ ] Define supported Upstox order, validity, and product capabilities through a verified broker capability matrix.
 
@@ -51,14 +54,25 @@
 - [ ] Define restricted-live allocation and instrument allow-list.
 - [ ] Define rollback ownership and operational approvals.
 
+### Integration
+
+- [x] Define ASP.NET Core and Python responsibility boundaries.
+- [x] Define synchronous and asynchronous integration patterns.
+- [x] Define outbox, inbox, idempotency, and at-least-once delivery assumptions.
+- [x] Prevent Python from mutating execution, portfolio, risk, or active production configuration.
+- [ ] Implement cross-runtime contract compatibility tests.
+- [ ] Select and implement the initial durable transport behind the transport-neutral contracts.
+
 ### Data and database
 
-- [ ] Accept SQL Server schemas and naming conventions.
-- [ ] Select a single database migration authority.
-- [ ] Define decimal precision for price, quantity, P&L, percentages, and Greeks.
+- [x] Accept SQL Server schemas and naming conventions.
+- [x] Select one centralized database migration authority.
+- [x] Define decimal precision for price, quantity, P&L, percentages, and Greeks.
 - [x] Define canonical instrument identity requirements.
 - [ ] Define broker instrument mapping storage and refresh rules.
-- [ ] Define UTC storage and Asia/Kolkata display/session rules.
+- [x] Define UTC storage and `Asia/Kolkata` display/session rules.
+- [x] Prohibit EF Core and Alembic from independently migrating the shared operational schema.
+- [ ] Create the initial clean-database migration and verification scripts.
 
 ### Contracts
 
@@ -97,10 +111,10 @@
 | ADR-0004 | Cash, futures, and options rollout scope | Accepted |
 | ADR-0005 | Paper, shadow, and live environment policy | Accepted |
 | ADR-0006 | Capital and risk limits | Proposed |
-| ADR-0007 | ASP.NET Core–Python integration model | Not started |
-| ADR-0008 | SQL Server schema and naming conventions | Not started |
-| ADR-0009 | Database migration ownership | Not started |
-| ADR-0010 | Timestamp, timezone, and exchange calendar | Not started |
+| ADR-0007 | ASP.NET Core–Python integration model | Accepted |
+| ADR-0008 | SQL Server schema and naming conventions | Accepted |
+| ADR-0009 | Database migration ownership | Accepted |
+| ADR-0010 | Timestamp, timezone, and exchange calendar | Accepted |
 | ADR-0011 | Canonical engine-output and signal contracts | In progress |
 | ADR-0012 | Thesis, risk-decision, and trade-plan contracts | Not started |
 | ADR-0013 | Upstox broker-adapter boundary | Not started |
@@ -121,13 +135,14 @@ Phase 0 is complete only when:
 - [ ] The first live instrument allow-list is approved.
 - [ ] Risk limits are approved and represented by a versioned policy.
 - [ ] Paper, shadow, restricted-live, and scaled-live rules have measurable promotion gates.
-- [ ] A single SQL Server migration authority is established.
-- [ ] UTC, Asia/Kolkata, and exchange-session behavior is unambiguous.
+- [x] A single SQL Server migration authority is established by architecture decision.
+- [x] UTC, `Asia/Kolkata`, exchange-calendar, and session behavior are unambiguous.
+- [ ] The initial database migration and migrator execute successfully on a clean SQL Server database.
 - [ ] Canonical contracts validate in ASP.NET Core and Python.
 - [ ] Upstox-specific types do not leak into domain or application projects.
-- [ ] AI services have no access to live execution credentials.
+- [x] Architecture rules prohibit AI services from receiving live execution credentials.
+- [ ] Enforced deployment permissions prove AI services cannot access live execution credentials.
 - [ ] Orders require approved, unexpired risk-decision and trade-plan lineage.
 - [ ] Duplicate-order prevention and reconciliation policies are accepted.
 - [ ] One example lifecycle is traceable end to end with correlation and causation IDs.
 - [ ] Live-loss learning governance is accepted.
-- [ ] The initial SQL Server migration succeeds on a clean database.

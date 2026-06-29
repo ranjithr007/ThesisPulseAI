@@ -21,3 +21,7 @@
 /tests/contracts/dotnet/obj/ThesisPulse.ContractTests.csproj.nuget.dgspec.json
 /tests/contracts/dotnet/obj/ThesisPulse.ContractTests.csproj.nuget.g.props
 /tests/contracts/dotnet/obj/ThesisPulse.ContractTests.csproj.nuget.g.targets
+/src/ThesisPulse.DatabaseMigrator/obj
+/tests/contracts/dotnet/bin/Release/net8.0
+/tests/contracts/dotnet/obj/Release/net8.0
+/tests/database/dotnet/obj

@@ -16,7 +16,8 @@ This directory is the single migration authority for the shared ThesisPulse AI S
 - Approved quantity, risk, price tolerance and protective stops may only become stricter downstream.
 - Execution intent is persisted before broker contact.
 - Unknown post-submission outcomes require reconciliation; blind retries are prohibited.
-- Order and fill events are append-only; current order state is a projection.
+- Order, fill, position, cash, exposure and P&L events are append-only; current state is a projection.
+- Broker positions are reconciliation evidence and cannot destructively overwrite fill-derived portfolio history.
 - Broker credentials and access tokens are never stored in operational contracts or payload archives.
 
 ## Structure
@@ -40,65 +41,40 @@ V<zero-padded-sequence>__<lower_snake_case_description>.sql
 
 ## Implemented migrations
 
-### V0001 — schemas and migration metadata
+| Migration | Foundation | Verification |
+|---|---|---|
+| V0001 | Schemas and migration metadata | `database/verification/V0001__verify_schemas_and_migration_metadata.sql` |
+| V0002 | Exchanges, instruments, calendars, universes and broker mappings | `database/verification/V0002__verify_reference_tables.sql` |
+| V0003 | Market observations, candles, ingestion and quality | `database/verification/V0003__verify_market_data_tables.sql` |
+| V0004 | Intelligence engines, outputs, signals and lineage | `database/verification/V0004__verify_intelligence_and_signal_tables.sql` |
+| V0005 | Theses, evidence, scenarios, invalidation and failure fingerprints | `database/verification/V0005__verify_thesis_tables.sql` |
+| V0006 | Risk policies, snapshots, decisions and trade plans | `database/verification/V0006__verify_risk_and_trade_plan_tables.sql` |
+| V0007 | Execution commands, orders, fills and reconciliation | `database/verification/V0007__verify_execution_and_reconciliation_tables.sql` |
+| V0008 | Portfolio positions, lots, cash/exposure ledgers, valuations and P&L | `database/verification/V0008__verify_portfolio_and_pnl_tables.sql` |
 
-Creates the business schemas plus migration metadata and run tracking.
-
-Verification: `database/verification/V0001__verify_schemas_and_migration_metadata.sql`
-
-### V0002 — reference tables
-
-Creates versioned exchanges, calendars, sessions, instruments, universes, brokers and broker-instrument mappings.
-
-Verification: `database/verification/V0002__verify_reference_tables.sql`
-
-### V0003 — market data, candles and quality state
-
-Creates market sources, immutable observations, normalized candle revisions, ingestion cursors and quality assessments.
-
-Verification: `database/verification/V0003__verify_market_data_tables.sql`
-
-### V0004 — intelligence outputs and canonical signals
-
-Creates engine registration and runs, immutable outputs, evidence lineage, canonical signals and signal status history.
-
-Verification: `database/verification/V0004__verify_intelligence_and_signal_tables.sql`
-
-### V0005 — theses and falsification lifecycle
-
-Creates immutable theses, related-signal lineage, evidence, assumptions, scenarios, invalidation events and failure fingerprints.
-
-Verification: `database/verification/V0005__verify_thesis_tables.sql`
-
-### V0006 — risk decisions and trade plans
-
-Creates immutable risk policies, active assignments, capital and portfolio snapshots, deterministic decisions, limit evidence and trade plans.
-
-Verification: `database/verification/V0006__verify_risk_and_trade_plan_tables.sql`
-
-### V0007 — execution, orders, fills and reconciliation
+### V0008 — portfolio and P&L
 
 Creates:
 
-- `broker.broker_accounts`
-- `execution.order_transition_policies`
-- `execution.order_transition_rules`
-- `execution.execution_commands`
-- `execution.execution_command_events`
-- `execution.execution_command_states`
-- `execution.orders`
-- `execution.order_events`
-- `execution.order_event_quarantines`
-- `execution.fills`
-- `broker.broker_requests`
-- `execution.reconciliation_runs`
-- `execution.reconciliation_observations`
-- `execution.reconciliation_discrepancies`
-- `execution.reconciliation_resolutions`
+- `portfolio.portfolios`
+- `portfolio.positions`
+- `portfolio.position_events`
+- `portfolio.position_lots`
+- `portfolio.position_lot_closures`
+- `portfolio.realized_pnl_entries`
+- `portfolio.cash_balances`
+- `portfolio.cash_ledger_entries`
+- `portfolio.exposure_states`
+- `portfolio.exposure_ledger_entries`
+- `portfolio.valuation_marks`
+- `portfolio.position_valuations`
+- `portfolio.pnl_snapshots`
+- `portfolio.pnl_snapshot_positions`
+- `portfolio.broker_position_observations`
+- `portfolio.position_reconciliation_states`
+- `portfolio.position_reconciliation_events`
 
-V0007 enforces environment/account-scoped command idempotency, unique client and broker identities, command-type field rules, optimistic order versions, append-only order events, broker-sequence evidence, idempotent fill identities, unknown-outcome reconciliation and exit-safe discrepancy handling.
-
-Verification: `database/verification/V0007__verify_execution_and_reconciliation_tables.sql`
+V0008 enforces fill idempotency at the position boundary, lot and closure identities, cash-balance arithmetic, exposure ledger ordering, valuation freshness eligibility, current projection concurrency, and exit-safe broker-position reconciliation.
 
 ## LocalDB execution
 
@@ -155,32 +131,39 @@ sqlcmd -S "(localdb)\MSSQLLocalDB" -d "ThesisPulseAI" -E -b -I -i ".\database\ve
 ### V0007
 
 ```powershell
-sqlcmd `
-  -S "(localdb)\MSSQLLocalDB" `
-  -d "ThesisPulseAI" `
-  -E `
-  -b `
-  -I `
-  -i ".\database\migrations\V0007__create_execution_and_reconciliation_tables.sql"
-
-sqlcmd `
-  -S "(localdb)\MSSQLLocalDB" `
-  -d "ThesisPulseAI" `
-  -E `
-  -b `
-  -I `
-  -i ".\database\verification\V0007__verify_execution_and_reconciliation_tables.sql"
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d "ThesisPulseAI" -E -b -I -i ".\database\migrations\V0007__create_execution_and_reconciliation_tables.sql"
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d "ThesisPulseAI" -E -b -I -i ".\database\verification\V0007__verify_execution_and_reconciliation_tables.sql"
 ```
 
-Expected V0007 result:
+### V0008
+
+```powershell
+sqlcmd `
+  -S "(localdb)\MSSQLLocalDB" `
+  -d "ThesisPulseAI" `
+  -E `
+  -b `
+  -I `
+  -i ".\database\migrations\V0008__create_portfolio_and_pnl_tables.sql"
+
+sqlcmd `
+  -S "(localdb)\MSSQLLocalDB" `
+  -d "ThesisPulseAI" `
+  -E `
+  -b `
+  -I `
+  -i ".\database\verification\V0008__verify_portfolio_and_pnl_tables.sql"
+```
+
+Expected V0008 result:
 
 ```text
 verification_status  migration_version  verified_table_count
 -------------------  -----------------  --------------------
-PASS                 V0007              15
+PASS                 V0008              17
 ```
 
-Run each new migration and its verification script a second time to confirm repeat execution succeeds without duplicate objects.
+Run every new migration and its verification script a second time to confirm repeat execution succeeds without duplicate objects.
 
 ## Initial migration sequence
 
@@ -191,8 +174,8 @@ Run each new migration and its verification script a second time to confirm repe
 5. theses, evidence, scenarios, invalidation and failure fingerprints;
 6. risk policies, snapshots, decisions and trade plans;
 7. execution commands, orders, events, fills and reconciliation;
-8. portfolio positions, exposure and P&L ledgers;
-9. inbox, outbox, jobs, audit events, incidents and kill switches.
+8. portfolio positions, lots, cash/exposure ledgers, valuations and P&L;
+9. inbox, outbox, jobs, audit events, incidents, alerts and kill switches.
 
 ## Planned migrator
 
@@ -206,11 +189,12 @@ Every migration set must be verified against an empty database, the previous sup
 
 ## Related decisions
 
+- `docs/adr/ADR-0001-system-architecture-and-technology-ownership.md`
 - `docs/adr/ADR-0006-capital-and-risk-limits.md`
 - `docs/adr/ADR-0008-sql-server-schema-and-naming-conventions.md`
 - `docs/adr/ADR-0009-database-migration-ownership.md`
-- `docs/adr/ADR-0012-thesis-risk-decision-and-trade-plan-contracts.md`
 - `docs/adr/ADR-0013-upstox-broker-adapter-boundary.md`
 - `docs/adr/ADR-0014-order-idempotency-and-execution-lifecycle.md`
 - `docs/adr/ADR-0017-audit-traceability-and-decision-lineage.md`
 - `docs/adr/ADR-0019-failure-handling-and-kill-switch-policy.md`
+- `docs/broker/UPSTOX-RECONCILIATION-POLICY.md`

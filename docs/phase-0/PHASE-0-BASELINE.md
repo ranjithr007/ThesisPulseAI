@@ -20,6 +20,7 @@
 - Failure controls block new exposure while preserving approved exits.
 - Stale or invalid mandatory market data cannot create new exposure.
 - Risk ceilings are defined by accepted policy `risk-policy-1.0.0`.
+- Broker submission is idempotent and unknown outcomes require reconciliation.
 
 ## Workstream status
 
@@ -45,9 +46,10 @@
 - [x] Author and locally verify V0003 market observations, candles, ingestion state and quality assessments.
 - [x] Author and locally verify V0004 engine registry, outputs, evidence and canonical signals.
 - [x] Author and locally verify V0005 immutable theses and falsification lifecycle.
-- [x] Author V0006 immutable risk policies, snapshots, decisions, checks and trade plans.
-- [x] Add V0006 structural verification script.
-- [ ] Execute V0006 locally twice and confirm verification passes.
+- [x] Author and locally verify V0006 risk policies, snapshots, decisions and trade plans.
+- [x] Author V0007 execution commands, orders, events, fills and reconciliation evidence.
+- [x] Add V0007 structural verification script.
+- [ ] Execute V0007 locally twice and confirm verification passes.
 - [ ] Initial durable transport implementation.
 
 ### Risk and environments
@@ -94,6 +96,12 @@
 - [x] Order state machine and idempotency policy.
 - [x] Unknown-outcome reconciliation policy.
 - [x] Partial-fill and actual-position quantity rules.
+- [x] Implement canonical broker-account storage without credentials.
+- [x] Implement immutable execution-command and status-event storage.
+- [x] Implement current command and order projections with optimistic versions.
+- [x] Implement append-only order events and event quarantine storage.
+- [x] Implement idempotent fill storage using broker IDs or fingerprints.
+- [x] Implement redacted broker-request and reconciliation evidence storage.
 - [x] Model, engine, feature and configuration versioning policy.
 - [x] Immutable deployment manifests and deterministic rollback.
 - [x] Live-loss attribution and candidate-learning governance.
@@ -108,7 +116,9 @@
 - [x] Implement SQL Server engine-output and canonical-signal storage foundation.
 - [x] Implement SQL Server thesis and falsification-lifecycle storage foundation.
 - [x] Implement SQL Server risk and trade-plan storage foundation.
-- [ ] Add reviewed exchange, calendar, universe and broker reference seeds.
+- [x] Implement SQL Server execution and reconciliation storage foundation.
+- [ ] Add reviewed exchange, calendar, universe, broker and broker-account seeds.
+- [ ] Seed an approved order-transition policy.
 - [ ] Implement market-data ingestion and candle-normalization services.
 - [ ] Implement engine registry seeds and intelligence persistence adapters.
 - [ ] Implement fusion and signal-creation service with engine-authority validation.
@@ -117,11 +127,13 @@
 - [ ] Implement active risk-policy resolver and parent-ceiling validation.
 - [ ] Implement immutable capital and portfolio snapshot writers.
 - [ ] Implement deterministic risk evaluation and trade-plan services.
+- [ ] Implement command idempotency, durable outbox and order projection services.
+- [ ] Implement fake and Upstox broker adapters.
+- [ ] Implement fill processor and protective-order sizing from actual fills.
+- [ ] Implement reconciliation scheduler and operator-resolution workflow.
 - [ ] Implement model registry and deployment manifest storage.
 - [ ] Implement learning-candidate validation jobs.
-- [ ] Implement SQL Server execution, portfolio, operational and audit tables.
-- [ ] Implement fake and Upstox broker adapters.
-- [ ] Implement reconciliation and operational-control workers.
+- [ ] Implement SQL Server portfolio, operational and audit tables.
 - [ ] Implement secret manager and production service identities.
 
 ## ADR register
@@ -156,13 +168,13 @@
 - [ ] Seed and activate the accepted policy in SQL Server.
 - [ ] Live allow-list, capital allocation and measurable promotion gates approved.
 - [ ] Sector, correlation, margin and notional exposure extensions approved.
-- [ ] V0001 through V0006 succeed on a clean database and pass repeat execution.
+- [ ] V0001 through V0007 succeed on a clean database and pass repeat execution.
 - [ ] All contracts validate locally in .NET and Python; CI automation is deferred.
 - [x] Architecture prevents Upstox types from entering domain and application layers.
 - [ ] Runtime tests prove the broker adapter boundary.
 - [x] Contract rules require complete signal-to-execution lineage.
-- [x] Duplicate prevention and reconciliation policies are accepted.
-- [ ] Runtime and database constraints enforce duplicate prevention across execution lifecycle.
+- [x] Database storage enforces core command, order-event and fill uniqueness.
+- [ ] Runtime tests prove no duplicate broker side effects across retries and unknown outcomes.
 - [x] Model, engine and configuration versions are required for reproducibility.
 - [x] Live-loss learning governance is accepted.
 - [x] End-to-end audit and lineage requirements are accepted.

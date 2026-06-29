@@ -44,7 +44,6 @@ public sealed record StoredSignal(
     decimal Strength,
     decimal Confidence,
     string Status,
-    int StatusSequence,
     DateTimeOffset GeneratedAtUtc,
     DateTimeOffset ValidUntilUtc,
     string Producer,
@@ -56,6 +55,13 @@ public interface ISignalStore
         EventEnvelope<SignalGeneratedV1> envelope,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyCollection<StoredSignal>> GetLatestAsync(
+        int maximumCount,
+        CancellationToken cancellationToken = default);
+}
+
+public interface ISignalStatusStore
+{
     Task<SignalTransitionResult> TransitionStatusAsync(
         Guid signalUid,
         SignalStatusTransitionV1 transition,
@@ -63,9 +69,5 @@ public interface ISignalStore
 
     Task<StoredSignal?> GetAsync(
         Guid signalUid,
-        CancellationToken cancellationToken = default);
-
-    Task<IReadOnlyCollection<StoredSignal>> GetLatestAsync(
-        int maximumCount,
         CancellationToken cancellationToken = default);
 }

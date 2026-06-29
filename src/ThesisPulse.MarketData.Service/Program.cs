@@ -34,21 +34,31 @@ app.UseThesisPulsePlatformFoundation();
 app.MapThesisPulsePlatformEndpoints(serviceName);
 app.MapMarketDataEndpoints();
 
-app.MapGet("/api/v1/status", (IConfiguration configuration) => Results.Ok(new
-{
-    mode = "MARKET_DATA_FOUNDATION",
-    environment = "PAPER",
-    provider = "UPSTOX",
-    providerEnabled = configuration.GetValue("Upstox:Enabled", false),
-    persistence = configuration["MarketData:Persistence:Provider"] ?? "InMemory",
-    operationsEnabled = operationsOptions.Enabled,
-    instrumentSynchronizationEnabled = operationsOptions.Enabled,
-    historicalIngestionEnabled = operationsOptions.Enabled,
-    liveFeedAuthorizationEnabled = operationsOptions.Enabled,
-    liveFeedNormalizationEnabled = true,
-    liveWebSocketWorkerEnabled = false,
-    brokerConnectivityEnabled = configuration.GetValue("Upstox:Enabled", false),
-}));
+app.MapGet(
+    "/api/v1/status",
+    (
+        IConfiguration configuration,
+        IUpstoxLiveFeedHealthState liveFeedHealthState) => Results.Ok(new
+        {
+            mode = "MARKET_DATA_LIVE_FEED",
+            environment = "PAPER",
+            provider = "UPSTOX",
+            providerEnabled = configuration.GetValue("Upstox:Enabled", false),
+            persistence = configuration["MarketData:Persistence:Provider"]
+                ?? "InMemory",
+            operationsEnabled = operationsOptions.Enabled,
+            instrumentSynchronizationEnabled = operationsOptions.Enabled,
+            historicalIngestionEnabled = operationsOptions.Enabled,
+            liveFeedAuthorizationEnabled = operationsOptions.Enabled,
+            liveFeedNormalizationEnabled = true,
+            liveWebSocketWorkerEnabled = configuration.GetValue(
+                "Upstox:LiveFeed:Enabled",
+                false),
+            liveFeed = liveFeedHealthState.GetSnapshot(),
+            brokerConnectivityEnabled = configuration.GetValue(
+                "Upstox:Enabled",
+                false),
+        }));
 
 app.Run();
 

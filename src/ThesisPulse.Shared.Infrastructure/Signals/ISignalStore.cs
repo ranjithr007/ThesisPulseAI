@@ -67,11 +67,14 @@ public interface ISignalStatusStore
         SignalStatusTransitionV1 transition,
         CancellationToken cancellationToken = default);
 
-    Task<ExpireDueSignalsResultV1> ExpireDueAsync(
-        ExpireDueSignalsRequestV1 request,
-        CancellationToken cancellationToken = default);
-
     Task<StoredSignal?> GetAsync(
         Guid signalUid,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IDueSignalMaintenanceStore
+{
+    Task<ExpireDueSignalsResultV1> ExpireDueAsync(
+        ExpireDueSignalsRequestV1 request,
         CancellationToken cancellationToken = default);
 }

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ThesisPulse.Infrastructure.Brokers.Upstox</RootNamespace>
+    <AssemblyName>ThesisPulse.Infrastructure.Brokers.Upstox</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="$(SolutionDir)src/ThesisPulse.Shared.Contracts/ThesisPulse.Shared.Contracts.csproj" />
+    <ProjectReference Include="$(SolutionDir)src/ThesisPulse.Shared.Infrastructure/ThesisPulse.Shared.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

@@ -25,3 +25,8 @@
 /tests/contracts/dotnet/bin/Release/net8.0
 /tests/contracts/dotnet/obj/Release/net8.0
 /tests/database/dotnet/obj
+/src/ThesisPulse.DatabaseMigrator/bin/Release/net8.0
+/tests/database/dotnet/bin/Release/net8.0
+/src/ThesisPulse.DatabaseMigrator/bin/Debug/net8.0
+/tests/database/dotnet/bin/Debug/net8.0
+*.sqlite-journal

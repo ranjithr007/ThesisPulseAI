@@ -1,0 +1,58 @@
+{
+  "contract_version": "1.0.0",
+  "risk_policy_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  "risk_policy_version": "risk-policy-1.0.0",
+  "status": "APPROVED",
+  "environment": "PAPER",
+  "parent_policy_id": null,
+  "scope": {
+    "scope_type": "GLOBAL",
+    "scope_id": "GLOBAL"
+  },
+  "effective_from_utc": "2026-06-29T00:00:00Z",
+  "effective_to_utc": null,
+  "limits": {
+    "standard_risk_per_trade_fraction": 0.0025,
+    "maximum_risk_per_trade_fraction": 0.005,
+    "maximum_total_open_risk_fraction": 0.01,
+    "daily_soft_loss_fraction": 0.01,
+    "daily_hard_loss_fraction": 0.015,
+    "weekly_loss_fraction": 0.03,
+    "maximum_strategy_drawdown_fraction": 0.06,
+    "maximum_portfolio_drawdown_fraction": 0.08,
+    "consecutive_loss_pause_count": 3,
+    "maximum_trades_per_symbol_per_session": 2,
+    "maximum_sector_exposure_fraction": null,
+    "maximum_correlated_exposure_fraction": null,
+    "maximum_margin_utilization_fraction": null,
+    "maximum_single_instrument_notional_fraction": null,
+    "maximum_gross_exposure_fraction": null,
+    "maximum_net_exposure_fraction": null
+  },
+  "soft_limit_response": {
+    "operating_mode": "RESTRICTED",
+    "risk_multiplier": 0.5,
+    "maximum_concurrent_new_positions": 1,
+    "requires_operator_approval": false
+  },
+  "hard_limit_response": {
+    "operating_mode": "CLOSE_ONLY",
+    "allow_risk_reducing_exits": true,
+    "requires_reconciliation_before_reset": true,
+    "requires_operator_approval_to_reset": true
+  },
+  "consecutive_loss_response": {
+    "operating_mode": "PAUSED",
+    "trigger_outcome_attribution": true,
+    "minimum_cooling_off_minutes": 30,
+    "requires_health_check": true,
+    "requires_operator_approval": false
+  },
+  "mandatory_rules": ["NO_MARTINGALE", "NO_AVERAGING_DOWN"],
+  "created_at_utc": "2026-06-29T00:00:00Z",
+  "created_by": "architecture",
+  "approved_at_utc": "2026-06-29T00:00:00Z",
+  "approved_by": "risk-owner",
+  "checksum": "0123456789abcdef0123456789abcdef",
+  "metadata": {}
+}

@@ -1,0 +1,33 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://thesispulse.ai/contracts/v1/execution-command.schema.json",
+  "title":"ThesisPulse AI Execution Command v1",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["contract_version","message_id","correlation_id","causation_id","environment","generated_at_utc","execution_command_id","trade_plan_id","broker_account_id","command_type","idempotency_key","instrument_id","side","quantity","order_type","time_in_force","valid_until_utc"],
+  "properties":{
+    "contract_version":{"type":"string","const":"1.0.0"},
+    "message_id":{"type":"string","format":"uuid"},
+    "correlation_id":{"type":"string","format":"uuid"},
+    "causation_id":{"type":["string","null"],"format":"uuid"},
+    "environment":{"type":"string","enum":["PAPER","SHADOW","LIVE"]},
+    "generated_at_utc":{"type":"string","format":"date-time"},
+    "execution_command_id":{"type":"string","format":"uuid"},
+    "trade_plan_id":{"type":"string","format":"uuid"},
+    "broker_account_id":{"type":"string","minLength":1,"maxLength":100},
+    "command_type":{"type":"string","enum":["PLACE","MODIFY","CANCEL"]},
+    "idempotency_key":{"type":"string","minLength":8,"maxLength":200},
+    "instrument_id":{"type":"string","minLength":1,"maxLength":100},
+    "side":{"type":"string","enum":["BUY","SELL"]},
+    "quantity":{"type":"number","exclusiveMinimum":0},
+    "order_type":{"type":"string","enum":["MARKET","LIMIT","STOP_MARKET","STOP_LIMIT"]},
+    "limit_price":{"type":["number","null"],"exclusiveMinimum":0},
+    "trigger_price":{"type":["number","null"],"exclusiveMinimum":0},
+    "time_in_force":{"type":"string","enum":["DAY","IOC"]},
+    "client_order_id":{"type":["string","null"],"maxLength":100},
+    "target_order_id":{"type":["string","null"],"format":"uuid"},
+    "expected_order_version":{"type":["integer","null"],"minimum":0},
+    "valid_until_utc":{"type":"string","format":"date-time"},
+    "metadata":{"type":"object","additionalProperties":true}
+  }
+}

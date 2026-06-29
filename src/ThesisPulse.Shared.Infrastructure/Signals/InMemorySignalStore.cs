@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using ThesisPulse.Shared.Contracts.Messaging.V1;
 using ThesisPulse.Shared.Contracts.Signals.V1;
 
@@ -6,7 +5,9 @@ namespace ThesisPulse.Shared.Infrastructure.Signals;
 
 public sealed class InMemorySignalStore : ISignalStore
 {
-    private readonly ConcurrentDictionary<Guid, StoredSignal> _signals = new();
+    private readonly object _sync = new();
+    private readonly Dictionary<Guid, StoredSignal> _signalsByMessage = new();
+    private readonly Dictionary<Guid, StoredSignal> _signalsBySignal = new();
 
     public Task<SignalSaveResult> SaveAsync(
         EventEnvelope<SignalGeneratedV1> envelope,
@@ -15,14 +16,31 @@ public sealed class InMemorySignalStore : ISignalStore
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(envelope);
 
-        var stored = Map(envelope);
-        var created = _signals.TryAdd(envelope.Metadata.MessageId, stored);
-        var current = created ? stored : _signals[envelope.Metadata.MessageId];
+        lock (_sync)
+        {
+            if (_signalsByMessage.TryGetValue(
+                    envelope.Metadata.MessageId,
+                    out var messageDuplicate))
+            {
+                return Task.FromResult(ToDuplicate(messageDuplicate));
+            }
 
-        return Task.FromResult(new SignalSaveResult(
-            created ? SignalSaveOutcome.Created : SignalSaveOutcome.Duplicate,
-            current.SignalUid,
-            current.SignalId));
+            if (_signalsBySignal.TryGetValue(
+                    envelope.Payload.SignalUid,
+                    out var signalDuplicate))
+            {
+                return Task.FromResult(ToDuplicate(signalDuplicate));
+            }
+
+            var stored = Map(envelope);
+            _signalsByMessage.Add(stored.MessageId, stored);
+            _signalsBySignal.Add(stored.SignalUid, stored);
+
+            return Task.FromResult(new SignalSaveResult(
+                SignalSaveOutcome.Created,
+                stored.SignalUid,
+                stored.SignalId));
+        }
     }
 
     public Task<IReadOnlyCollection<StoredSignal>> GetLatestAsync(
@@ -36,13 +54,19 @@ public sealed class InMemorySignalStore : ISignalStore
             throw new ArgumentOutOfRangeException(nameof(maximumCount));
         }
 
-        IReadOnlyCollection<StoredSignal> result = _signals.Values
-            .OrderByDescending(item => item.GeneratedAtUtc)
-            .Take(maximumCount)
-            .ToArray();
+        lock (_sync)
+        {
+            IReadOnlyCollection<StoredSignal> result = _signalsByMessage.Values
+                .OrderByDescending(item => item.GeneratedAtUtc)
+                .Take(maximumCount)
+                .ToArray();
 
-        return Task.FromResult(result);
+            return Task.FromResult(result);
+        }
     }
+
+    private static SignalSaveResult ToDuplicate(StoredSignal signal) =>
+        new(SignalSaveOutcome.Duplicate, signal.SignalUid, signal.SignalId);
 
     private static StoredSignal Map(EventEnvelope<SignalGeneratedV1> envelope) =>
         new(

@@ -3,7 +3,10 @@ using ThesisPulse.Shared.Contracts.Signals.V1;
 
 namespace ThesisPulse.Shared.Infrastructure.Signals;
 
-public sealed class InMemorySignalStore : ISignalStore, ISignalStatusStore
+public sealed class InMemorySignalStore :
+    ISignalStore,
+    ISignalStatusStore,
+    IDueSignalMaintenanceStore
 {
     private readonly object _sync = new();
     private readonly Dictionary<Guid, StoredSignal> _signalsByMessage = new();

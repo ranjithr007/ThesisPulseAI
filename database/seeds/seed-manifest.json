@@ -31,6 +31,12 @@
       "path": "database/seeds/policies/S0005__seed_paper_order_transition_policy.sql",
       "scope": "paper_execution_policy",
       "activation": "draft_zero_rules"
+    },
+    {
+      "sequence": 6,
+      "path": "database/seeds/intelligence/S0006__seed_mock_fusion_engine.sql",
+      "scope": "paper_intelligence",
+      "activation": "signal_authority"
     }
   ],
   "excluded": [

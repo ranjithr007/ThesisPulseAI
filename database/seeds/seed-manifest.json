@@ -37,6 +37,12 @@
       "path": "database/seeds/intelligence/S0006__seed_mock_fusion_engine.sql",
       "scope": "paper_intelligence",
       "activation": "signal_authority"
+    },
+    {
+      "sequence": 7,
+      "path": "database/seeds/reference/S0007__seed_upstox_market_data_sources.sql",
+      "scope": "paper_market_data",
+      "activation": "provider_identity_only"
     }
   ],
   "excluded": [

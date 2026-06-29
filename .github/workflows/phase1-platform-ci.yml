@@ -26,6 +26,12 @@ jobs:
         run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore
       - name: Test
         run: dotnet test ThesisPulseAI.sln --configuration Release --no-build --verbosity normal
+      - name: Contract fixture tests
+        run: dotnet run --project tests/contracts/dotnet/ThesisPulse.ContractTests.csproj --configuration Release --no-build
+      - name: Database migrator tests
+        run: dotnet run --project tests/database/dotnet/ThesisPulse.DatabaseMigrator.Tests.csproj --configuration Release --no-build
+      - name: Market Data foundation tests
+        run: dotnet run --project tests/marketdata/dotnet/ThesisPulse.MarketData.Tests.csproj --configuration Release
 
   python:
     name: Python lint and tests

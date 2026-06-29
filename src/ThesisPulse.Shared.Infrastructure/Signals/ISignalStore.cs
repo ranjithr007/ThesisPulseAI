@@ -9,10 +9,28 @@ public enum SignalSaveOutcome
     Duplicate = 1,
 }
 
+public enum SignalTransitionOutcome
+{
+    Applied = 0,
+    Duplicate = 1,
+    Rejected = 2,
+    NotFound = 3,
+}
+
 public sealed record SignalSaveResult(
     SignalSaveOutcome Outcome,
     Guid SignalUid,
     long? SignalId);
+
+public sealed record SignalTransitionResult(
+    SignalTransitionOutcome Outcome,
+    Guid TransitionUid,
+    Guid SignalUid,
+    long? SignalId,
+    string? PreviousStatus,
+    string? CurrentStatus,
+    int? EventSequence,
+    string? Reason);
 
 public sealed record StoredSignal(
     long? SignalId,
@@ -26,6 +44,7 @@ public sealed record StoredSignal(
     decimal Strength,
     decimal Confidence,
     string Status,
+    int StatusSequence,
     DateTimeOffset GeneratedAtUtc,
     DateTimeOffset ValidUntilUtc,
     string Producer,
@@ -35,6 +54,15 @@ public interface ISignalStore
 {
     Task<SignalSaveResult> SaveAsync(
         EventEnvelope<SignalGeneratedV1> envelope,
+        CancellationToken cancellationToken = default);
+
+    Task<SignalTransitionResult> TransitionStatusAsync(
+        Guid signalUid,
+        SignalStatusTransitionV1 transition,
+        CancellationToken cancellationToken = default);
+
+    Task<StoredSignal?> GetAsync(
+        Guid signalUid,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyCollection<StoredSignal>> GetLatestAsync(

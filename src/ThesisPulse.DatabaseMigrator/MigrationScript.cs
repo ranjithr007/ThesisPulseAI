@@ -49,7 +49,7 @@ public sealed record MigrationScript(
             ComputeChecksum(content));
     }
 
-    public static IReadOnlyList<MigrationScript> Discover(string migrationsPath)
+    public static MigrationScript[] Discover(string migrationsPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(migrationsPath);
 

@@ -10,6 +10,7 @@ public sealed class InMemorySignalStore : ISignalStore, ISignalStatusStore
     private readonly Dictionary<Guid, StoredSignal> _signalsBySignal = new();
     private readonly Dictionary<Guid, SignalTransitionResult> _transitions = new();
     private readonly Dictionary<Guid, int> _statusSequences = new();
+    private readonly Dictionary<Guid, DateTimeOffset> _lastStatusTimes = new();
 
     public Task<SignalSaveResult> SaveAsync(
         EventEnvelope<SignalGeneratedV1> envelope,
@@ -38,6 +39,7 @@ public sealed class InMemorySignalStore : ISignalStore, ISignalStatusStore
             _signalsByMessage.Add(stored.MessageId, stored);
             _signalsBySignal.Add(stored.SignalUid, stored);
             _statusSequences.Add(stored.SignalUid, 0);
+            _lastStatusTimes.Add(stored.SignalUid, envelope.Payload.GeneratedAtUtc);
 
             return Task.FromResult(new SignalSaveResult(
                 SignalSaveOutcome.Created,
@@ -92,6 +94,15 @@ public sealed class InMemorySignalStore : ISignalStore, ISignalStatusStore
                     current));
             }
 
+            if (transition.OccurredAtUtc < _lastStatusTimes[signalUid])
+            {
+                return Task.FromResult(Rejected(
+                    transition,
+                    signalUid,
+                    "occurredAtUtc cannot be earlier than the latest status event",
+                    current));
+            }
+
             if (transition.RelatedSignalUid.HasValue &&
                 (transition.RelatedSignalUid.Value == signalUid ||
                  !_signalsBySignal.ContainsKey(transition.RelatedSignalUid.Value)))
@@ -112,6 +123,7 @@ public sealed class InMemorySignalStore : ISignalStore, ISignalStatusStore
             _signalsBySignal[signalUid] = updated;
             _signalsByMessage[current.MessageId] = updated;
             _statusSequences[signalUid] = nextSequence;
+            _lastStatusTimes[signalUid] = transition.OccurredAtUtc;
 
             var result = new SignalTransitionResult(
                 SignalTransitionOutcome.Applied,

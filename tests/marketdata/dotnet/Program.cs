@@ -83,7 +83,7 @@ Run("decoded Upstox feed is normalized", () =>
     AssertEqual("NSE_INDEX|Nifty 50|sequence-1", update.SourceEventId);
 });
 
-Run("historical candle storage is idempotent", async () =>
+RunAsync("historical candle storage is idempotent", async () =>
 {
     var store = new InMemoryMarketDataStore(evaluator);
     var now = DateTimeOffset.UtcNow;
@@ -104,7 +104,7 @@ Run("historical candle storage is idempotent", async () =>
     AssertEqual(1, second.Duplicates);
 });
 
-Run("instrument sync remains non-tradeable", async () =>
+RunAsync("instrument sync remains non-tradeable", async () =>
 {
     var store = new InMemoryMarketDataStore(evaluator);
     var instrument = new CanonicalInstrumentV1(
@@ -161,7 +161,7 @@ void Run(string name, Action test)
     }
 }
 
-void Run(string name, Func<Task> test)
+void RunAsync(string name, Func<Task> test)
 {
     try
     {

@@ -1,0 +1,6 @@
+D:\00 Projects\ThesisPulseAI\tests\contracts\dotnet\obj\Debug\net8.0\ThesisPulse.ContractTests.csproj.AssemblyReference.cache
+D:\00 Projects\ThesisPulseAI\tests\contracts\dotnet\obj\Debug\net8.0\ThesisPulse.ContractTests.GeneratedMSBuildEditorConfig.editorconfig
+D:\00 Projects\ThesisPulseAI\tests\contracts\dotnet\obj\Debug\net8.0\ThesisPulse.ContractTests.AssemblyInfoInputs.cache
+D:\00 Projects\ThesisPulseAI\tests\contracts\dotnet\obj\Debug\net8.0\ThesisPulse.ContractTests.AssemblyInfo.cs
+D:\00 Projects\ThesisPulseAI\tests\contracts\dotnet\obj\Debug\net8.0\ThesisPulse.ContractTests.csproj.CoreCompileInputs.cache
+D:\00 Projects\ThesisPulseAI\tests\contracts\dotnet\obj\Debug\net8.0\ThesisPulse.ContractTests.sourcelink.json

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Json.Schema;
 
 var repoRoot = FindRepoRoot(AppContext.BaseDirectory);
@@ -14,14 +13,25 @@ var caseCount = 0;
 foreach (var testCase in manifestDocument.RootElement.GetProperty("cases").EnumerateArray())
 {
     caseCount++;
-    var name = testCase.GetProperty("name").GetString() ?? throw new InvalidOperationException("Fixture name is required.");
-    var schemaFile = testCase.GetProperty("schema").GetString() ?? throw new InvalidOperationException("Schema path is required.");
-    var fixtureFile = testCase.GetProperty("fixture").GetString() ?? throw new InvalidOperationException("Fixture path is required.");
+    var name = testCase.GetProperty("name").GetString()
+        ?? throw new InvalidOperationException("Fixture name is required.");
+    var schemaFile = testCase.GetProperty("schema").GetString()
+        ?? throw new InvalidOperationException("Schema path is required.");
+    var fixtureFile = testCase.GetProperty("fixture").GetString()
+        ?? throw new InvalidOperationException("Fixture path is required.");
     var expectedValid = testCase.GetProperty("expected_valid").GetBoolean();
 
-    var schema = JsonSchema.FromText(File.ReadAllText(Path.Combine(contractsRoot, schemaFile)));
-    var instance = JsonNode.Parse(File.ReadAllText(Path.Combine(fixturesRoot, fixtureFile)))
-        ?? throw new InvalidOperationException($"Fixture {fixtureFile} is empty.");
+    var schemaPath = Path.Combine(contractsRoot, schemaFile);
+    var fixturePath = Path.Combine(fixturesRoot, fixtureFile);
+
+    var schema = JsonSchema.FromText(File.ReadAllText(schemaPath));
+
+    JsonElement instance;
+    using (var fixtureDocument = JsonDocument.Parse(File.ReadAllText(fixturePath)))
+    {
+        // Clone the root so it remains valid after fixtureDocument is disposed.
+        instance = fixtureDocument.RootElement.Clone();
+    }
 
     var result = schema.Evaluate(instance, new EvaluationOptions
     {
@@ -31,7 +41,8 @@ foreach (var testCase in manifestDocument.RootElement.GetProperty("cases").Enume
 
     if (result.IsValid != expectedValid)
     {
-        var detail = result.ToJsonDocument().RootElement.ToString();
+        using var resultDocument = result.ToJsonDocument();
+        var detail = resultDocument.RootElement.ToString();
         failures.Add($"{name}: {detail}");
         Console.WriteLine($"FAIL {name}: {detail}");
     }

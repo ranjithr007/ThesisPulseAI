@@ -10,7 +10,7 @@ This directory is the single migration authority for the shared ThesisPulse AI S
 - Applied migrations are immutable.
 - Production migrations are forward-only by default.
 - Runtime database principals do not receive DDL permissions.
-- Prices, quantities, capital, risk, fees, and P&L use fixed-precision decimals rather than `float`.
+- Prices, quantities, capital, risk, fees, P&L, scores and confidence use fixed-precision decimals rather than `float`.
 - Canonical timestamps use UTC `datetime2(7)` columns.
 - Scripts that create filtered indexes declare the required SQL Server session options explicitly.
 
@@ -63,7 +63,7 @@ Creates:
 - `reference.brokers`
 - `reference.broker_instrument_mappings`
 
-V0002 is data-neutral. Exchange, instrument, calendar, universe and broker mapping records are added later through reviewed reference seed versions.
+V0002 is data-neutral. Exchange, instrument, calendar, universe and broker mapping records are added through reviewed seed versions.
 
 Verification:
 
@@ -88,6 +88,31 @@ Verification:
 
 ```text
 database/verification/V0003__verify_market_data_tables.sql
+```
+
+### V0004 — intelligence outputs and canonical signals
+
+Creates:
+
+- `intelligence.engines`
+- `intelligence.engine_runs`
+- `intelligence.engine_outputs`
+- `intelligence.engine_output_market_inputs`
+- `intelligence.engine_output_features`
+- `intelligence.engine_output_evidence`
+- `intelligence.engine_output_warnings`
+- `intelligence.signals`
+- `intelligence.signal_engine_outputs`
+- `intelligence.signal_confirmation_timeframes`
+- `intelligence.signal_evidence`
+- `intelligence.signal_status_events`
+
+V0004 preserves exact model/configuration/feature versions, candle and quality lineage, dynamic fusion weights, evidence, warnings, signal entry/invalidation context, contract hashes, and correlation/causation IDs. Intelligence engines are constrained from order execution.
+
+Verification:
+
+```text
+database/verification/V0004__verify_intelligence_and_signal_tables.sql
 ```
 
 ## LocalDB execution
@@ -160,12 +185,32 @@ sqlcmd `
   -i ".\database\verification\V0003__verify_market_data_tables.sql"
 ```
 
-Expected V0003 result:
+### Run and verify V0004
+
+```powershell
+sqlcmd `
+  -S "(localdb)\MSSQLLocalDB" `
+  -d "ThesisPulseAI" `
+  -E `
+  -b `
+  -I `
+  -i ".\database\migrations\V0004__create_intelligence_and_signal_tables.sql"
+
+sqlcmd `
+  -S "(localdb)\MSSQLLocalDB" `
+  -d "ThesisPulseAI" `
+  -E `
+  -b `
+  -I `
+  -i ".\database\verification\V0004__verify_intelligence_and_signal_tables.sql"
+```
+
+Expected V0004 result:
 
 ```text
 verification_status  migration_version  verified_table_count
 -------------------  -----------------  --------------------
-PASS                 V0003              6
+PASS                 V0004              12
 ```
 
 Run each new migration and its verification script a second time to confirm repeat execution succeeds without duplicate objects.
@@ -221,11 +266,12 @@ Every migration set must be verified against:
 - the least-privilege .NET runtime principal;
 - the least-privilege Python runtime principal.
 
-Verification includes schema objects, constraints, indexes, checksums, model mapping smoke tests, and repeat execution.
+Verification includes schema objects, constraints, indexes, checksums, model mapping smoke tests, repeat execution and end-to-end lineage checks.
 
 ## Related decisions
 
 - `docs/adr/ADR-0008-sql-server-schema-and-naming-conventions.md`
 - `docs/adr/ADR-0009-database-migration-ownership.md`
 - `docs/adr/ADR-0010-timestamp-timezone-and-exchange-calendar.md`
+- `docs/adr/ADR-0011-canonical-engine-output-and-signal-contracts.md`
 - `docs/adr/ADR-0020-market-data-quality-freshness-and-stale-data-policy.md`

@@ -42,9 +42,10 @@
 - [x] UTC, timezone and exchange-calendar policy.
 - [x] Author and locally verify V0001 business schemas and migration metadata.
 - [x] Author and locally verify V0002 versioned reference tables.
-- [x] Author V0003 market observations, candles, ingestion state and quality assessments.
-- [x] Add V0003 structural verification script.
-- [ ] Execute V0003 locally twice and confirm verification passes.
+- [x] Author and locally verify V0003 market observations, candles, ingestion state and quality assessments.
+- [x] Author V0004 engine registry, runs, outputs, evidence and canonical signals.
+- [x] Add V0004 structural verification script.
+- [ ] Execute V0004 locally twice and confirm verification passes.
 - [ ] Initial durable transport implementation.
 
 ### Risk and environments
@@ -98,8 +99,11 @@
 - [x] Implement SQL Server schema ownership boundaries and migration metadata tables.
 - [x] Implement SQL Server reference-table foundation.
 - [x] Implement SQL Server market-data and data-quality storage foundation.
+- [x] Implement SQL Server engine-output and canonical-signal storage foundation.
 - [ ] Add reviewed exchange, calendar, universe and broker reference seeds.
 - [ ] Implement market-data ingestion and candle-normalization services.
+- [ ] Implement engine registry seeds and intelligence persistence adapters.
+- [ ] Implement fusion and signal-creation service with engine-authority validation.
 - [ ] Implement model registry and deployment manifest storage.
 - [ ] Implement learning-candidate workflow and validation jobs.
 - [ ] Implement SQL Server operational and audit business tables.
@@ -138,7 +142,7 @@
 - [x] Initial risk policy is approved and versioned.
 - [ ] Live allow-list, capital allocation and measurable promotion gates approved.
 - [ ] Sector, correlation, margin and notional exposure extensions approved.
-- [ ] V0001 through V0003 succeed on a clean database and pass repeat execution.
+- [ ] V0001 through V0004 succeed on a clean database and pass repeat execution.
 - [ ] All contracts validate locally in .NET and Python; CI automation is deferred.
 - [x] Architecture prevents Upstox types from entering domain and application layers.
 - [ ] Runtime tests prove the broker adapter boundary.

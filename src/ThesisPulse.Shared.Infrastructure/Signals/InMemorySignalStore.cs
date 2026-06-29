@@ -58,85 +58,71 @@ public sealed class InMemorySignalStore : ISignalStore, ISignalStatusStore
 
         lock (_sync)
         {
-            if (_transitions.TryGetValue(transition.TransitionUid, out var duplicate))
+            return Task.FromResult(TransitionStatusCore(signalUid, transition));
+        }
+    }
+
+    public Task<ExpireDueSignalsResultV1> ExpireDueAsync(
+        ExpireDueSignalsRequestV1 request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ValidateExpiryRequest(request);
+
+        lock (_sync)
+        {
+            var dueSignals = _signalsBySignal.Values
+                .Where(signal =>
+                    signal.ValidUntilUtc <= request.AsOfUtc &&
+                    (signal.Status.Equals(
+                         SignalStatusV1.Candidate,
+                         StringComparison.OrdinalIgnoreCase) ||
+                     signal.Status.Equals(
+                         SignalStatusV1.Validated,
+                         StringComparison.OrdinalIgnoreCase)))
+                .OrderBy(signal => signal.ValidUntilUtc)
+                .Take(request.MaximumCount)
+                .ToArray();
+
+            var expired = new List<ExpiredSignalV1>(dueSignals.Length);
+
+            foreach (var signal in dueSignals)
             {
-                return Task.FromResult(duplicate.SignalUid == signalUid
-                    ? duplicate with { Outcome = SignalTransitionOutcome.Duplicate }
-                    : Rejected(
-                        transition,
-                        signalUid,
-                        "transitionUid is already assigned to another signal"));
+                var transition = new SignalStatusTransitionV1(
+                    TransitionUid: Guid.NewGuid(),
+                    TargetStatus: SignalStatusV1.Expired,
+                    ReasonCodes: new[] { "VALIDITY_WINDOW_ELAPSED" },
+                    OccurredAtUtc: request.AsOfUtc,
+                    SourceService: request.SourceService,
+                    SourceVersion: request.SourceVersion,
+                    CorrelationId: request.CorrelationId,
+                    CausationId: null,
+                    RelatedSignalUid: null,
+                    Metadata: new Dictionary<string, string>
+                    {
+                        ["job"] = "signal-expiry",
+                    });
+
+                var result = TransitionStatusCore(signal.SignalUid, transition);
+                if (result.Outcome != SignalTransitionOutcome.Applied)
+                {
+                    continue;
+                }
+
+                expired.Add(new ExpiredSignalV1(
+                    result.TransitionUid,
+                    result.SignalUid,
+                    result.SignalId,
+                    result.PreviousStatus!,
+                    result.CurrentStatus!,
+                    result.EventSequence!.Value));
             }
 
-            if (!_signalsBySignal.TryGetValue(signalUid, out var current))
-            {
-                return Task.FromResult(new SignalTransitionResult(
-                    SignalTransitionOutcome.NotFound,
-                    transition.TransitionUid,
-                    signalUid,
-                    SignalId: null,
-                    PreviousStatus: null,
-                    CurrentStatus: null,
-                    EventSequence: null,
-                    Reason: "Signal was not found."));
-            }
-
-            var validationError = SignalStatusTransitionRules.Validate(
-                current.Status,
-                transition);
-
-            if (validationError is not null)
-            {
-                return Task.FromResult(Rejected(
-                    transition,
-                    signalUid,
-                    validationError,
-                    current));
-            }
-
-            if (transition.OccurredAtUtc < _lastStatusTimes[signalUid])
-            {
-                return Task.FromResult(Rejected(
-                    transition,
-                    signalUid,
-                    "occurredAtUtc cannot be earlier than the latest status event",
-                    current));
-            }
-
-            if (transition.RelatedSignalUid.HasValue &&
-                (transition.RelatedSignalUid.Value == signalUid ||
-                 !_signalsBySignal.ContainsKey(transition.RelatedSignalUid.Value)))
-            {
-                return Task.FromResult(Rejected(
-                    transition,
-                    signalUid,
-                    "relatedSignalUid must reference a different existing signal",
-                    current));
-            }
-
-            var nextSequence = _statusSequences[signalUid] + 1;
-            var updated = current with
-            {
-                Status = transition.TargetStatus.ToUpperInvariant(),
-            };
-
-            _signalsBySignal[signalUid] = updated;
-            _signalsByMessage[current.MessageId] = updated;
-            _statusSequences[signalUid] = nextSequence;
-            _lastStatusTimes[signalUid] = transition.OccurredAtUtc;
-
-            var result = new SignalTransitionResult(
-                SignalTransitionOutcome.Applied,
-                transition.TransitionUid,
-                signalUid,
-                updated.SignalId,
-                current.Status,
-                updated.Status,
-                nextSequence,
-                Reason: null);
-
-            _transitions.Add(transition.TransitionUid, result);
-            return Task.FromResult(result);
+            return Task.FromResult(new ExpireDueSignalsResultV1(
+                request.AsOfUtc,
+                dueSignals.Length,
+                expired.Count,
+                expired));
         }
     }
 
@@ -173,6 +159,106 @@ public sealed class InMemorySignalStore : ISignalStore, ISignalStatusStore
 
             return Task.FromResult(result);
         }
+    }
+
+    private SignalTransitionResult TransitionStatusCore(
+        Guid signalUid,
+        SignalStatusTransitionV1 transition)
+    {
+        if (_transitions.TryGetValue(transition.TransitionUid, out var duplicate))
+        {
+            return duplicate.SignalUid == signalUid
+                ? duplicate with { Outcome = SignalTransitionOutcome.Duplicate }
+                : Rejected(
+                    transition,
+                    signalUid,
+                    "transitionUid is already assigned to another signal");
+        }
+
+        if (!_signalsBySignal.TryGetValue(signalUid, out var current))
+        {
+            return new SignalTransitionResult(
+                SignalTransitionOutcome.NotFound,
+                transition.TransitionUid,
+                signalUid,
+                SignalId: null,
+                PreviousStatus: null,
+                CurrentStatus: null,
+                EventSequence: null,
+                Reason: "Signal was not found.");
+        }
+
+        var validationError = SignalStatusTransitionRules.Validate(
+            current.Status,
+            transition);
+
+        if (validationError is not null)
+        {
+            return Rejected(transition, signalUid, validationError, current);
+        }
+
+        if (transition.OccurredAtUtc < _lastStatusTimes[signalUid])
+        {
+            return Rejected(
+                transition,
+                signalUid,
+                "occurredAtUtc cannot be earlier than the latest status event",
+                current);
+        }
+
+        if (transition.RelatedSignalUid.HasValue &&
+            (transition.RelatedSignalUid.Value == signalUid ||
+             !_signalsBySignal.ContainsKey(transition.RelatedSignalUid.Value)))
+        {
+            return Rejected(
+                transition,
+                signalUid,
+                "relatedSignalUid must reference a different existing signal",
+                current);
+        }
+
+        var nextSequence = _statusSequences[signalUid] + 1;
+        var updated = current with
+        {
+            Status = transition.TargetStatus.ToUpperInvariant(),
+        };
+
+        _signalsBySignal[signalUid] = updated;
+        _signalsByMessage[current.MessageId] = updated;
+        _statusSequences[signalUid] = nextSequence;
+        _lastStatusTimes[signalUid] = transition.OccurredAtUtc;
+
+        var result = new SignalTransitionResult(
+            SignalTransitionOutcome.Applied,
+            transition.TransitionUid,
+            signalUid,
+            updated.SignalId,
+            current.Status,
+            updated.Status,
+            nextSequence,
+            Reason: null);
+
+        _transitions.Add(transition.TransitionUid, result);
+        return result;
+    }
+
+    private static void ValidateExpiryRequest(ExpireDueSignalsRequestV1 request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request.AsOfUtc == default)
+        {
+            throw new ArgumentException("asOfUtc is required", nameof(request));
+        }
+
+        if (request.MaximumCount is < 1 or > 500)
+        {
+            throw new ArgumentOutOfRangeException(nameof(request.MaximumCount));
+        }
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.SourceService);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.SourceVersion);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.CorrelationId);
     }
 
     private SignalTransitionResult Rejected(

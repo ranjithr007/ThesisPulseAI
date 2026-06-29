@@ -1,0 +1,16 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/.vs/slnx.sqlite
+/.vs/ThesisPulseAI
+/.vs/ThesisPulseAI/CopilotIndices/17.14.995.13737
+/.vs/ThesisPulseAI/CopilotIndices/17.14.995.13737/CodeChunks.db
+/.vs/ThesisPulseAI/CopilotIndices/17.14.995.13737/CodeChunks.db-shm
+/.vs/ThesisPulseAI/CopilotIndices/17.14.995.13737/CodeChunks.db-wal
+/.vs/ThesisPulseAI/CopilotIndices/17.14.995.13737/SemanticSymbols.db
+/.vs/ThesisPulseAI/CopilotIndices/17.14.995.13737/SemanticSymbols.db-shm
+/.vs/ThesisPulseAI/CopilotIndices/17.14.995.13737/SemanticSymbols.db-wal
+/.vs/ThesisPulseAI/FileContentIndex
+/.vs/ThesisPulseAI/FileContentIndex/01972770-7783-47a9-866d-309b28f1ce9e.vsidx
+/.vs/ThesisPulseAI/FileContentIndex/fcc55a93-a661-4d96-887e-c0b41c85879d.vsidx

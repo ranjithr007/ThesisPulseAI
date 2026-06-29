@@ -43,9 +43,10 @@
 - [x] Author and locally verify V0001 business schemas and migration metadata.
 - [x] Author and locally verify V0002 versioned reference tables.
 - [x] Author and locally verify V0003 market observations, candles, ingestion state and quality assessments.
-- [x] Author V0004 engine registry, runs, outputs, evidence and canonical signals.
-- [x] Add V0004 structural verification script.
-- [ ] Execute V0004 locally twice and confirm verification passes.
+- [x] Author and locally verify V0004 engine registry, outputs, evidence and canonical signals.
+- [x] Author V0005 immutable theses, evidence, scenarios, invalidation events and failure fingerprints.
+- [x] Add V0005 structural verification script.
+- [ ] Execute V0005 locally twice and confirm verification passes.
 - [ ] Initial durable transport implementation.
 
 ### Risk and environments
@@ -100,12 +101,15 @@
 - [x] Implement SQL Server reference-table foundation.
 - [x] Implement SQL Server market-data and data-quality storage foundation.
 - [x] Implement SQL Server engine-output and canonical-signal storage foundation.
+- [x] Implement SQL Server thesis and falsification-lifecycle storage foundation.
 - [ ] Add reviewed exchange, calendar, universe and broker reference seeds.
 - [ ] Implement market-data ingestion and candle-normalization services.
 - [ ] Implement engine registry seeds and intelligence persistence adapters.
 - [ ] Implement fusion and signal-creation service with engine-authority validation.
+- [ ] Implement thesis creation, validation, expiry and invalidation workers.
+- [ ] Implement failure-fingerprint review to learning-candidate workflow.
 - [ ] Implement model registry and deployment manifest storage.
-- [ ] Implement learning-candidate workflow and validation jobs.
+- [ ] Implement learning-candidate validation jobs.
 - [ ] Implement SQL Server operational and audit business tables.
 - [ ] Implement fake and Upstox broker adapters.
 - [ ] Implement reconciliation and operational-control workers.
@@ -142,7 +146,7 @@
 - [x] Initial risk policy is approved and versioned.
 - [ ] Live allow-list, capital allocation and measurable promotion gates approved.
 - [ ] Sector, correlation, margin and notional exposure extensions approved.
-- [ ] V0001 through V0004 succeed on a clean database and pass repeat execution.
+- [ ] V0001 through V0005 succeed on a clean database and pass repeat execution.
 - [ ] All contracts validate locally in .NET and Python; CI automation is deferred.
 - [x] Architecture prevents Upstox types from entering domain and application layers.
 - [ ] Runtime tests prove the broker adapter boundary.

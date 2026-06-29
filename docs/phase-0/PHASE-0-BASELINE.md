@@ -7,10 +7,12 @@
 ## Product baseline
 
 - Initial universe: NIFTY 50, BANK NIFTY, FINNIFTY, and selected liquid equities.
+- Universe membership and tradability are effective-dated and versioned.
 - Primary trading timeframe: 5-minute intraday.
 - Confirmation timeframes: 1-minute, 15-minute, hourly, and daily.
-- Initial rollout should prioritize cash and futures execution.
-- Options require a separately accepted scope covering chain normalization, strike and expiry selection, Greeks, spreads, liquidity, margin, and multi-leg execution.
+- Cash-equity execution is introduced before index-futures execution.
+- Options begin with data, intelligence, backtesting, and paper trading; restricted-live single-leg options require separate evidence.
+- Multi-leg options are excluded from the initial live scope.
 - Overnight exposure is disabled until explicitly approved.
 
 ## Architecture baseline
@@ -26,10 +28,12 @@
 
 ### Product and trading scope
 
-- [ ] Approve the exact liquid-equity allow-list and eligibility rule.
-- [ ] Approve cash, futures, and options rollout sequence.
+- [x] Define versioned universe eligibility and instrument-state rules.
+- [ ] Approve the first liquid-equity live allow-list.
+- [x] Approve cash, futures, and options rollout sequence.
+- [x] Define primary and confirmation timeframe responsibilities.
 - [ ] Define trading-session and holiday-calendar behavior.
-- [ ] Define overnight and expiry-day restrictions.
+- [x] Define initial overnight and derivatives-scope restrictions.
 - [ ] Define supported Upstox order, validity, and product capabilities through a verified broker capability matrix.
 
 ### Risk
@@ -52,7 +56,8 @@
 - [ ] Accept SQL Server schemas and naming conventions.
 - [ ] Select a single database migration authority.
 - [ ] Define decimal precision for price, quantity, P&L, percentages, and Greeks.
-- [ ] Define instrument identity and broker mapping strategy.
+- [x] Define canonical instrument identity requirements.
+- [ ] Define broker instrument mapping storage and refresh rules.
 - [ ] Define UTC storage and Asia/Kolkata display/session rules.
 
 ### Contracts
@@ -87,9 +92,9 @@
 | ADR | Topic | Status |
 |---|---|---|
 | ADR-0001 | System architecture and technology ownership | Accepted |
-| ADR-0002 | Initial market and instrument universe | Not started |
-| ADR-0003 | Trading timeframes and confirmation hierarchy | Not started |
-| ADR-0004 | Cash, futures, and options rollout scope | Not started |
+| ADR-0002 | Initial market and instrument universe | Accepted |
+| ADR-0003 | Trading timeframes and confirmation hierarchy | Accepted |
+| ADR-0004 | Cash, futures, and options rollout scope | Accepted |
 | ADR-0005 | Paper, shadow, and live environment policy | Accepted |
 | ADR-0006 | Capital and risk limits | Proposed |
 | ADR-0007 | ASP.NET Core–Python integration model | Not started |
@@ -112,9 +117,10 @@
 Phase 0 is complete only when:
 
 - [ ] Every critical ADR is accepted and committed.
-- [ ] The initial universe and instrument eligibility rules are versioned.
+- [x] Initial universe eligibility and instrument-state rules are versioned.
+- [ ] The first live instrument allow-list is approved.
 - [ ] Risk limits are approved and represented by a versioned policy.
-- [ ] Paper, shadow, restricted-live, and scaled-live rules are documented.
+- [ ] Paper, shadow, restricted-live, and scaled-live rules have measurable promotion gates.
 - [ ] A single SQL Server migration authority is established.
 - [ ] UTC, Asia/Kolkata, and exchange-session behavior is unambiguous.
 - [ ] Canonical contracts validate in ASP.NET Core and Python.

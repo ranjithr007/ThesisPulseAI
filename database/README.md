@@ -10,9 +10,11 @@ This directory is the single migration authority for the shared ThesisPulse AI S
 - Applied migrations are immutable.
 - Production migrations are forward-only by default.
 - Runtime database principals do not receive DDL permissions.
-- Prices, quantities, capital, risk, fees, P&L, scores and confidence use fixed-precision decimals rather than `float`.
+- Prices, quantities, capital, risk, fees, P&L, scores, probabilities and confidence use fixed-precision decimals rather than `float`.
 - Canonical timestamps use UTC `datetime2(7)` columns.
 - Scripts that create filtered indexes declare the required SQL Server session options explicitly.
+- Signals and theses never authorize execution; risk and trade-plan stages remain separate.
+- Losses and failed theses create governed evidence only; they cannot directly mutate live production settings.
 
 ## Structure
 
@@ -37,7 +39,7 @@ V<zero-padded-sequence>__<lower_snake_case_description>.sql
 
 ### V0001 — schemas and migration metadata
 
-Creates all business schemas plus:
+Creates the business schemas plus:
 
 - `operations.database_metadata`
 - `operations.schema_migrations`
@@ -51,19 +53,7 @@ database/verification/V0001__verify_schemas_and_migration_metadata.sql
 
 ### V0002 — reference tables
 
-Creates:
-
-- `reference.exchanges`
-- `reference.exchange_calendars`
-- `reference.calendar_days`
-- `reference.trading_sessions`
-- `reference.instruments`
-- `reference.universe_versions`
-- `reference.universe_members`
-- `reference.brokers`
-- `reference.broker_instrument_mappings`
-
-V0002 is data-neutral. Exchange, instrument, calendar, universe and broker mapping records are added through reviewed seed versions.
+Creates versioned exchanges, calendars, sessions, instruments, universes, brokers and broker-instrument mappings.
 
 Verification:
 
@@ -73,16 +63,7 @@ database/verification/V0002__verify_reference_tables.sql
 
 ### V0003 — market data, candles and quality state
 
-Creates:
-
-- `market.data_sources`
-- `market.ingestion_batches`
-- `market.source_observations`
-- `market.candles`
-- `market.ingestion_cursors`
-- `market.data_quality_assessments`
-
-The design preserves source payload identity, event/published/received/processed timestamps, correction revisions, exact candle revisions, point-in-time eligibility, freshness decisions and ingestion health.
+Creates market sources, ingestion batches, immutable source observations, normalized candle revisions, ingestion cursors and canonical quality assessments.
 
 Verification:
 
@@ -92,27 +73,34 @@ database/verification/V0003__verify_market_data_tables.sql
 
 ### V0004 — intelligence outputs and canonical signals
 
-Creates:
-
-- `intelligence.engines`
-- `intelligence.engine_runs`
-- `intelligence.engine_outputs`
-- `intelligence.engine_output_market_inputs`
-- `intelligence.engine_output_features`
-- `intelligence.engine_output_evidence`
-- `intelligence.engine_output_warnings`
-- `intelligence.signals`
-- `intelligence.signal_engine_outputs`
-- `intelligence.signal_confirmation_timeframes`
-- `intelligence.signal_evidence`
-- `intelligence.signal_status_events`
-
-V0004 preserves exact model/configuration/feature versions, candle and quality lineage, dynamic fusion weights, evidence, warnings, signal entry/invalidation context, contract hashes, and correlation/causation IDs. Intelligence engines are constrained from order execution.
+Creates engine registration and runs, immutable engine outputs, market/feature/evidence lineage, canonical signals, fusion lineage, confirmation timeframes and append-only signal status events.
 
 Verification:
 
 ```text
 database/verification/V0004__verify_intelligence_and_signal_tables.sql
+```
+
+### V0005 — theses and falsification lifecycle
+
+Creates:
+
+- `thesis.theses`
+- `thesis.thesis_signal_relationships`
+- `thesis.thesis_evidence`
+- `thesis.thesis_assumptions`
+- `thesis.thesis_invalidation_conditions`
+- `thesis.thesis_invalidation_events`
+- `thesis.thesis_scenarios`
+- `thesis.thesis_status_events`
+- `thesis.thesis_failure_fingerprints`
+
+V0005 preserves the exact primary signal, related supporting/contradicting signals, regime engine output, hypothesis, assumptions, scenario probabilities, expected path, expiry, invalidation state, status history and failure fingerprints. A failure fingerprint is constrained from authorizing a production change.
+
+Verification:
+
+```text
+database/verification/V0005__verify_thesis_tables.sql
 ```
 
 ## LocalDB execution
@@ -205,12 +193,32 @@ sqlcmd `
   -i ".\database\verification\V0004__verify_intelligence_and_signal_tables.sql"
 ```
 
-Expected V0004 result:
+### Run and verify V0005
+
+```powershell
+sqlcmd `
+  -S "(localdb)\MSSQLLocalDB" `
+  -d "ThesisPulseAI" `
+  -E `
+  -b `
+  -I `
+  -i ".\database\migrations\V0005__create_thesis_tables.sql"
+
+sqlcmd `
+  -S "(localdb)\MSSQLLocalDB" `
+  -d "ThesisPulseAI" `
+  -E `
+  -b `
+  -I `
+  -i ".\database\verification\V0005__verify_thesis_tables.sql"
+```
+
+Expected V0005 result:
 
 ```text
 verification_status  migration_version  verified_table_count
 -------------------  -----------------  --------------------
-PASS                 V0004              12
+PASS                 V0005              9
 ```
 
 Run each new migration and its verification script a second time to confirm repeat execution succeeds without duplicate objects.
@@ -221,7 +229,7 @@ Run each new migration and its verification script a second time to confirm repe
 2. reference instruments, exchanges, calendars, sessions, universes and broker mappings;
 3. market observations, candles, ingestion state and data-quality assessments;
 4. intelligence engine outputs and signals;
-5. theses and decision lineage;
+5. theses, evidence, scenarios, invalidation and failure fingerprints;
 6. risk policies, snapshots, decisions and trade plans;
 7. execution commands, orders, events and fills;
 8. portfolio positions, exposure and P&L ledgers;
@@ -252,7 +260,7 @@ The planned `ThesisPulse.DatabaseMigrator` .NET console application will:
 - stop on first failure;
 - return a non-zero process exit code on failure.
 
-Until that migrator is implemented, local scripts are executed explicitly with `sqlcmd` or SSMS. Manual local execution does not replace the migration ledger behavior required for shared environments.
+Until that migrator is implemented, local scripts are executed explicitly with `sqlcmd` or SSMS. Manual local execution does not replace the migration-ledger behavior required for shared environments.
 
 Connection strings and credentials must come from environment-specific secret configuration and must not be committed.
 
@@ -266,7 +274,7 @@ Every migration set must be verified against:
 - the least-privilege .NET runtime principal;
 - the least-privilege Python runtime principal.
 
-Verification includes schema objects, constraints, indexes, checksums, model mapping smoke tests, repeat execution and end-to-end lineage checks.
+Verification includes schema objects, constraints, indexes, checksums, model-mapping smoke tests, repeat execution and end-to-end lineage checks.
 
 ## Related decisions
 
@@ -274,4 +282,6 @@ Verification includes schema objects, constraints, indexes, checksums, model map
 - `docs/adr/ADR-0009-database-migration-ownership.md`
 - `docs/adr/ADR-0010-timestamp-timezone-and-exchange-calendar.md`
 - `docs/adr/ADR-0011-canonical-engine-output-and-signal-contracts.md`
+- `docs/adr/ADR-0012-thesis-risk-decision-and-trade-plan-contracts.md`
+- `docs/adr/ADR-0016-live-loss-learning-and-promotion-governance.md`
 - `docs/adr/ADR-0020-market-data-quality-freshness-and-stale-data-policy.md`

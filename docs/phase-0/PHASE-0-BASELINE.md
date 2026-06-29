@@ -40,6 +40,9 @@
 - [x] SQL Server naming, precision and schema conventions.
 - [x] Centralized migration ownership.
 - [x] UTC, timezone and exchange-calendar policy.
+- [x] Author V0001 business-schema and migration-metadata foundation.
+- [x] Add V0001 structural verification script.
+- [ ] Execute V0001 on a clean local SQL Server database and repeat it successfully.
 - [ ] Initial durable transport implementation.
 
 ### Risk and environments
@@ -73,7 +76,8 @@
 - [x] Initial shared valid and invalid fixture manifest.
 - [x] Equivalent .NET and Python schema-validation runners.
 - [ ] Expand fixtures to every contract and semantic rule.
-- [ ] Execute both runners in CI and confirm equivalent results.
+- [ ] Confirm equivalent local .NET and Python results.
+- [ ] Add automated CI validation later; CI is intentionally deferred during local development.
 
 ### Execution and governance
 
@@ -89,9 +93,10 @@
 - [x] Security, credential and secret-management policy.
 - [x] Failure handling, operating modes and kill-switch policy.
 - [x] Market-data quality, freshness and stale-data policy.
+- [x] Implement SQL Server schema ownership boundaries and migration metadata tables.
 - [ ] Implement model registry and deployment manifest storage.
 - [ ] Implement learning-candidate workflow and validation jobs.
-- [ ] Implement SQL Server operational and audit tables.
+- [ ] Implement SQL Server operational and audit business tables.
 - [ ] Implement fake and Upstox broker adapters.
 - [ ] Implement reconciliation and operational-control workers.
 - [ ] Implement secret manager and production service identities.
@@ -127,8 +132,8 @@
 - [x] Initial risk policy is approved and versioned.
 - [ ] Live allow-list, capital allocation and measurable promotion gates approved.
 - [ ] Sector, correlation, margin and notional exposure extensions approved.
-- [ ] Initial SQL Server migration succeeds on a clean database.
-- [ ] All contracts validate in .NET and Python CI.
+- [ ] Initial SQL Server migration succeeds on a clean database and passes repeat execution.
+- [ ] All contracts validate locally in .NET and Python; CI automation is deferred.
 - [x] Architecture prevents Upstox types from entering domain and application layers.
 - [ ] Runtime tests prove the broker adapter boundary.
 - [x] Contract rules require complete signal-to-execution lineage.

@@ -90,7 +90,7 @@ static void DiscoveryOrdersContiguousScripts()
 
     var scripts = MigrationScript.Discover(directory.Path);
 
-    AssertEqual(2, scripts.Count, "Expected two migration scripts.");
+    AssertEqual(2, scripts.Length, "Expected two migration scripts.");
     AssertEqual(1, scripts[0].Sequence, "V0001 should be first.");
     AssertEqual(2, scripts[1].Sequence, "V0002 should be second.");
 }

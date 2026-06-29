@@ -18,15 +18,15 @@
   "confidence": 0.68,
   "entry_window": {
     "opens_at_utc": "2026-06-29T09:15:00Z",
-    "closes_at_utc": "2026-06-29T09:25:00Z"
+    "closes_at_utc": "2026-06-29T09:25:00Z",
+    "reference_price": 1500.0
   },
   "invalidation": {
-    "type": "PRICE",
-    "price": 1490.0,
-    "description": "Five-minute structure invalidated"
+    "price_level": 1490.0,
+    "reason": "Five-minute structure invalidated"
   },
   "expected_holding_period_minutes": 45,
-  "engine_output_ids": ["44444444-4444-4444-8444-444444444444"],
+  "source_engine_output_ids": ["44444444-4444-4444-8444-444444444444"],
   "status": "CANDIDATE",
   "valid_until_utc": "2026-06-29T09:25:00Z"
 }

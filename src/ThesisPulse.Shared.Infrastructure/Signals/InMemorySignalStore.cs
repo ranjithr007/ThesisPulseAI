@@ -3,12 +3,13 @@ using ThesisPulse.Shared.Contracts.Signals.V1;
 
 namespace ThesisPulse.Shared.Infrastructure.Signals;
 
-public sealed class InMemorySignalStore : ISignalStore
+public sealed class InMemorySignalStore : ISignalStore, ISignalStatusStore
 {
     private readonly object _sync = new();
     private readonly Dictionary<Guid, StoredSignal> _signalsByMessage = new();
     private readonly Dictionary<Guid, StoredSignal> _signalsBySignal = new();
     private readonly Dictionary<Guid, SignalTransitionResult> _transitions = new();
+    private readonly Dictionary<Guid, int> _statusSequences = new();
 
     public Task<SignalSaveResult> SaveAsync(
         EventEnvelope<SignalGeneratedV1> envelope,
@@ -36,6 +37,7 @@ public sealed class InMemorySignalStore : ISignalStore
             var stored = Map(envelope);
             _signalsByMessage.Add(stored.MessageId, stored);
             _signalsBySignal.Add(stored.SignalUid, stored);
+            _statusSequences.Add(stored.SignalUid, 0);
 
             return Task.FromResult(new SignalSaveResult(
                 SignalSaveOutcome.Created,
@@ -101,14 +103,15 @@ public sealed class InMemorySignalStore : ISignalStore
                     current));
             }
 
+            var nextSequence = _statusSequences[signalUid] + 1;
             var updated = current with
             {
                 Status = transition.TargetStatus.ToUpperInvariant(),
-                StatusSequence = current.StatusSequence + 1,
             };
 
             _signalsBySignal[signalUid] = updated;
             _signalsByMessage[current.MessageId] = updated;
+            _statusSequences[signalUid] = nextSequence;
 
             var result = new SignalTransitionResult(
                 SignalTransitionOutcome.Applied,
@@ -117,7 +120,7 @@ public sealed class InMemorySignalStore : ISignalStore
                 updated.SignalId,
                 current.Status,
                 updated.Status,
-                updated.StatusSequence,
+                nextSequence,
                 Reason: null);
 
             _transitions.Add(transition.TransitionUid, result);
@@ -160,7 +163,7 @@ public sealed class InMemorySignalStore : ISignalStore
         }
     }
 
-    private static SignalTransitionResult Rejected(
+    private SignalTransitionResult Rejected(
         SignalStatusTransitionV1 transition,
         Guid signalUid,
         string reason,
@@ -172,7 +175,7 @@ public sealed class InMemorySignalStore : ISignalStore
             current?.SignalId,
             current?.Status,
             current?.Status,
-            current?.StatusSequence,
+            current is null ? null : _statusSequences[current.SignalUid],
             reason);
 
     private static SignalSaveResult ToDuplicate(StoredSignal signal) =>
@@ -191,7 +194,6 @@ public sealed class InMemorySignalStore : ISignalStore
             Strength: envelope.Payload.Strength,
             Confidence: envelope.Payload.Confidence,
             Status: SignalStatusV1.Candidate,
-            StatusSequence: 0,
             GeneratedAtUtc: envelope.Payload.GeneratedAtUtc,
             ValidUntilUtc: envelope.Payload.ValidUntilUtc,
             Producer: envelope.Metadata.Producer,

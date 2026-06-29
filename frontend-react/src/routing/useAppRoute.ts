@@ -44,7 +44,9 @@ export function useAppRoute() {
     window.addEventListener("hashchange", handleHashChange);
 
     if (!window.location.hash) {
-      window.history.replaceState(null, "", routeToHash({ page: "signals" }));
+      const defaultHash = routeToHash({ page: "signals" });
+      window.history.replaceState(null, "", defaultHash);
+      setRoute({ page: "signals" });
     }
 
     return () => window.removeEventListener("hashchange", handleHashChange);
@@ -53,7 +55,7 @@ export function useAppRoute() {
   const navigate = useCallback((nextRoute: AppRoute) => {
     const nextHash = routeToHash(nextRoute);
 
-    if (window.location.hash === nextHash.slice(1)) {
+    if (window.location.hash === nextHash) {
       setRoute(nextRoute);
       return;
     }

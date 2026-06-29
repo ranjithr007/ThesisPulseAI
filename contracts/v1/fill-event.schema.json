@@ -1,0 +1,30 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://thesispulse.ai/contracts/v1/fill-event.schema.json",
+  "title":"ThesisPulse AI Fill Event v1",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["contract_version","message_id","correlation_id","environment","generated_at_utc","fill_event_id","order_id","instrument_id","side","fill_qty","fill_price","fill_at_utc","received_at_utc"],
+  "properties":{
+    "contract_version":{"type":"string","const":"1.0.0"},
+    "message_id":{"type":"string","format":"uuid"},
+    "correlation_id":{"type":"string","format":"uuid"},
+    "causation_id":{"type":["string","null"],"format":"uuid"},
+    "environment":{"type":"string","enum":["PAPER","SHADOW","LIVE"]},
+    "generated_at_utc":{"type":"string","format":"date-time"},
+    "fill_event_id":{"type":"string","format":"uuid"},
+    "order_id":{"type":"string","format":"uuid"},
+    "broker_order_id":{"type":["string","null"],"maxLength":200},
+    "broker_fill_id":{"type":["string","null"],"maxLength":200},
+    "instrument_id":{"type":"string","minLength":1,"maxLength":100},
+    "side":{"type":"string","enum":["BUY","SELL"]},
+    "fill_qty":{"type":"number","exclusiveMinimum":0},
+    "fill_price":{"type":"number","exclusiveMinimum":0},
+    "fees_amount":{"type":["number","null"],"minimum":0},
+    "taxes_amount":{"type":["number","null"],"minimum":0},
+    "fill_at_utc":{"type":"string","format":"date-time"},
+    "received_at_utc":{"type":"string","format":"date-time"},
+    "broker_sequence":{"type":["string","integer","null"]},
+    "metadata":{"type":"object","additionalProperties":true}
+  }
+}

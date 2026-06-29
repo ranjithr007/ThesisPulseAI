@@ -19,6 +19,7 @@
 - Audit and decision lineage are immutable and queryable end to end.
 - Failure controls block new exposure while preserving approved exits.
 - Stale or invalid mandatory market data cannot create new exposure.
+- Risk ceilings are defined by accepted policy `risk-policy-1.0.0`.
 
 ## Workstream status
 
@@ -44,12 +45,14 @@
 ### Risk and environments
 
 - [x] Paper, shadow and live boundaries.
-- [ ] Accept ADR-0006 starting risk limits.
+- [x] Accept ADR-0006 starting risk limits.
+- [x] Add a versioned risk-policy contract.
 - [ ] Sector and correlation limits.
 - [x] Promotion sequence from offline to scaled live.
 - [ ] Strategy-specific measurable promotion thresholds.
 - [x] Close-only, pause, halt and recovery operating modes.
 - [x] Emergency exit and kill-switch architecture policy.
+- [ ] Restricted-live capital allocation.
 
 ### Canonical contracts
 
@@ -65,6 +68,7 @@
 - [x] Learning-candidate schema.
 - [x] Operational-control schema.
 - [x] Data-quality-assessment schema.
+- [x] Risk-policy schema.
 - [x] Semantic validation rules for decision and execution lifecycles.
 - [ ] Shared valid and invalid fixtures.
 - [ ] Equivalent .NET and Python validation tests.
@@ -99,7 +103,7 @@
 | 0003 | Timeframe hierarchy | Accepted |
 | 0004 | Instrument rollout | Accepted |
 | 0005 | Environment policy | Accepted |
-| 0006 | Capital and risk limits | Proposed |
+| 0006 | Capital and risk limits | Accepted |
 | 0007 | .NET–Python integration | Accepted |
 | 0008 | SQL Server conventions | Accepted |
 | 0009 | Migration ownership | Accepted |
@@ -117,9 +121,10 @@
 
 ## Exit gate
 
-- [x] All architecture ADRs except the proposed risk-limit values are accepted.
-- [ ] Risk policy approved and versioned.
-- [ ] Live allow-list and measurable promotion gates approved.
+- [x] All architecture ADRs are accepted.
+- [x] Initial risk policy is approved and versioned.
+- [ ] Live allow-list, capital allocation and measurable promotion gates approved.
+- [ ] Sector, correlation, margin and notional exposure extensions approved.
 - [ ] Initial SQL Server migration succeeds on a clean database.
 - [ ] All contracts validate in .NET and Python.
 - [x] Architecture prevents Upstox types from entering domain and application layers.

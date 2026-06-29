@@ -45,7 +45,7 @@ verification_status  seed_domain  context_instruments  universe_members  draft_c
 PASS                 REFERENCE    3                    3                 1
 ```
 
-The PAPER risk policy and DRAFT transition-policy scripts validate their own immutable identities, checksums, assignments, and rule counts inside their transactions.
+The PAPER risk-policy script validates its immutable identity, checksum, active assignment, and each required safety rule. The DRAFT transition-policy script validates its checksum, unapproved status, and zero-rule state.
 
 ## Manifest
 

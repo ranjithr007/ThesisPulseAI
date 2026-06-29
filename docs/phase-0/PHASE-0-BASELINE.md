@@ -11,10 +11,10 @@
 - ASP.NET Core owns execution, portfolio, risk and operational state.
 - Python owns features, intelligence, inference, training and backtesting.
 - SQL Server is the operational source of truth.
-- Upstox remains behind a broker adapter.
+- Upstox remains behind a canonical broker adapter.
 - UTC is canonical; Indian sessions use `Asia/Kolkata` and a versioned calendar.
 - Shared database changes use one script-based migration authority.
-- Lifecycle: `Signal -> Thesis -> Risk Decision -> Trade Plan -> Execution Command`.
+- Lifecycle: `Signal -> Thesis -> Risk Decision -> Trade Plan -> Execution Command -> Order Events -> Fill Events`.
 
 ## Workstream status
 
@@ -25,7 +25,8 @@
 - [x] Cash, futures and options rollout sequence.
 - [x] Intraday and initial overnight restrictions.
 - [ ] First live liquid-equity allow-list.
-- [ ] Verified Upstox capability matrix.
+- [x] Upstox capability-matrix structure and promotion gates.
+- [ ] Re-verify active Upstox capabilities before restricted live.
 
 ### Architecture and integration
 
@@ -51,17 +52,22 @@
 - [x] Thesis schema.
 - [x] Risk-decision schema.
 - [x] Trade-plan schema.
-- [x] Semantic validation rules.
-- [ ] Execution-command schema.
-- [ ] Order-event and fill-event schemas.
+- [x] Execution-command schema.
+- [x] Order-event schema.
+- [x] Fill-event schema.
+- [x] Semantic validation rules for decision and execution lifecycles.
 - [ ] Shared valid and invalid fixtures.
 - [ ] Equivalent .NET and Python validation tests.
 
 ### Execution and governance
 
-- [ ] Canonical broker interface and mapping refresh rules.
-- [ ] Order state machine and idempotency.
-- [ ] Reconciliation and partial-fill policy.
+- [x] Canonical broker interface and mapping boundary.
+- [x] Order state machine and idempotency policy.
+- [x] Unknown-outcome reconciliation policy.
+- [x] Partial-fill and actual-position quantity rules.
+- [ ] Implement SQL Server execution tables and constraints.
+- [ ] Implement fake and Upstox broker adapters.
+- [ ] Implement reconciliation worker.
 - [ ] Security and secret-management policy.
 - [ ] Model and configuration versioning.
 - [ ] Live-loss learning and promotion governance.
@@ -83,7 +89,9 @@
 | 0010 | Time and calendar rules | Accepted |
 | 0011 | Engine output and signal contracts | Accepted |
 | 0012 | Thesis, risk decision and trade plan contracts | Accepted |
-| 0013–0020 | Broker, execution, versioning, learning, audit and operations | Not started |
+| 0013 | Upstox broker-adapter boundary | Accepted |
+| 0014 | Order idempotency and execution lifecycle | Accepted |
+| 0015–0020 | Versioning, learning, audit, security and operations | Not started |
 
 ## Exit gate
 
@@ -92,8 +100,10 @@
 - [ ] Live allow-list and promotion gates approved.
 - [ ] Initial SQL Server migration succeeds on a clean database.
 - [ ] All contracts validate in .NET and Python.
-- [ ] Upstox types do not leak into domain or application layers.
-- [ ] Runtime controls enforce complete signal-to-trade-plan lineage.
-- [ ] Duplicate prevention and reconciliation are accepted.
+- [x] Architecture prevents Upstox types from entering domain and application layers.
+- [ ] Runtime tests prove the broker adapter boundary.
+- [x] Contract rules require complete signal-to-execution lineage.
+- [x] Duplicate prevention and reconciliation policies are accepted.
+- [ ] Runtime and database constraints enforce duplicate prevention.
 - [ ] One complete lifecycle is traceable with correlation and causation IDs.
 - [ ] Live-loss learning governance is accepted.

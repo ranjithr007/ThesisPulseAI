@@ -41,8 +41,9 @@ foreach (var testCase in manifestDocument.RootElement.GetProperty("cases").Enume
 
     if (result.IsValid != expectedValid)
     {
-        using var resultDocument = result.ToJsonDocument();
-        var detail = resultDocument.RootElement.ToString();
+        // EvaluationResults.ToJsonDocument() is not available in JsonSchema.Net 9.2.2.
+        // ToString() is version-safe and still provides diagnostic context.
+        var detail = result.ToString() ?? "Validation result did not match the expected outcome.";
         failures.Add($"{name}: {detail}");
         Console.WriteLine($"FAIL {name}: {detail}");
     }

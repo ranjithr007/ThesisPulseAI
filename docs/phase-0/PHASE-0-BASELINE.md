@@ -42,7 +42,10 @@
 - [x] UTC, timezone and exchange-calendar policy.
 - [x] Author V0001 business-schema and migration-metadata foundation.
 - [x] Add V0001 structural verification script.
-- [ ] Execute V0001 on a clean local SQL Server database and repeat it successfully.
+- [x] Execute V0001 locally with SQL Server LocalDB.
+- [x] Author V0002 versioned reference tables.
+- [x] Add V0002 structural verification script.
+- [ ] Execute V0002 locally twice and confirm verification passes.
 - [ ] Initial durable transport implementation.
 
 ### Risk and environments
@@ -94,6 +97,8 @@
 - [x] Failure handling, operating modes and kill-switch policy.
 - [x] Market-data quality, freshness and stale-data policy.
 - [x] Implement SQL Server schema ownership boundaries and migration metadata tables.
+- [x] Implement SQL Server reference-table foundation.
+- [ ] Add reviewed exchange, calendar, universe and broker reference seeds.
 - [ ] Implement model registry and deployment manifest storage.
 - [ ] Implement learning-candidate workflow and validation jobs.
 - [ ] Implement SQL Server operational and audit business tables.
@@ -132,13 +137,13 @@
 - [x] Initial risk policy is approved and versioned.
 - [ ] Live allow-list, capital allocation and measurable promotion gates approved.
 - [ ] Sector, correlation, margin and notional exposure extensions approved.
-- [ ] Initial SQL Server migration succeeds on a clean database and passes repeat execution.
+- [ ] V0001 and V0002 succeed on a clean database and pass repeat execution.
 - [ ] All contracts validate locally in .NET and Python; CI automation is deferred.
 - [x] Architecture prevents Upstox types from entering domain and application layers.
 - [ ] Runtime tests prove the broker adapter boundary.
 - [x] Contract rules require complete signal-to-execution lineage.
 - [x] Duplicate prevention and reconciliation policies are accepted.
-- [ ] Runtime and database constraints enforce duplicate prevention.
+- [ ] Runtime and database constraints enforce duplicate prevention across the lifecycle.
 - [x] Model, engine and configuration versions are required for reproducibility.
 - [x] Live-loss learning governance is accepted.
 - [x] End-to-end audit and lineage requirements are accepted.

@@ -21,11 +21,28 @@ public static class SignalStatusTransitionRules
             return $"Unsupported target status '{transition.TargetStatus}'.";
         }
 
+        if (transition.OccurredAtUtc == default)
+        {
+            return "occurredAtUtc is required";
+        }
+
         if (string.IsNullOrWhiteSpace(transition.SourceService) ||
             string.IsNullOrWhiteSpace(transition.SourceVersion) ||
             string.IsNullOrWhiteSpace(transition.CorrelationId))
         {
             return "sourceService, sourceVersion, and correlationId are required";
+        }
+
+        if (transition.ReasonCodes.Any(string.IsNullOrWhiteSpace))
+        {
+            return "reasonCodes must not contain blank values";
+        }
+
+        if (transition.ReasonCodes.Count != transition.ReasonCodes
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count())
+        {
+            return "reasonCodes must not contain duplicates";
         }
 
         if (transition.TargetStatus.Equals(

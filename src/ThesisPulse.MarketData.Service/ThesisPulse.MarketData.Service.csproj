@@ -4,6 +4,9 @@
     <AssemblyName>ThesisPulse.MarketData.Service</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\ThesisPulse.Infrastructure.Brokers.Upstox\ThesisPulse.Infrastructure.Brokers.Upstox.csproj" />
+    <ProjectReference Include="..\ThesisPulse.Shared.Contracts\ThesisPulse.Shared.Contracts.csproj" />
+    <ProjectReference Include="..\ThesisPulse.Shared.Infrastructure\ThesisPulse.Shared.Infrastructure.csproj" />
     <ProjectReference Include="..\ThesisPulse.Shared.Observability\ThesisPulse.Shared.Observability.csproj" />
   </ItemGroup>
 </Project>

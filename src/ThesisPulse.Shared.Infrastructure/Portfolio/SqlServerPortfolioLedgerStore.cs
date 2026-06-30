@@ -8,16 +8,11 @@ namespace ThesisPulse.Shared.Infrastructure.Portfolio;
 
 public sealed class SqlServerPortfolioLedgerStore : IPortfolioLedgerStore
 {
-    private static readonly IReadOnlySet<string> ReconciliationTriggers =
+    private static readonly IReadOnlySet<string> AllowedTriggers =
         new HashSet<string>(StringComparer.Ordinal)
         {
-            "UNKNOWN_OUTCOME",
-            "STARTUP",
-            "PERIODIC",
-            "STREAM_RECOVERY",
-            "QUANTITY_MISMATCH",
-            "SESSION_SHUTDOWN",
-            "OPERATOR_REQUEST",
+            "UNKNOWN_OUTCOME", "STARTUP", "PERIODIC", "STREAM_RECOVERY",
+            "QUANTITY_MISMATCH", "SESSION_SHUTDOWN", "OPERATOR_REQUEST",
         };
 
     private readonly SqlServerPortfolioLedgerOptions _options;
@@ -33,7 +28,7 @@ public sealed class SqlServerPortfolioLedgerStore : IPortfolioLedgerStore
         PortfolioFillProjectionRequestV1 request,
         CancellationToken cancellationToken = default)
     {
-        ValidateProjectionRequest(request);
+        Validate(request);
         await using var connection = new SqlConnection(_options.ConnectionString);
         await connection.OpenAsync(cancellationToken);
         await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(
@@ -42,126 +37,75 @@ public sealed class SqlServerPortfolioLedgerStore : IPortfolioLedgerStore
 
         try
         {
-            var fill = await LoadFillAsync(
-                connection,
-                transaction,
-                request,
-                cancellationToken);
+            var fill = await ReadFillAsync(connection, transaction, request, cancellationToken);
             if (fill is null)
             {
                 await transaction.CommitAsync(cancellationToken);
-                return RejectProjection(request, "FILL_OR_PORTFOLIO_NOT_FOUND");
+                return Rejected(request, "FILL_OR_PORTFOLIO_NOT_FOUND");
             }
 
-            if (await IsFillProjectedAsync(
-                    connection,
-                    transaction,
-                    fill.FillId,
-                    cancellationToken))
+            if (await IsProjectedAsync(connection, transaction, fill.FillId, cancellationToken))
             {
                 await transaction.CommitAsync(cancellationToken);
-                var duplicateSnapshot = await GetSnapshotAsync(
-                    request.PortfolioCode,
-                    request.AsOfUtc,
-                    cancellationToken);
-                var duplicatePosition = duplicateSnapshot?.Positions.FirstOrDefault(
-                    position => string.Equals(
-                        position.InstrumentKey,
-                        fill.InstrumentKey,
-                        StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(
-                        position.ProductType,
-                        fill.ProductType,
-                        StringComparison.Ordinal));
-                return new PortfolioFillProjectionResultV1(
-                    request.RequestUid,
-                    request.FillUid,
-                    PortfolioLedgerContractV1.Duplicate,
-                    Array.Empty<string>(),
-                    duplicatePosition,
-                    duplicateSnapshot,
-                    request.AsOfUtc);
+                return await DuplicateAsync(request, fill.InstrumentKey, cancellationToken);
             }
 
-            var position = await LoadPositionAsync(
-                connection,
-                transaction,
-                fill,
-                cancellationToken);
-            var accounting = DeterministicPositionAccounting.ApplyFill(
-                position.State,
-                position.Lots,
+            var before = await ReadPositionAsync(connection, transaction, fill, cancellationToken);
+            var result = DeterministicPositionAccounting.ApplyFill(
+                before.State,
+                before.Lots,
                 new PositionFillInput(
                     fill.FillUid,
                     fill.Side,
                     fill.Quantity,
                     fill.Price,
-                    fill.FeesAmount,
-                    fill.TaxesAmount,
-                    fill.FillAtUtc));
-            var positionId = await PersistPositionAsync(
+                    fill.Fees,
+                    fill.Taxes,
+                    fill.FilledAtUtc));
+            var positionId = await SavePositionAsync(
                 connection,
                 transaction,
                 fill,
-                position,
-                accounting,
+                before,
+                result,
                 cancellationToken);
-            var eventId = await InsertPositionEventAsync(
+            var eventId = await SavePositionEventAsync(
                 connection,
                 transaction,
                 fill,
                 positionId,
-                accounting,
+                result,
                 cancellationToken);
-            await PersistLotsAsync(
+            await SaveLotsAndPnlAsync(
                 connection,
                 transaction,
                 fill,
                 positionId,
                 eventId,
-                accounting,
+                result,
                 cancellationToken);
-            await PersistCashAsync(
-                connection,
-                transaction,
-                fill,
-                cancellationToken);
-
+            await SaveCashAsync(connection, transaction, fill, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            var portfolio = await GetSnapshotAsync(
+
+            var snapshot = await GetSnapshotAsync(
                 request.PortfolioCode,
                 request.AsOfUtc,
                 cancellationToken);
-            var projectedPosition = portfolio?.Positions.FirstOrDefault(
-                item => string.Equals(
-                    item.InstrumentKey,
-                    fill.InstrumentKey,
-                    StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(item.ProductType, fill.ProductType, StringComparison.Ordinal));
             return new PortfolioFillProjectionResultV1(
                 request.RequestUid,
                 request.FillUid,
                 PortfolioLedgerContractV1.Projected,
                 Array.Empty<string>(),
-                projectedPosition,
-                portfolio,
+                snapshot?.Positions.FirstOrDefault(position =>
+                    string.Equals(position.InstrumentKey, fill.InstrumentKey, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(position.ProductType, fill.ProductType, StringComparison.Ordinal)),
+                snapshot,
                 request.AsOfUtc);
         }
         catch (SqlException exception) when (exception.Number is 2601 or 2627)
         {
             await transaction.RollbackAsync(cancellationToken);
-            var duplicateSnapshot = await GetSnapshotAsync(
-                request.PortfolioCode,
-                request.AsOfUtc,
-                cancellationToken);
-            return new PortfolioFillProjectionResultV1(
-                request.RequestUid,
-                request.FillUid,
-                PortfolioLedgerContractV1.Duplicate,
-                Array.Empty<string>(),
-                duplicateSnapshot?.Positions.FirstOrDefault(),
-                duplicateSnapshot,
-                request.AsOfUtc);
+            return await DuplicateAsync(request, null, cancellationToken);
         }
         catch
         {
@@ -178,25 +122,14 @@ public sealed class SqlServerPortfolioLedgerStore : IPortfolioLedgerStore
         ArgumentException.ThrowIfNullOrWhiteSpace(portfolioCode);
         await using var connection = new SqlConnection(_options.ConnectionString);
         await connection.OpenAsync(cancellationToken);
-        var portfolio = await ReadPortfolioAsync(
-            connection,
-            null,
-            portfolioCode,
-            lockForUpdate: false,
-            cancellationToken);
+        var portfolio = await ReadPortfolioAsync(connection, null, portfolioCode, false, cancellationToken);
         if (portfolio is null)
         {
             return null;
         }
 
-        var positions = await ReadPositionSnapshotsAsync(
-            connection,
-            portfolio,
-            cancellationToken);
-        var cash = await ReadCashSnapshotsAsync(
-            connection,
-            portfolio,
-            cancellationToken);
+        var positions = await ReadPositionsAsync(connection, portfolio, cancellationToken);
+        var cash = await ReadCashAsync(connection, portfolio, cancellationToken);
         var gross = positions.Sum(position => position.MarketValueAmount);
         var net = positions.Sum(position => position.Direction switch
         {
@@ -205,11 +138,11 @@ public sealed class SqlServerPortfolioLedgerStore : IPortfolioLedgerStore
             _ => 0m,
         });
         return new PortfolioLedgerSnapshotV1(
-            portfolio.PortfolioUid,
-            portfolio.PortfolioCode,
+            portfolio.Uid,
+            portfolio.Code,
             portfolio.Environment,
             portfolio.AccountingMethod,
-            portfolio.CurrencyCode,
+            portfolio.Currency,
             positions,
             cash,
             gross,
@@ -227,11 +160,9 @@ public sealed class SqlServerPortfolioLedgerStore : IPortfolioLedgerStore
         ArgumentException.ThrowIfNullOrWhiteSpace(request.PortfolioCode);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.CorrelationId);
         var trigger = request.TriggerType.Trim().ToUpperInvariant();
-        if (!ReconciliationTriggers.Contains(trigger))
+        if (!AllowedTriggers.Contains(trigger))
         {
-            throw new ArgumentException(
-                "Unsupported reconciliation trigger type.",
-                nameof(request));
+            throw new ArgumentException("Unsupported reconciliation trigger.", nameof(request));
         }
 
         await using var connection = new SqlConnection(_options.ConnectionString);
@@ -245,31 +176,16 @@ public sealed class SqlServerPortfolioLedgerStore : IPortfolioLedgerStore
                 connection,
                 transaction,
                 request.PortfolioCode,
-                lockForUpdate: true,
+                true,
                 cancellationToken)
                 ?? throw new InvalidOperationException("Portfolio was not found.");
-            var discrepancies = new List<LedgerDiscrepancyV1>();
-            await FindUnprojectedFillsAsync(
+            var discrepancies = await DetectDiscrepanciesAsync(
                 connection,
                 transaction,
                 portfolio,
-                discrepancies,
                 cancellationToken);
-            await FindPositionMismatchesAsync(
-                connection,
-                transaction,
-                portfolio,
-                discrepancies,
-                cancellationToken);
-            await FindCashMismatchesAsync(
-                connection,
-                transaction,
-                portfolio,
-                discrepancies,
-                cancellationToken);
-
             var runUid = Guid.NewGuid();
-            var runId = await InsertReconciliationRunAsync(
+            var runId = await SaveReconciliationRunAsync(
                 connection,
                 transaction,
                 request,
@@ -278,7 +194,7 @@ public sealed class SqlServerPortfolioLedgerStore : IPortfolioLedgerStore
                 runUid,
                 discrepancies,
                 cancellationToken);
-            await InsertDiscrepanciesAsync(
+            await SaveDiscrepanciesAsync(
                 connection,
                 transaction,
                 runId,
@@ -286,16 +202,14 @@ public sealed class SqlServerPortfolioLedgerStore : IPortfolioLedgerStore
                 request.AsOfUtc,
                 cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-
-            var status = discrepancies.Count == 0
-                ? PortfolioLedgerContractV1.Reconciled
-                : PortfolioLedgerContractV1.Discrepant;
             return new LedgerReconciliationResultV1(
                 request.RequestUid,
                 runUid,
                 request.PortfolioCode,
-                status,
-                discrepancies.Count + 1,
+                discrepancies.Count == 0
+                    ? PortfolioLedgerContractV1.Reconciled
+                    : PortfolioLedgerContractV1.Discrepant,
+                3,
                 discrepancies,
                 discrepancies.Count > 0,
                 true,
@@ -309,1274 +223,636 @@ public sealed class SqlServerPortfolioLedgerStore : IPortfolioLedgerStore
         }
     }
 
-    private async Task<FillContext?> LoadFillAsync(
+    private async Task<FillRow?> ReadFillAsync(
         SqlConnection connection,
         SqlTransaction transaction,
         PortfolioFillProjectionRequestV1 request,
         CancellationToken cancellationToken)
     {
         const string sql = """
-            SELECT
-                f.[fill_id], f.[fill_uid], f.[order_id], f.[broker_account_id],
-                f.[instrument_id], p.[portfolio_id], p.[portfolio_uid],
-                p.[portfolio_code], p.[environment], p.[accounting_method],
-                p.[base_currency_code], e.[exchange_code], i.[canonical_symbol],
-                CASE
-                    WHEN o.[position_intent] = 'INTRADAY' THEN 'INTRADAY'
-                    WHEN o.[position_intent] = 'DELIVERY' THEN 'DELIVERY'
-                    ELSE 'FUTURE'
-                END,
-                f.[side], f.[fill_quantity], f.[fill_price],
-                COALESCE(f.[fees_amount], 0), COALESCE(f.[taxes_amount], 0),
-                f.[fill_at_utc], f.[correlation_id]
-            FROM [execution].[fills] f WITH (UPDLOCK, HOLDLOCK)
-            INNER JOIN [execution].[orders] o ON o.[order_id] = f.[order_id]
-            INNER JOIN [risk].[trade_plans] tp ON tp.[trade_plan_id] = f.[trade_plan_id]
-            INNER JOIN [intelligence].[signals] s ON s.[signal_id] = tp.[signal_id]
-            INNER JOIN [portfolio].[portfolios] p WITH (UPDLOCK, HOLDLOCK)
-                ON p.[broker_account_id] = f.[broker_account_id]
-               AND p.[environment] = f.[environment]
-               AND p.[strategy_code] = s.[strategy_code]
-            INNER JOIN [reference].[instruments] i ON i.[instrument_id] = f.[instrument_id]
-            INNER JOIN [reference].[exchanges] e ON e.[exchange_id] = i.[exchange_id]
-            WHERE f.[fill_uid] = @fill_uid
-              AND p.[portfolio_code] = @portfolio_code
-              AND p.[environment] = 'PAPER'
-              AND p.[status] IN ('ACTIVE', 'RESTRICTED', 'CLOSE_ONLY');
+            SELECT f.[fill_id], f.[fill_uid], f.[order_id], f.[instrument_id],
+                   p.[portfolio_id], p.[portfolio_uid], p.[portfolio_code],
+                   p.[environment], p.[accounting_method], p.[base_currency_code],
+                   e.[exchange_code], i.[canonical_symbol],
+                   CASE WHEN o.[position_intent] = 'INTRADAY' THEN 'INTRADAY'
+                        WHEN o.[position_intent] = 'DELIVERY' THEN 'DELIVERY'
+                        ELSE 'FUTURE' END,
+                   f.[side], f.[fill_quantity], f.[fill_price],
+                   COALESCE(f.[fees_amount],0), COALESCE(f.[taxes_amount],0),
+                   f.[fill_at_utc], f.[correlation_id], f.[broker_account_id]
+            FROM [execution].[fills] f WITH (UPDLOCK,HOLDLOCK)
+            INNER JOIN [execution].[orders] o ON o.[order_id]=f.[order_id]
+            INNER JOIN [risk].[trade_plans] tp ON tp.[trade_plan_id]=f.[trade_plan_id]
+            INNER JOIN [intelligence].[signals] s ON s.[signal_id]=tp.[signal_id]
+            INNER JOIN [portfolio].[portfolios] p WITH (UPDLOCK,HOLDLOCK)
+                ON p.[broker_account_id]=f.[broker_account_id]
+               AND p.[environment]=f.[environment]
+               AND p.[strategy_code]=s.[strategy_code]
+            INNER JOIN [reference].[instruments] i ON i.[instrument_id]=f.[instrument_id]
+            INNER JOIN [reference].[exchanges] e ON e.[exchange_id]=i.[exchange_id]
+            WHERE f.[fill_uid]=@fill_uid AND p.[portfolio_code]=@portfolio_code
+              AND p.[environment]='PAPER';
             """;
-        await using var command = CreateCommand(connection, transaction, sql);
+        await using var command = Command(connection, transaction, sql);
         command.Parameters.Add("@fill_uid", SqlDbType.UniqueIdentifier).Value = request.FillUid;
-        command.Parameters.Add("@portfolio_code", SqlDbType.VarChar, 100).Value =
-            request.PortfolioCode;
+        command.Parameters.Add("@portfolio_code", SqlDbType.VarChar, 100).Value = request.PortfolioCode;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
-        {
-            return null;
-        }
-
-        return new FillContext(
-            reader.GetInt64(0),
-            reader.GetGuid(1),
-            reader.GetInt64(2),
-            reader.GetInt64(3),
-            reader.GetInt64(4),
-            reader.GetInt64(5),
-            reader.GetGuid(6),
-            reader.GetString(7),
-            reader.GetString(8),
-            reader.GetString(9),
-            reader.GetString(10),
-            $"{reader.GetString(11)}|{reader.GetString(12)}",
-            reader.GetString(13),
-            reader.GetString(14),
-            reader.GetDecimal(15),
-            reader.GetDecimal(16),
-            reader.GetDecimal(17),
-            reader.GetDecimal(18),
-            ReadUtc(reader, 19),
-            reader.GetGuid(20));
+        return await reader.ReadAsync(cancellationToken)
+            ? new FillRow(
+                reader.GetInt64(0), reader.GetGuid(1), reader.GetInt64(2), reader.GetInt64(3),
+                reader.GetInt64(4), reader.GetGuid(5), reader.GetString(6), reader.GetString(7),
+                reader.GetString(8), reader.GetString(9),
+                $"{reader.GetString(10)}|{reader.GetString(11)}", reader.GetString(12),
+                reader.GetString(13), reader.GetDecimal(14), reader.GetDecimal(15),
+                reader.GetDecimal(16), reader.GetDecimal(17), Utc(reader, 18),
+                reader.GetGuid(19), reader.GetInt64(20))
+            : null;
     }
 
-    private async Task<bool> IsFillProjectedAsync(
+    private async Task<bool> IsProjectedAsync(
         SqlConnection connection,
         SqlTransaction transaction,
         long fillId,
         CancellationToken cancellationToken)
     {
-        const string sql = """
-            SELECT TOP (1) 1
-            FROM [portfolio].[position_events] WITH (UPDLOCK, HOLDLOCK)
-            WHERE [fill_id] = @fill_id;
-            """;
-        await using var command = CreateCommand(connection, transaction, sql);
+        const string sql = "SELECT TOP(1) 1 FROM [portfolio].[position_events] WITH (UPDLOCK,HOLDLOCK) WHERE [fill_id]=@fill_id;";
+        await using var command = Command(connection, transaction, sql);
         command.Parameters.Add("@fill_id", SqlDbType.BigInt).Value = fillId;
         return await command.ExecuteScalarAsync(cancellationToken) is not null;
     }
 
-    private async Task<PositionContext> LoadPositionAsync(
+    private async Task<PositionRow> ReadPositionAsync(
         SqlConnection connection,
         SqlTransaction transaction,
-        FillContext fill,
+        FillRow fill,
         CancellationToken cancellationToken)
     {
-        const string positionSql = """
-            SELECT TOP (1)
-                [position_id], [position_uid], [position_side], [quantity],
-                [average_open_price], [cost_basis_amount], [realized_pnl_amount],
-                [accrued_fees_amount], [accrued_taxes_amount],
-                [current_position_version], [opened_at_utc], [last_fill_at_utc],
-                [closed_at_utc], [market_value_amount], [unrealized_pnl_amount]
-            FROM [portfolio].[positions] WITH (UPDLOCK, HOLDLOCK)
-            WHERE [portfolio_id] = @portfolio_id
-              AND [instrument_id] = @instrument_id
-              AND [product_type] = @product_type;
+        const string sql = """
+            SELECT TOP(1) [position_id],[position_uid],[position_side],[quantity],
+                [average_open_price],[cost_basis_amount],[realized_pnl_amount],
+                [accrued_fees_amount],[accrued_taxes_amount],[current_position_version],
+                [opened_at_utc]
+            FROM [portfolio].[positions] WITH (UPDLOCK,HOLDLOCK)
+            WHERE [portfolio_id]=@portfolio_id AND [instrument_id]=@instrument_id
+              AND [product_type]=@product_type;
             """;
-        await using var positionCommand = CreateCommand(
-            connection,
-            transaction,
-            positionSql);
-        positionCommand.Parameters.Add("@portfolio_id", SqlDbType.BigInt).Value =
-            fill.PortfolioId;
-        positionCommand.Parameters.Add("@instrument_id", SqlDbType.BigInt).Value =
-            fill.InstrumentId;
-        positionCommand.Parameters.Add("@product_type", SqlDbType.VarChar, 30).Value =
-            fill.ProductType;
-        await using var reader = await positionCommand.ExecuteReaderAsync(cancellationToken);
+        await using var command = Command(connection, transaction, sql);
+        command.Parameters.Add("@portfolio_id", SqlDbType.BigInt).Value = fill.PortfolioId;
+        command.Parameters.Add("@instrument_id", SqlDbType.BigInt).Value = fill.InstrumentId;
+        command.Parameters.Add("@product_type", SqlDbType.VarChar, 30).Value = fill.ProductType;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
         {
-            return new PositionContext(
+            return new PositionRow(
                 null,
                 Guid.NewGuid(),
-                new PositionAccountingState(
-                    EvidenceDirectionV1.Neutral,
-                    0m,
-                    null,
-                    0m,
-                    0m,
-                    0m,
-                    0m,
-                    0),
+                new PositionAccountingState(EvidenceDirectionV1.Neutral,0m,null,0m,0m,0m,0m,0),
                 Array.Empty<PositionLotState>(),
-                null,
-                null,
-                null,
-                0m,
-                0m);
+                null);
         }
 
-        var positionId = reader.GetInt64(0);
-        var context = new PositionContext(
-            positionId,
+        var id = reader.GetInt64(0);
+        var row = new PositionRow(
+            id,
             reader.GetGuid(1),
             new PositionAccountingState(
-                ParseDirection(reader.GetString(2)),
-                reader.GetDecimal(3),
-                reader.IsDBNull(4) ? null : reader.GetDecimal(4),
-                reader.GetDecimal(5),
-                reader.GetDecimal(6),
-                reader.GetDecimal(7),
-                reader.GetDecimal(8),
-                reader.GetInt32(9)),
+                Direction(reader.GetString(2)), reader.GetDecimal(3),
+                reader.IsDBNull(4) ? null : reader.GetDecimal(4), reader.GetDecimal(5),
+                reader.GetDecimal(6), reader.GetDecimal(7), reader.GetDecimal(8), reader.GetInt32(9)),
             Array.Empty<PositionLotState>(),
-            reader.IsDBNull(10) ? null : ReadUtc(reader, 10),
-            reader.IsDBNull(11) ? null : ReadUtc(reader, 11),
-            reader.IsDBNull(12) ? null : ReadUtc(reader, 12),
-            reader.GetDecimal(13),
-            reader.GetDecimal(14));
+            reader.IsDBNull(10) ? null : Utc(reader,10));
         await reader.DisposeAsync();
-        var lots = await LoadLotsAsync(
-            connection,
-            transaction,
-            positionId,
-            cancellationToken);
-        return context with { Lots = lots };
+        return row with { Lots = await ReadLotsAsync(connection, transaction, id, cancellationToken) };
     }
 
-    private async Task<IReadOnlyCollection<PositionLotState>> LoadLotsAsync(
+    private async Task<IReadOnlyCollection<PositionLotState>> ReadLotsAsync(
         SqlConnection connection,
         SqlTransaction transaction,
         long positionId,
         CancellationToken cancellationToken)
     {
         const string sql = """
-            SELECT
-                [position_lot_id], [position_lot_uid], [lot_sequence], [lot_side],
-                [opened_quantity], [remaining_quantity], [open_price],
-                [allocated_open_fees_amount], [allocated_open_taxes_amount],
-                [opened_at_utc]
-            FROM [portfolio].[position_lots] WITH (UPDLOCK, HOLDLOCK)
-            WHERE [position_id] = @position_id
-            ORDER BY [lot_sequence];
+            SELECT [position_lot_id],[position_lot_uid],[lot_sequence],[lot_side],
+                [opened_quantity],[remaining_quantity],[open_price],
+                [allocated_open_fees_amount],[allocated_open_taxes_amount],[opened_at_utc]
+            FROM [portfolio].[position_lots] WITH (UPDLOCK,HOLDLOCK)
+            WHERE [position_id]=@position_id ORDER BY [lot_sequence];
             """;
-        await using var command = CreateCommand(connection, transaction, sql);
+        await using var command = Command(connection, transaction, sql);
         command.Parameters.Add("@position_id", SqlDbType.BigInt).Value = positionId;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        var lots = new List<PositionLotState>();
+        var rows = new List<PositionLotState>();
         while (await reader.ReadAsync(cancellationToken))
         {
-            lots.Add(new PositionLotState(
-                reader.GetInt64(0),
-                reader.GetGuid(1),
-                reader.GetInt32(2),
-                ParseDirection(reader.GetString(3)),
-                reader.GetDecimal(4),
-                reader.GetDecimal(5),
-                reader.GetDecimal(6),
-                reader.GetDecimal(7),
-                reader.GetDecimal(8),
-                ReadUtc(reader, 9)));
+            rows.Add(new PositionLotState(
+                reader.GetInt64(0), reader.GetGuid(1), reader.GetInt32(2), Direction(reader.GetString(3)),
+                reader.GetDecimal(4), reader.GetDecimal(5), reader.GetDecimal(6),
+                reader.GetDecimal(7), reader.GetDecimal(8), Utc(reader,9)));
         }
-
-        return lots;
+        return rows;
     }
 
-    private async Task<long> PersistPositionAsync(
+    private async Task<long> SavePositionAsync(
         SqlConnection connection,
         SqlTransaction transaction,
-        FillContext fill,
-        PositionContext before,
-        PositionAccountingResult accounting,
+        FillRow fill,
+        PositionRow before,
+        PositionAccountingResult result,
         CancellationToken cancellationToken)
     {
-        var status = accounting.After.Quantity == 0 ? "CLOSED" : "OPEN";
-        var side = ToSide(accounting.After.Direction);
-        var openedAt = accounting.EventType == "REVERSED"
-            ? fill.FillAtUtc
-            : before.OpenedAtUtc ??
-                (accounting.After.Quantity > 0 ? fill.FillAtUtc : null);
-        var closedAt = accounting.After.Quantity == 0 ? fill.FillAtUtc : null;
+        var status = result.After.Quantity == 0 ? "CLOSED" : "OPEN";
+        var side = Side(result.After.Direction);
+        DateTimeOffset? openedAt = result.EventType == "REVERSED"
+            ? fill.FilledAtUtc
+            : before.OpenedAtUtc ?? (result.After.Quantity > 0 ? fill.FilledAtUtc : (DateTimeOffset?)null);
+        DateTimeOffset? closedAt = result.After.Quantity == 0 ? fill.FilledAtUtc : null;
 
-        if (before.PositionId is null)
+        if (before.Id is null)
         {
-            const string insertSql = """
+            const string sql = """
                 INSERT INTO [portfolio].[positions]
-                (
-                    [position_uid], [portfolio_id], [instrument_id], [product_type],
-                    [position_side], [quantity], [average_open_price], [cost_basis_amount],
-                    [market_value_amount], [realized_pnl_amount], [unrealized_pnl_amount],
-                    [accrued_fees_amount], [accrued_taxes_amount],
-                    [protective_exit_quantity], [status], [current_position_version],
-                    [last_event_sequence], [opened_at_utc], [last_fill_at_utc],
-                    [closed_at_utc], [last_valued_at_utc], [created_by], [updated_by]
-                )
+                ([position_uid],[portfolio_id],[instrument_id],[product_type],[position_side],[quantity],
+                 [average_open_price],[cost_basis_amount],[market_value_amount],[realized_pnl_amount],
+                 [unrealized_pnl_amount],[accrued_fees_amount],[accrued_taxes_amount],
+                 [protective_exit_quantity],[status],[current_position_version],[last_event_sequence],
+                 [opened_at_utc],[last_fill_at_utc],[closed_at_utc],[last_valued_at_utc],
+                 [created_by],[updated_by])
                 OUTPUT INSERTED.[position_id]
-                VALUES
-                (
-                    @position_uid, @portfolio_id, @instrument_id, @product_type,
-                    @side, @quantity, @average_price, @cost_basis,
-                    @market_value, @realized_pnl, @unrealized_pnl,
-                    @fees, @taxes,
-                    0, @status, @version,
-                    @version, @opened_at_utc, @fill_at_utc,
-                    @closed_at_utc, @fill_at_utc, @actor, @actor
-                );
+                VALUES(@uid,@portfolio,@instrument,@product,@side,@qty,@avg,@cost,@market,@realized,
+                       @unrealized,@fees,@taxes,0,@status,@version,@version,@opened,@fill_at,@closed,
+                       @fill_at,@actor,@actor);
                 """;
-            await using var command = CreateCommand(connection, transaction, insertSql);
-            AddPositionParameters(
-                command,
-                fill,
-                before.PositionUid,
-                accounting,
-                side,
-                status,
-                openedAt,
-                closedAt);
-            return Convert.ToInt64(
-                await command.ExecuteScalarAsync(cancellationToken),
+            await using var command = Command(connection, transaction, sql);
+            AddPositionParameters(command, fill, before.Uid, result, side, status, openedAt, closedAt);
+            return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken),
                 System.Globalization.CultureInfo.InvariantCulture);
         }
 
-        const string updateSql = """
+        const string update = """
             UPDATE [portfolio].[positions]
-            SET [position_side] = @side,
-                [quantity] = @quantity,
-                [average_open_price] = @average_price,
-                [cost_basis_amount] = @cost_basis,
-                [market_value_amount] = @market_value,
-                [realized_pnl_amount] = @realized_pnl,
-                [unrealized_pnl_amount] = @unrealized_pnl,
-                [accrued_fees_amount] = @fees,
-                [accrued_taxes_amount] = @taxes,
-                [status] = @status,
-                [current_position_version] = @version,
-                [last_event_sequence] = @version,
-                [opened_at_utc] = @opened_at_utc,
-                [last_fill_at_utc] = @fill_at_utc,
-                [closed_at_utc] = @closed_at_utc,
-                [last_valued_at_utc] = @fill_at_utc,
-                [updated_at_utc] = @fill_at_utc,
-                [updated_by] = @actor
-            WHERE [position_id] = @position_id
-              AND [current_position_version] = @expected_version;
+            SET [position_side]=@side,[quantity]=@qty,[average_open_price]=@avg,
+                [cost_basis_amount]=@cost,[market_value_amount]=@market,
+                [realized_pnl_amount]=@realized,[unrealized_pnl_amount]=@unrealized,
+                [accrued_fees_amount]=@fees,[accrued_taxes_amount]=@taxes,[status]=@status,
+                [current_position_version]=@version,[last_event_sequence]=@version,
+                [opened_at_utc]=@opened,[last_fill_at_utc]=@fill_at,[closed_at_utc]=@closed,
+                [last_valued_at_utc]=@fill_at,[updated_at_utc]=@fill_at,[updated_by]=@actor
+            WHERE [position_id]=@id AND [current_position_version]=@expected;
             """;
-        await using var updateCommand = CreateCommand(
-            connection,
-            transaction,
-            updateSql);
-        AddPositionParameters(
-            updateCommand,
-            fill,
-            before.PositionUid,
-            accounting,
-            side,
-            status,
-            openedAt,
-            closedAt);
-        updateCommand.Parameters.Add("@position_id", SqlDbType.BigInt).Value =
-            before.PositionId.Value;
-        updateCommand.Parameters.Add("@expected_version", SqlDbType.Int).Value =
-            before.State.Version;
+        await using var updateCommand = Command(connection, transaction, update);
+        AddPositionParameters(updateCommand, fill, before.Uid, result, side, status, openedAt, closedAt);
+        updateCommand.Parameters.Add("@id", SqlDbType.BigInt).Value = before.Id.Value;
+        updateCommand.Parameters.Add("@expected", SqlDbType.Int).Value = before.State.Version;
         if (await updateCommand.ExecuteNonQueryAsync(cancellationToken) != 1)
-        {
-            throw new InvalidOperationException(
-                "Position projection changed concurrently.");
-        }
-
-        return before.PositionId.Value;
+            throw new InvalidOperationException("Position changed concurrently.");
+        return before.Id.Value;
     }
 
     private void AddPositionParameters(
         SqlCommand command,
-        FillContext fill,
-        Guid positionUid,
-        PositionAccountingResult accounting,
+        FillRow fill,
+        Guid uid,
+        PositionAccountingResult result,
         string side,
         string status,
-        DateTimeOffset? openedAt,
-        DateTimeOffset? closedAt)
+        DateTimeOffset? opened,
+        DateTimeOffset? closed)
     {
-        command.Parameters.Add("@position_uid", SqlDbType.UniqueIdentifier).Value = positionUid;
-        command.Parameters.Add("@portfolio_id", SqlDbType.BigInt).Value = fill.PortfolioId;
-        command.Parameters.Add("@instrument_id", SqlDbType.BigInt).Value = fill.InstrumentId;
-        command.Parameters.Add("@product_type", SqlDbType.VarChar, 30).Value = fill.ProductType;
-        command.Parameters.Add("@side", SqlDbType.VarChar, 10).Value = side;
-        AddDecimal(command, "@quantity", accounting.After.Quantity, 19, 6);
-        AddNullableDecimal(command, "@average_price", accounting.After.AverageOpenPrice, 19, 6);
-        AddDecimal(command, "@cost_basis", accounting.After.CostBasisAmount, 19, 6);
-        AddDecimal(command, "@market_value", accounting.MarketValueAmount, 19, 6);
-        AddDecimal(command, "@realized_pnl", accounting.After.RealizedPnlAmount, 19, 6);
-        AddDecimal(command, "@unrealized_pnl", accounting.UnrealizedPnlAmount, 19, 6);
-        AddDecimal(command, "@fees", accounting.After.AccruedFeesAmount, 19, 6);
-        AddDecimal(command, "@taxes", accounting.After.AccruedTaxesAmount, 19, 6);
-        command.Parameters.Add("@status", SqlDbType.VarChar, 30).Value = status;
-        command.Parameters.Add("@version", SqlDbType.Int).Value = accounting.After.Version;
-        AddNullableDateTime(command, "@opened_at_utc", openedAt);
-        AddDateTime(command, "@fill_at_utc", fill.FillAtUtc);
-        AddNullableDateTime(command, "@closed_at_utc", closedAt);
-        command.Parameters.Add("@actor", SqlDbType.NVarChar, 256).Value = _options.Actor;
+        command.Parameters.Add("@uid",SqlDbType.UniqueIdentifier).Value=uid;
+        command.Parameters.Add("@portfolio",SqlDbType.BigInt).Value=fill.PortfolioId;
+        command.Parameters.Add("@instrument",SqlDbType.BigInt).Value=fill.InstrumentId;
+        command.Parameters.Add("@product",SqlDbType.VarChar,30).Value=fill.ProductType;
+        command.Parameters.Add("@side",SqlDbType.VarChar,10).Value=side;
+        Decimal(command,"@qty",result.After.Quantity); NullableDecimal(command,"@avg",result.After.AverageOpenPrice);
+        Decimal(command,"@cost",result.After.CostBasisAmount); Decimal(command,"@market",result.MarketValueAmount);
+        Decimal(command,"@realized",result.After.RealizedPnlAmount); Decimal(command,"@unrealized",result.UnrealizedPnlAmount);
+        Decimal(command,"@fees",result.After.AccruedFeesAmount); Decimal(command,"@taxes",result.After.AccruedTaxesAmount);
+        command.Parameters.Add("@status",SqlDbType.VarChar,30).Value=status;
+        command.Parameters.Add("@version",SqlDbType.Int).Value=result.After.Version;
+        NullableTime(command,"@opened",opened); Time(command,"@fill_at",fill.FilledAtUtc); NullableTime(command,"@closed",closed);
+        command.Parameters.Add("@actor",SqlDbType.NVarChar,256).Value=_options.Actor;
     }
 
-    private async Task<long> InsertPositionEventAsync(
+    private async Task<long> SavePositionEventAsync(
         SqlConnection connection,
         SqlTransaction transaction,
-        FillContext fill,
+        FillRow fill,
         long positionId,
-        PositionAccountingResult accounting,
+        PositionAccountingResult result,
         CancellationToken cancellationToken)
     {
         const string sql = """
             INSERT INTO [portfolio].[position_events]
-            (
-                [position_event_uid], [position_id], [fill_id], [order_id],
-                [event_sequence], [resulting_position_version], [event_type],
-                [source_type], [side_before], [side_after], [quantity_before],
-                [quantity_delta], [quantity_after], [average_price_before],
-                [average_price_after], [cost_basis_before], [cost_basis_after],
-                [realized_pnl_delta], [fees_delta], [taxes_delta],
-                [event_at_utc], [source_service], [source_version],
-                [correlation_id], [created_by]
-            )
+            ([position_event_uid],[position_id],[fill_id],[order_id],[event_sequence],
+             [resulting_position_version],[event_type],[source_type],[side_before],[side_after],
+             [quantity_before],[quantity_delta],[quantity_after],[average_price_before],
+             [average_price_after],[cost_basis_before],[cost_basis_after],[realized_pnl_delta],
+             [fees_delta],[taxes_delta],[event_at_utc],[source_service],[source_version],
+             [correlation_id],[created_by])
             OUTPUT INSERTED.[position_event_id]
-            VALUES
-            (
-                NEWID(), @position_id, @fill_id, @order_id,
-                @version, @version, @event_type,
-                'FILL', @side_before, @side_after, @quantity_before,
-                @quantity_delta, @quantity_after, @average_before,
-                @average_after, @cost_before, @cost_after,
-                @realized_delta, @fees_delta, @taxes_delta,
-                @event_at_utc, @source_service, @source_version,
-                @correlation_id, @actor
-            );
+            VALUES(NEWID(),@position,@fill,@order,@version,@version,@type,'FILL',@before_side,
+                   @after_side,@before_qty,@delta,@after_qty,@before_avg,@after_avg,@before_cost,
+                   @after_cost,@realized,@fees,@taxes,@event_at,@service,@source_version,@correlation,@actor);
             """;
-        await using var command = CreateCommand(connection, transaction, sql);
-        command.Parameters.Add("@position_id", SqlDbType.BigInt).Value = positionId;
-        command.Parameters.Add("@fill_id", SqlDbType.BigInt).Value = fill.FillId;
-        command.Parameters.Add("@order_id", SqlDbType.BigInt).Value = fill.OrderId;
-        command.Parameters.Add("@version", SqlDbType.Int).Value = accounting.After.Version;
-        command.Parameters.Add("@event_type", SqlDbType.VarChar, 40).Value = accounting.EventType;
-        command.Parameters.Add("@side_before", SqlDbType.VarChar, 10).Value =
-            ToSide(accounting.Before.Direction);
-        command.Parameters.Add("@side_after", SqlDbType.VarChar, 10).Value =
-            ToSide(accounting.After.Direction);
-        AddDecimal(command, "@quantity_before", accounting.Before.Quantity, 19, 6);
-        AddDecimal(command, "@quantity_delta", accounting.QuantityDelta, 19, 6);
-        AddDecimal(command, "@quantity_after", accounting.After.Quantity, 19, 6);
-        AddNullableDecimal(command, "@average_before", accounting.Before.AverageOpenPrice, 19, 6);
-        AddNullableDecimal(command, "@average_after", accounting.After.AverageOpenPrice, 19, 6);
-        AddDecimal(command, "@cost_before", accounting.Before.CostBasisAmount, 19, 6);
-        AddDecimal(command, "@cost_after", accounting.After.CostBasisAmount, 19, 6);
-        AddDecimal(command, "@realized_delta", accounting.NetRealizedPnlDelta, 19, 6);
-        AddDecimal(command, "@fees_delta", accounting.FillFeesAmount, 19, 6);
-        AddDecimal(command, "@taxes_delta", accounting.FillTaxesAmount, 19, 6);
-        AddDateTime(command, "@event_at_utc", fill.FillAtUtc);
-        command.Parameters.Add("@source_service", SqlDbType.VarChar, 100).Value = _options.Actor;
-        command.Parameters.Add("@source_version", SqlDbType.VarChar, 50).Value = _options.SourceVersion;
-        command.Parameters.Add("@correlation_id", SqlDbType.UniqueIdentifier).Value =
-            fill.CorrelationId;
-        command.Parameters.Add("@actor", SqlDbType.NVarChar, 256).Value = _options.Actor;
-        return Convert.ToInt64(
-            await command.ExecuteScalarAsync(cancellationToken),
+        await using var command = Command(connection,transaction,sql);
+        command.Parameters.Add("@position",SqlDbType.BigInt).Value=positionId;
+        command.Parameters.Add("@fill",SqlDbType.BigInt).Value=fill.FillId;
+        command.Parameters.Add("@order",SqlDbType.BigInt).Value=fill.OrderId;
+        command.Parameters.Add("@version",SqlDbType.Int).Value=result.After.Version;
+        command.Parameters.Add("@type",SqlDbType.VarChar,40).Value=result.EventType;
+        command.Parameters.Add("@before_side",SqlDbType.VarChar,10).Value=Side(result.Before.Direction);
+        command.Parameters.Add("@after_side",SqlDbType.VarChar,10).Value=Side(result.After.Direction);
+        Decimal(command,"@before_qty",result.Before.Quantity); Decimal(command,"@delta",result.QuantityDelta);
+        Decimal(command,"@after_qty",result.After.Quantity); NullableDecimal(command,"@before_avg",result.Before.AverageOpenPrice);
+        NullableDecimal(command,"@after_avg",result.After.AverageOpenPrice); Decimal(command,"@before_cost",result.Before.CostBasisAmount);
+        Decimal(command,"@after_cost",result.After.CostBasisAmount); Decimal(command,"@realized",result.NetRealizedPnlDelta);
+        Decimal(command,"@fees",result.FillFeesAmount); Decimal(command,"@taxes",result.FillTaxesAmount);
+        Time(command,"@event_at",fill.FilledAtUtc);
+        command.Parameters.Add("@service",SqlDbType.VarChar,100).Value=_options.Actor;
+        command.Parameters.Add("@source_version",SqlDbType.VarChar,50).Value=_options.SourceVersion;
+        command.Parameters.Add("@correlation",SqlDbType.UniqueIdentifier).Value=fill.CorrelationId;
+        command.Parameters.Add("@actor",SqlDbType.NVarChar,256).Value=_options.Actor;
+        return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken),
             System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    private async Task PersistLotsAsync(
+    private async Task SaveLotsAndPnlAsync(
         SqlConnection connection,
         SqlTransaction transaction,
-        FillContext fill,
+        FillRow fill,
         long positionId,
-        long positionEventId,
-        PositionAccountingResult accounting,
+        long eventId,
+        PositionAccountingResult result,
         CancellationToken cancellationToken)
     {
-        foreach (var lot in accounting.UpdatedExistingLots)
+        foreach (var lot in result.UpdatedExistingLots)
         {
-            const string updateSql = """
+            const string sql = """
                 UPDATE [portfolio].[position_lots]
-                SET [remaining_quantity] = @remaining_quantity,
-                    [status] = @status,
-                    [closed_at_utc] = @closed_at_utc,
-                    [updated_at_utc] = @fill_at_utc,
-                    [updated_by] = @actor
-                WHERE [position_lot_id] = @lot_id;
+                SET [remaining_quantity]=@remaining,[status]=@status,[closed_at_utc]=@closed,
+                    [updated_at_utc]=@fill_at,[updated_by]=@actor
+                WHERE [position_lot_id]=@id;
                 """;
-            await using var command = CreateCommand(connection, transaction, updateSql);
-            AddDecimal(command, "@remaining_quantity", lot.RemainingQuantity, 19, 6);
-            command.Parameters.Add("@status", SqlDbType.VarChar, 20).Value =
-                lot.RemainingQuantity == 0 ? "CLOSED" : "OPEN";
-            AddNullableDateTime(
-                command,
-                "@closed_at_utc",
-                lot.RemainingQuantity == 0 ? fill.FillAtUtc : null);
-            AddDateTime(command, "@fill_at_utc", fill.FillAtUtc);
-            command.Parameters.Add("@actor", SqlDbType.NVarChar, 256).Value = _options.Actor;
-            command.Parameters.Add("@lot_id", SqlDbType.BigInt).Value =
-                lot.DatabaseId ?? throw new InvalidOperationException("Existing lot has no database ID.");
+            await using var command=Command(connection,transaction,sql);
+            Decimal(command,"@remaining",lot.RemainingQuantity);
+            command.Parameters.Add("@status",SqlDbType.VarChar,20).Value=lot.RemainingQuantity==0?"CLOSED":"OPEN";
+            NullableTime(command,"@closed",lot.RemainingQuantity==0?fill.FilledAtUtc:(DateTimeOffset?)null);
+            Time(command,"@fill_at",fill.FilledAtUtc); command.Parameters.Add("@actor",SqlDbType.NVarChar,256).Value=_options.Actor;
+            command.Parameters.Add("@id",SqlDbType.BigInt).Value=lot.DatabaseId ?? throw new InvalidOperationException("Lot ID missing.");
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        foreach (var lot in accounting.NewLots)
+        foreach (var lot in result.NewLots)
         {
-            const string insertSql = """
+            const string sql = """
                 INSERT INTO [portfolio].[position_lots]
-                (
-                    [position_lot_uid], [position_id], [opening_fill_id],
-                    [lot_sequence], [lot_side], [opened_quantity], [remaining_quantity],
-                    [open_price], [open_gross_amount], [allocated_open_fees_amount],
-                    [allocated_open_taxes_amount], [opened_at_utc], [status],
-                    [created_by], [updated_by]
-                )
-                VALUES
-                (
-                    @lot_uid, @position_id, @fill_id,
-                    @sequence, @side, @opened_quantity, @remaining_quantity,
-                    @open_price, @gross, @fees,
-                    @taxes, @opened_at_utc, 'OPEN',
-                    @actor, @actor
-                );
+                ([position_lot_uid],[position_id],[opening_fill_id],[lot_sequence],[lot_side],
+                 [opened_quantity],[remaining_quantity],[open_price],[open_gross_amount],
+                 [allocated_open_fees_amount],[allocated_open_taxes_amount],[opened_at_utc],
+                 [status],[created_by],[updated_by])
+                VALUES(@uid,@position,@fill,@sequence,@side,@opened,@remaining,@price,@gross,
+                       @fees,@taxes,@opened_at,'OPEN',@actor,@actor);
                 """;
-            await using var command = CreateCommand(connection, transaction, insertSql);
-            command.Parameters.Add("@lot_uid", SqlDbType.UniqueIdentifier).Value = lot.LotUid;
-            command.Parameters.Add("@position_id", SqlDbType.BigInt).Value = positionId;
-            command.Parameters.Add("@fill_id", SqlDbType.BigInt).Value = fill.FillId;
-            command.Parameters.Add("@sequence", SqlDbType.Int).Value = lot.Sequence;
-            command.Parameters.Add("@side", SqlDbType.VarChar, 10).Value = ToSide(lot.Direction);
-            AddDecimal(command, "@opened_quantity", lot.OpenedQuantity, 19, 6);
-            AddDecimal(command, "@remaining_quantity", lot.RemainingQuantity, 19, 6);
-            AddDecimal(command, "@open_price", lot.OpenPrice, 19, 6);
-            AddDecimal(command, "@gross", lot.OpenedQuantity * lot.OpenPrice, 19, 6);
-            AddDecimal(command, "@fees", lot.AllocatedOpenFeesAmount, 19, 6);
-            AddDecimal(command, "@taxes", lot.AllocatedOpenTaxesAmount, 19, 6);
-            AddDateTime(command, "@opened_at_utc", lot.OpenedAtUtc);
-            command.Parameters.Add("@actor", SqlDbType.NVarChar, 256).Value = _options.Actor;
+            await using var command=Command(connection,transaction,sql);
+            command.Parameters.Add("@uid",SqlDbType.UniqueIdentifier).Value=lot.LotUid;
+            command.Parameters.Add("@position",SqlDbType.BigInt).Value=positionId;
+            command.Parameters.Add("@fill",SqlDbType.BigInt).Value=fill.FillId;
+            command.Parameters.Add("@sequence",SqlDbType.Int).Value=lot.Sequence;
+            command.Parameters.Add("@side",SqlDbType.VarChar,10).Value=Side(lot.Direction);
+            Decimal(command,"@opened",lot.OpenedQuantity); Decimal(command,"@remaining",lot.RemainingQuantity);
+            Decimal(command,"@price",lot.OpenPrice); Decimal(command,"@gross",lot.OpenedQuantity*lot.OpenPrice);
+            Decimal(command,"@fees",lot.AllocatedOpenFeesAmount); Decimal(command,"@taxes",lot.AllocatedOpenTaxesAmount);
+            Time(command,"@opened_at",lot.OpenedAtUtc); command.Parameters.Add("@actor",SqlDbType.NVarChar,256).Value=_options.Actor;
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        foreach (var closure in accounting.Closures)
+        foreach (var closure in result.Closures)
         {
-            var closureId = await InsertLotClosureAsync(
-                connection,
-                transaction,
-                fill,
-                positionEventId,
-                closure,
-                cancellationToken);
-            await InsertRealizedPnlAsync(
-                connection,
-                transaction,
-                fill,
-                positionId,
-                closureId,
-                closure,
-                cancellationToken);
+            const string closureSql = """
+                INSERT INTO [portfolio].[position_lot_closures]
+                ([position_lot_closure_uid],[position_lot_id],[closing_fill_id],[position_event_id],
+                 [closure_sequence],[matched_quantity],[open_price],[close_price],
+                 [gross_realized_pnl_amount],[allocated_open_fees_amount],
+                 [allocated_close_fees_amount],[allocated_open_taxes_amount],
+                 [allocated_close_taxes_amount],[net_realized_pnl_amount],[matching_method],
+                 [closed_at_utc],[created_by])
+                OUTPUT INSERTED.[position_lot_closure_id]
+                VALUES(NEWID(),@lot,@fill,@event,@sequence,@qty,@open,@close,@gross,@open_fees,
+                       @close_fees,@open_taxes,@close_taxes,@net,'FIFO',@closed,@actor);
+                """;
+            await using var command=Command(connection,transaction,closureSql);
+            command.Parameters.Add("@lot",SqlDbType.BigInt).Value=closure.Lot.DatabaseId ?? throw new InvalidOperationException("Closure lot ID missing.");
+            command.Parameters.Add("@fill",SqlDbType.BigInt).Value=fill.FillId;
+            command.Parameters.Add("@event",SqlDbType.BigInt).Value=eventId;
+            command.Parameters.Add("@sequence",SqlDbType.Int).Value=closure.Sequence;
+            Decimal(command,"@qty",closure.MatchedQuantity); Decimal(command,"@open",closure.OpenPrice);
+            Decimal(command,"@close",closure.ClosePrice); Decimal(command,"@gross",closure.GrossRealizedPnlAmount);
+            Decimal(command,"@open_fees",closure.AllocatedOpenFeesAmount); Decimal(command,"@close_fees",closure.AllocatedCloseFeesAmount);
+            Decimal(command,"@open_taxes",closure.AllocatedOpenTaxesAmount); Decimal(command,"@close_taxes",closure.AllocatedCloseTaxesAmount);
+            Decimal(command,"@net",closure.NetRealizedPnlAmount); Time(command,"@closed",fill.FilledAtUtc);
+            command.Parameters.Add("@actor",SqlDbType.NVarChar,256).Value=_options.Actor;
+            var closureId=Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken),System.Globalization.CultureInfo.InvariantCulture);
+            await SaveRealizedPnlAsync(connection,transaction,fill,positionId,closureId,closure,cancellationToken);
         }
     }
 
-    private async Task<long> InsertLotClosureAsync(
-        SqlConnection connection,
-        SqlTransaction transaction,
-        FillContext fill,
-        long positionEventId,
-        PositionLotClosure closure,
-        CancellationToken cancellationToken)
+    private async Task SaveRealizedPnlAsync(
+        SqlConnection connection, SqlTransaction transaction, FillRow fill, long positionId,
+        long closureId, PositionLotClosure closure, CancellationToken cancellationToken)
     {
-        const string sql = """
-            INSERT INTO [portfolio].[position_lot_closures]
-            (
-                [position_lot_closure_uid], [position_lot_id], [closing_fill_id],
-                [position_event_id], [closure_sequence], [matched_quantity],
-                [open_price], [close_price], [gross_realized_pnl_amount],
-                [allocated_open_fees_amount], [allocated_close_fees_amount],
-                [allocated_open_taxes_amount], [allocated_close_taxes_amount],
-                [net_realized_pnl_amount], [matching_method], [closed_at_utc],
-                [created_by]
-            )
-            OUTPUT INSERTED.[position_lot_closure_id]
-            VALUES
-            (
-                NEWID(), @lot_id, @fill_id,
-                @position_event_id, @sequence, @matched_quantity,
-                @open_price, @close_price, @gross_pnl,
-                @open_fees, @close_fees,
-                @open_taxes, @close_taxes,
-                @net_pnl, 'FIFO', @closed_at_utc,
-                @actor
-            );
-            """;
-        await using var command = CreateCommand(connection, transaction, sql);
-        command.Parameters.Add("@lot_id", SqlDbType.BigInt).Value =
-            closure.Lot.DatabaseId ?? throw new InvalidOperationException("Closure lot has no database ID.");
-        command.Parameters.Add("@fill_id", SqlDbType.BigInt).Value = fill.FillId;
-        command.Parameters.Add("@position_event_id", SqlDbType.BigInt).Value = positionEventId;
-        command.Parameters.Add("@sequence", SqlDbType.Int).Value = closure.Sequence;
-        AddDecimal(command, "@matched_quantity", closure.MatchedQuantity, 19, 6);
-        AddDecimal(command, "@open_price", closure.OpenPrice, 19, 6);
-        AddDecimal(command, "@close_price", closure.ClosePrice, 19, 6);
-        AddDecimal(command, "@gross_pnl", closure.GrossRealizedPnlAmount, 19, 6);
-        AddDecimal(command, "@open_fees", closure.AllocatedOpenFeesAmount, 19, 6);
-        AddDecimal(command, "@close_fees", closure.AllocatedCloseFeesAmount, 19, 6);
-        AddDecimal(command, "@open_taxes", closure.AllocatedOpenTaxesAmount, 19, 6);
-        AddDecimal(command, "@close_taxes", closure.AllocatedCloseTaxesAmount, 19, 6);
-        AddDecimal(command, "@net_pnl", closure.NetRealizedPnlAmount, 19, 6);
-        AddDateTime(command, "@closed_at_utc", fill.FillAtUtc);
-        command.Parameters.Add("@actor", SqlDbType.NVarChar, 256).Value = _options.Actor;
-        return Convert.ToInt64(
-            await command.ExecuteScalarAsync(cancellationToken),
-            System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    private async Task InsertRealizedPnlAsync(
-        SqlConnection connection,
-        SqlTransaction transaction,
-        FillContext fill,
-        long positionId,
-        long closureId,
-        PositionLotClosure closure,
-        CancellationToken cancellationToken)
-    {
-        const string sql = """
+        const string sql="""
             INSERT INTO [portfolio].[realized_pnl_entries]
-            (
-                [realized_pnl_entry_uid], [portfolio_id], [position_id],
-                [position_lot_closure_id], [closing_fill_id], [instrument_id],
-                [trade_date], [currency_code], [gross_realized_pnl_amount],
-                [fees_amount], [taxes_amount], [net_realized_pnl_amount],
-                [recognized_at_utc], [correlation_id], [created_by]
-            )
-            VALUES
-            (
-                NEWID(), @portfolio_id, @position_id,
-                @closure_id, @fill_id, @instrument_id,
-                @trade_date, @currency_code, @gross_pnl,
-                @fees, @taxes, @net_pnl,
-                @recognized_at_utc, @correlation_id, @actor
-            );
+            ([realized_pnl_entry_uid],[portfolio_id],[position_id],[position_lot_closure_id],
+             [closing_fill_id],[instrument_id],[trade_date],[currency_code],
+             [gross_realized_pnl_amount],[fees_amount],[taxes_amount],[net_realized_pnl_amount],
+             [recognized_at_utc],[correlation_id],[created_by])
+            VALUES(NEWID(),@portfolio,@position,@closure,@fill,@instrument,@date,@currency,
+                   @gross,@fees,@taxes,@net,@recognized,@correlation,@actor);
             """;
-        await using var command = CreateCommand(connection, transaction, sql);
-        command.Parameters.Add("@portfolio_id", SqlDbType.BigInt).Value = fill.PortfolioId;
-        command.Parameters.Add("@position_id", SqlDbType.BigInt).Value = positionId;
-        command.Parameters.Add("@closure_id", SqlDbType.BigInt).Value = closureId;
-        command.Parameters.Add("@fill_id", SqlDbType.BigInt).Value = fill.FillId;
-        command.Parameters.Add("@instrument_id", SqlDbType.BigInt).Value = fill.InstrumentId;
-        command.Parameters.Add("@trade_date", SqlDbType.Date).Value = fill.FillAtUtc.UtcDateTime.Date;
-        command.Parameters.Add("@currency_code", SqlDbType.Char, 3).Value = fill.CurrencyCode;
-        AddDecimal(command, "@gross_pnl", closure.GrossRealizedPnlAmount, 19, 6);
-        AddDecimal(
-            command,
-            "@fees",
-            closure.AllocatedOpenFeesAmount + closure.AllocatedCloseFeesAmount,
-            19,
-            6);
-        AddDecimal(
-            command,
-            "@taxes",
-            closure.AllocatedOpenTaxesAmount + closure.AllocatedCloseTaxesAmount,
-            19,
-            6);
-        AddDecimal(command, "@net_pnl", closure.NetRealizedPnlAmount, 19, 6);
-        AddDateTime(command, "@recognized_at_utc", fill.FillAtUtc);
-        command.Parameters.Add("@correlation_id", SqlDbType.UniqueIdentifier).Value =
-            fill.CorrelationId;
-        command.Parameters.Add("@actor", SqlDbType.NVarChar, 256).Value = _options.Actor;
+        await using var command=Command(connection,transaction,sql);
+        command.Parameters.Add("@portfolio",SqlDbType.BigInt).Value=fill.PortfolioId;
+        command.Parameters.Add("@position",SqlDbType.BigInt).Value=positionId;
+        command.Parameters.Add("@closure",SqlDbType.BigInt).Value=closureId;
+        command.Parameters.Add("@fill",SqlDbType.BigInt).Value=fill.FillId;
+        command.Parameters.Add("@instrument",SqlDbType.BigInt).Value=fill.InstrumentId;
+        command.Parameters.Add("@date",SqlDbType.Date).Value=fill.FilledAtUtc.UtcDateTime.Date;
+        command.Parameters.Add("@currency",SqlDbType.Char,3).Value=fill.Currency;
+        Decimal(command,"@gross",closure.GrossRealizedPnlAmount);
+        Decimal(command,"@fees",closure.AllocatedOpenFeesAmount+closure.AllocatedCloseFeesAmount);
+        Decimal(command,"@taxes",closure.AllocatedOpenTaxesAmount+closure.AllocatedCloseTaxesAmount);
+        Decimal(command,"@net",closure.NetRealizedPnlAmount); Time(command,"@recognized",fill.FilledAtUtc);
+        command.Parameters.Add("@correlation",SqlDbType.UniqueIdentifier).Value=fill.CorrelationId;
+        command.Parameters.Add("@actor",SqlDbType.NVarChar,256).Value=_options.Actor;
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private async Task PersistCashAsync(
-        SqlConnection connection,
-        SqlTransaction transaction,
-        FillContext fill,
+    private async Task SaveCashAsync(
+        SqlConnection connection, SqlTransaction transaction, FillRow fill,
         CancellationToken cancellationToken)
     {
-        var gross = fill.Quantity * fill.Price;
-        var cashDelta = fill.Side == "BUY"
-            ? -(gross + fill.FeesAmount + fill.TaxesAmount)
-            : gross - fill.FeesAmount - fill.TaxesAmount;
-        if (cashDelta == 0)
-        {
-            return;
-        }
-
-        const string readSql = """
-            SELECT TOP (1)
-                [cash_balance_id], [settled_amount], [unsettled_receivable_amount],
-                [unsettled_payable_amount], [reserved_amount],
-                [current_balance_version], [last_ledger_sequence]
-            FROM [portfolio].[cash_balances] WITH (UPDLOCK, HOLDLOCK)
-            WHERE [portfolio_id] = @portfolio_id
-              AND [currency_code] = @currency_code;
-            """;
-        await using var readCommand = CreateCommand(connection, transaction, readSql);
-        readCommand.Parameters.Add("@portfolio_id", SqlDbType.BigInt).Value = fill.PortfolioId;
-        readCommand.Parameters.Add("@currency_code", SqlDbType.Char, 3).Value = fill.CurrencyCode;
-        await using var reader = await readCommand.ExecuteReaderAsync(cancellationToken);
-        long? balanceId = null;
-        decimal settled = 0m;
-        decimal receivable = 0m;
-        decimal payable = 0m;
-        decimal reserved = 0m;
-        var version = 0;
-        long sequence = 0;
-        if (await reader.ReadAsync(cancellationToken))
-        {
-            balanceId = reader.GetInt64(0);
-            settled = reader.GetDecimal(1);
-            receivable = reader.GetDecimal(2);
-            payable = reader.GetDecimal(3);
-            reserved = reader.GetDecimal(4);
-            version = reader.GetInt32(5);
-            sequence = reader.GetInt64(6);
-        }
-
-        await reader.DisposeAsync();
-        settled += cashDelta;
-        version++;
-        sequence++;
-        var total = settled + receivable - payable;
-        var available = total - reserved;
-
-        if (balanceId is null)
-        {
-            const string insertBalanceSql = """
-                INSERT INTO [portfolio].[cash_balances]
-                (
-                    [portfolio_id], [currency_code], [settled_amount],
-                    [unsettled_receivable_amount], [unsettled_payable_amount],
-                    [reserved_amount], [total_balance_amount], [available_amount],
-                    [current_balance_version], [last_ledger_sequence], [as_of_utc],
-                    [created_by], [updated_by]
-                )
-                OUTPUT INSERTED.[cash_balance_id]
-                VALUES
-                (
-                    @portfolio_id, @currency_code, @settled,
-                    0, 0,
-                    0, @total, @available,
-                    @version, @sequence, @as_of_utc,
-                    @actor, @actor
-                );
-                """;
-            await using var insertCommand = CreateCommand(
-                connection,
-                transaction,
-                insertBalanceSql);
-            AddCashParameters(
-                insertCommand,
-                fill,
-                settled,
-                total,
-                available,
-                version,
-                sequence);
-            balanceId = Convert.ToInt64(
-                await insertCommand.ExecuteScalarAsync(cancellationToken),
-                System.Globalization.CultureInfo.InvariantCulture);
-        }
-        else
-        {
-            const string updateBalanceSql = """
-                UPDATE [portfolio].[cash_balances]
-                SET [settled_amount] = @settled,
-                    [total_balance_amount] = @total,
-                    [available_amount] = @available,
-                    [current_balance_version] = @version,
-                    [last_ledger_sequence] = @sequence,
-                    [as_of_utc] = @as_of_utc,
-                    [updated_at_utc] = @as_of_utc,
-                    [updated_by] = @actor
-                WHERE [cash_balance_id] = @balance_id
-                  AND [current_balance_version] = @expected_version;
-                """;
-            await using var updateCommand = CreateCommand(
-                connection,
-                transaction,
-                updateBalanceSql);
-            AddCashParameters(
-                updateCommand,
-                fill,
-                settled,
-                total,
-                available,
-                version,
-                sequence);
-            updateCommand.Parameters.Add("@balance_id", SqlDbType.BigInt).Value =
-                balanceId.Value;
-            updateCommand.Parameters.Add("@expected_version", SqlDbType.Int).Value = version - 1;
-            if (await updateCommand.ExecuteNonQueryAsync(cancellationToken) != 1)
-            {
-                throw new InvalidOperationException("Cash projection changed concurrently.");
-            }
-        }
-
-        const string ledgerSql = """
+        var gross=fill.Quantity*fill.Price;
+        var delta=fill.Side=="BUY"?-(gross+fill.Fees+fill.Taxes):gross-fill.Fees-fill.Taxes;
+        if(delta==0) return;
+        const string sql="""
+            DECLARE @balance_id bigint,@settled decimal(19,6)=0,@receivable decimal(19,6)=0,
+                    @payable decimal(19,6)=0,@reserved decimal(19,6)=0,@version int=0,@sequence bigint=0;
+            SELECT @balance_id=[cash_balance_id],@settled=[settled_amount],
+                   @receivable=[unsettled_receivable_amount],@payable=[unsettled_payable_amount],
+                   @reserved=[reserved_amount],@version=[current_balance_version],
+                   @sequence=[last_ledger_sequence]
+            FROM [portfolio].[cash_balances] WITH(UPDLOCK,HOLDLOCK)
+            WHERE [portfolio_id]=@portfolio AND [currency_code]=@currency;
+            SET @settled=@settled+@delta; SET @version=@version+1; SET @sequence=@sequence+1;
+            IF @balance_id IS NULL
+            BEGIN
+              INSERT INTO [portfolio].[cash_balances]
+              ([portfolio_id],[currency_code],[settled_amount],[unsettled_receivable_amount],
+               [unsettled_payable_amount],[reserved_amount],[total_balance_amount],[available_amount],
+               [current_balance_version],[last_ledger_sequence],[as_of_utc],[created_by],[updated_by])
+              VALUES(@portfolio,@currency,@settled,0,0,0,@settled,@settled,@version,@sequence,@at,@actor,@actor);
+              SET @balance_id=SCOPE_IDENTITY();
+            END
+            ELSE
+              UPDATE [portfolio].[cash_balances]
+              SET [settled_amount]=@settled,
+                  [total_balance_amount]=@settled+@receivable-@payable,
+                  [available_amount]=@settled+@receivable-@payable-@reserved,
+                  [current_balance_version]=@version,[last_ledger_sequence]=@sequence,
+                  [as_of_utc]=@at,[updated_at_utc]=@at,[updated_by]=@actor
+              WHERE [cash_balance_id]=@balance_id;
             INSERT INTO [portfolio].[cash_ledger_entries]
-            (
-                [cash_ledger_entry_uid], [portfolio_id], [cash_balance_id],
-                [fill_id], [order_id], [ledger_sequence], [idempotency_key],
-                [entry_type], [currency_code], [settled_delta_amount],
-                [unsettled_receivable_delta_amount], [unsettled_payable_delta_amount],
-                [reserved_delta_amount], [effective_at_utc], [posted_at_utc],
-                [description], [correlation_id], [created_by]
-            )
-            VALUES
-            (
-                NEWID(), @portfolio_id, @balance_id,
-                @fill_id, @order_id, @sequence, @idempotency_key,
-                'TRADE_SETTLEMENT', @currency_code, @cash_delta,
-                0, 0,
-                0, @effective_at_utc, @effective_at_utc,
-                @description, @correlation_id, @actor
-            );
+            ([cash_ledger_entry_uid],[portfolio_id],[cash_balance_id],[fill_id],[order_id],
+             [ledger_sequence],[idempotency_key],[entry_type],[currency_code],
+             [settled_delta_amount],[unsettled_receivable_delta_amount],
+             [unsettled_payable_delta_amount],[reserved_delta_amount],[effective_at_utc],
+             [posted_at_utc],[description],[correlation_id],[created_by])
+            VALUES(NEWID(),@portfolio,@balance_id,@fill,@order,@sequence,@key,'TRADE_SETTLEMENT',
+                   @currency,@delta,0,0,0,@at,@at,@description,@correlation,@actor);
             """;
-        await using var ledgerCommand = CreateCommand(connection, transaction, ledgerSql);
-        ledgerCommand.Parameters.Add("@portfolio_id", SqlDbType.BigInt).Value = fill.PortfolioId;
-        ledgerCommand.Parameters.Add("@balance_id", SqlDbType.BigInt).Value = balanceId.Value;
-        ledgerCommand.Parameters.Add("@fill_id", SqlDbType.BigInt).Value = fill.FillId;
-        ledgerCommand.Parameters.Add("@order_id", SqlDbType.BigInt).Value = fill.OrderId;
-        ledgerCommand.Parameters.Add("@sequence", SqlDbType.BigInt).Value = sequence;
-        ledgerCommand.Parameters.Add("@idempotency_key", SqlDbType.VarChar, 200).Value =
-            $"FILL:{fill.FillUid:N}";
-        ledgerCommand.Parameters.Add("@currency_code", SqlDbType.Char, 3).Value =
-            fill.CurrencyCode;
-        AddDecimal(ledgerCommand, "@cash_delta", cashDelta, 19, 6);
-        AddDateTime(ledgerCommand, "@effective_at_utc", fill.FillAtUtc);
-        ledgerCommand.Parameters.Add("@description", SqlDbType.NVarChar, 1000).Value =
-            $"PAPER {fill.Side} fill {fill.FillUid:D}";
-        ledgerCommand.Parameters.Add("@correlation_id", SqlDbType.UniqueIdentifier).Value =
-            fill.CorrelationId;
-        ledgerCommand.Parameters.Add("@actor", SqlDbType.NVarChar, 256).Value = _options.Actor;
-        await ledgerCommand.ExecuteNonQueryAsync(cancellationToken);
+        await using var command=Command(connection,transaction,sql);
+        command.Parameters.Add("@portfolio",SqlDbType.BigInt).Value=fill.PortfolioId;
+        command.Parameters.Add("@currency",SqlDbType.Char,3).Value=fill.Currency;
+        Decimal(command,"@delta",delta); Time(command,"@at",fill.FilledAtUtc);
+        command.Parameters.Add("@actor",SqlDbType.NVarChar,256).Value=_options.Actor;
+        command.Parameters.Add("@fill",SqlDbType.BigInt).Value=fill.FillId;
+        command.Parameters.Add("@order",SqlDbType.BigInt).Value=fill.OrderId;
+        command.Parameters.Add("@key",SqlDbType.VarChar,200).Value=$"FILL:{fill.FillUid:N}";
+        command.Parameters.Add("@description",SqlDbType.NVarChar,1000).Value=$"PAPER {fill.Side} fill {fill.FillUid:D}";
+        command.Parameters.Add("@correlation",SqlDbType.UniqueIdentifier).Value=fill.CorrelationId;
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private void AddCashParameters(
-        SqlCommand command,
-        FillContext fill,
-        decimal settled,
-        decimal total,
-        decimal available,
-        int version,
-        long sequence)
-    {
-        command.Parameters.Add("@portfolio_id", SqlDbType.BigInt).Value = fill.PortfolioId;
-        command.Parameters.Add("@currency_code", SqlDbType.Char, 3).Value = fill.CurrencyCode;
-        AddDecimal(command, "@settled", settled, 19, 6);
-        AddDecimal(command, "@total", total, 19, 6);
-        AddDecimal(command, "@available", available, 19, 6);
-        command.Parameters.Add("@version", SqlDbType.Int).Value = version;
-        command.Parameters.Add("@sequence", SqlDbType.BigInt).Value = sequence;
-        AddDateTime(command, "@as_of_utc", fill.FillAtUtc);
-        command.Parameters.Add("@actor", SqlDbType.NVarChar, 256).Value = _options.Actor;
-    }
-
-    private async Task<PortfolioContext?> ReadPortfolioAsync(
-        SqlConnection connection,
-        SqlTransaction? transaction,
-        string portfolioCode,
-        bool lockForUpdate,
+    private async Task<PortfolioRow?> ReadPortfolioAsync(
+        SqlConnection connection, SqlTransaction? transaction, string code, bool lockForUpdate,
         CancellationToken cancellationToken)
     {
-        var lockHint = lockForUpdate ? " WITH (UPDLOCK, HOLDLOCK)" : string.Empty;
-        var sql = $"""
-            SELECT
-                [portfolio_id], [portfolio_uid], [portfolio_code], [environment],
-                [broker_account_id], [strategy_code], [base_currency_code],
-                [accounting_method]
-            FROM [portfolio].[portfolios]{lockHint}
-            WHERE [portfolio_code] = @portfolio_code
-              AND [environment] = 'PAPER';
-            """;
-        await using var command = CreateCommand(connection, transaction, sql);
-        command.Parameters.Add("@portfolio_code", SqlDbType.VarChar, 100).Value =
-            portfolioCode;
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken)
-            ? new PortfolioContext(
-                reader.GetInt64(0),
-                reader.GetGuid(1),
-                reader.GetString(2),
-                reader.GetString(3),
-                reader.GetInt64(4),
-                reader.GetString(5),
-                reader.GetString(6),
-                reader.GetString(7))
-            : null;
+        var hint=lockForUpdate?" WITH(UPDLOCK,HOLDLOCK)":string.Empty;
+        var sql=$"SELECT [portfolio_id],[portfolio_uid],[portfolio_code],[environment],"+
+                $"[broker_account_id],[strategy_code],[base_currency_code],[accounting_method] "+
+                $"FROM [portfolio].[portfolios]{hint} WHERE [portfolio_code]=@code AND [environment]='PAPER';";
+        await using var command=Command(connection,transaction,sql);
+        command.Parameters.Add("@code",SqlDbType.VarChar,100).Value=code;
+        await using var reader=await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken)?new PortfolioRow(
+            reader.GetInt64(0),reader.GetGuid(1),reader.GetString(2),reader.GetString(3),
+            reader.GetInt64(4),reader.GetString(5),reader.GetString(6),reader.GetString(7)):null;
     }
 
-    private async Task<IReadOnlyCollection<PositionLedgerSnapshotV1>> ReadPositionSnapshotsAsync(
-        SqlConnection connection,
-        PortfolioContext portfolio,
-        CancellationToken cancellationToken)
+    private async Task<IReadOnlyCollection<PositionLedgerSnapshotV1>> ReadPositionsAsync(
+        SqlConnection connection, PortfolioRow portfolio, CancellationToken cancellationToken)
     {
-        const string sql = """
-            SELECT
-                p.[position_uid], e.[exchange_code], i.[canonical_symbol],
-                p.[product_type], p.[position_side], p.[quantity],
-                p.[average_open_price], p.[cost_basis_amount],
-                p.[market_value_amount], p.[realized_pnl_amount],
-                p.[unrealized_pnl_amount], p.[accrued_fees_amount],
-                p.[accrued_taxes_amount], p.[status], p.[current_position_version],
-                p.[opened_at_utc], p.[last_fill_at_utc], p.[closed_at_utc],
-                p.[updated_at_utc]
+        const string sql="""
+            SELECT p.[position_uid],e.[exchange_code],i.[canonical_symbol],p.[product_type],
+                   p.[position_side],p.[quantity],p.[average_open_price],p.[cost_basis_amount],
+                   p.[market_value_amount],p.[realized_pnl_amount],p.[unrealized_pnl_amount],
+                   p.[accrued_fees_amount],p.[accrued_taxes_amount],p.[status],
+                   p.[current_position_version],p.[opened_at_utc],p.[last_fill_at_utc],
+                   p.[closed_at_utc],p.[updated_at_utc]
             FROM [portfolio].[positions] p
-            INNER JOIN [reference].[instruments] i ON i.[instrument_id] = p.[instrument_id]
-            INNER JOIN [reference].[exchanges] e ON e.[exchange_id] = i.[exchange_id]
-            WHERE p.[portfolio_id] = @portfolio_id
-            ORDER BY e.[exchange_code], i.[canonical_symbol], p.[product_type];
+            INNER JOIN [reference].[instruments] i ON i.[instrument_id]=p.[instrument_id]
+            INNER JOIN [reference].[exchanges] e ON e.[exchange_id]=i.[exchange_id]
+            WHERE p.[portfolio_id]=@id;
             """;
-        await using var command = CreateCommand(connection, null, sql);
-        command.Parameters.Add("@portfolio_id", SqlDbType.BigInt).Value = portfolio.PortfolioId;
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        var positions = new List<PositionLedgerSnapshotV1>();
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            positions.Add(new PositionLedgerSnapshotV1(
-                reader.GetGuid(0),
-                portfolio.PortfolioCode,
-                portfolio.Environment,
-                $"{reader.GetString(1)}|{reader.GetString(2)}",
-                reader.GetString(3),
-                ParseDirection(reader.GetString(4)),
-                reader.GetDecimal(5),
-                reader.IsDBNull(6) ? null : reader.GetDecimal(6),
-                reader.GetDecimal(7),
-                reader.GetDecimal(8),
-                reader.GetDecimal(9),
-                reader.GetDecimal(10),
-                reader.GetDecimal(11),
-                reader.GetDecimal(12),
-                reader.GetString(13),
-                reader.GetInt32(14),
-                reader.IsDBNull(15) ? null : ReadUtc(reader, 15),
-                reader.IsDBNull(16) ? null : ReadUtc(reader, 16),
-                reader.IsDBNull(17) ? null : ReadUtc(reader, 17),
-                ReadUtc(reader, 18)));
-        }
-
-        return positions;
+        await using var command=Command(connection,null,sql); command.Parameters.Add("@id",SqlDbType.BigInt).Value=portfolio.Id;
+        await using var reader=await command.ExecuteReaderAsync(cancellationToken);
+        var rows=new List<PositionLedgerSnapshotV1>();
+        while(await reader.ReadAsync(cancellationToken)) rows.Add(new PositionLedgerSnapshotV1(
+            reader.GetGuid(0),portfolio.Code,portfolio.Environment,$"{reader.GetString(1)}|{reader.GetString(2)}",
+            reader.GetString(3),Direction(reader.GetString(4)),reader.GetDecimal(5),
+            reader.IsDBNull(6)?null:reader.GetDecimal(6),reader.GetDecimal(7),reader.GetDecimal(8),
+            reader.GetDecimal(9),reader.GetDecimal(10),reader.GetDecimal(11),reader.GetDecimal(12),
+            reader.GetString(13),reader.GetInt32(14),reader.IsDBNull(15)?null:Utc(reader,15),
+            reader.IsDBNull(16)?null:Utc(reader,16),reader.IsDBNull(17)?null:Utc(reader,17),Utc(reader,18)));
+        return rows;
     }
 
-    private async Task<IReadOnlyCollection<CashLedgerSnapshotV1>> ReadCashSnapshotsAsync(
-        SqlConnection connection,
-        PortfolioContext portfolio,
+    private async Task<IReadOnlyCollection<CashLedgerSnapshotV1>> ReadCashAsync(
+        SqlConnection connection, PortfolioRow portfolio, CancellationToken cancellationToken)
+    {
+        const string sql="""
+            SELECT [currency_code],[settled_amount],[unsettled_receivable_amount],
+                   [unsettled_payable_amount],[reserved_amount],[total_balance_amount],
+                   [available_amount],[current_balance_version],[last_ledger_sequence],[as_of_utc]
+            FROM [portfolio].[cash_balances] WHERE [portfolio_id]=@id;
+            """;
+        await using var command=Command(connection,null,sql);command.Parameters.Add("@id",SqlDbType.BigInt).Value=portfolio.Id;
+        await using var reader=await command.ExecuteReaderAsync(cancellationToken);
+        var rows=new List<CashLedgerSnapshotV1>();
+        while(await reader.ReadAsync(cancellationToken)) rows.Add(new CashLedgerSnapshotV1(
+            portfolio.Code,reader.GetString(0),reader.GetDecimal(1),reader.GetDecimal(2),reader.GetDecimal(3),
+            reader.GetDecimal(4),reader.GetDecimal(5),reader.GetDecimal(6),reader.GetInt32(7),reader.GetInt64(8),Utc(reader,9)));
+        return rows;
+    }
+
+    private async Task<IReadOnlyCollection<LedgerDiscrepancyV1>> DetectDiscrepanciesAsync(
+        SqlConnection connection, SqlTransaction transaction, PortfolioRow portfolio,
         CancellationToken cancellationToken)
     {
-        const string sql = """
+        const string sql="""
             SELECT
-                [currency_code], [settled_amount], [unsettled_receivable_amount],
-                [unsettled_payable_amount], [reserved_amount], [total_balance_amount],
-                [available_amount], [current_balance_version], [last_ledger_sequence],
-                [as_of_utc]
-            FROM [portfolio].[cash_balances]
-            WHERE [portfolio_id] = @portfolio_id
-            ORDER BY [currency_code];
+              (SELECT COUNT(*) FROM [execution].[fills] f
+               INNER JOIN [risk].[trade_plans] tp ON tp.[trade_plan_id]=f.[trade_plan_id]
+               INNER JOIN [intelligence].[signals] s ON s.[signal_id]=tp.[signal_id]
+               LEFT JOIN [portfolio].[position_events] pe ON pe.[fill_id]=f.[fill_id]
+               WHERE f.[broker_account_id]=@account AND f.[environment]='PAPER'
+                 AND s.[strategy_code]=@strategy AND pe.[position_event_id] IS NULL),
+              (SELECT COUNT(*) FROM [portfolio].[positions] p
+               OUTER APPLY(SELECT COALESCE(SUM(l.[remaining_quantity]),0) q
+                           FROM [portfolio].[position_lots] l WHERE l.[position_id]=p.[position_id]) x
+               WHERE p.[portfolio_id]=@portfolio AND p.[quantity]<>x.q),
+              (SELECT COUNT(*) FROM [portfolio].[cash_balances] c
+               WHERE c.[portfolio_id]=@portfolio AND
+                    (c.[total_balance_amount]<>c.[settled_amount]+c.[unsettled_receivable_amount]-c.[unsettled_payable_amount]
+                     OR c.[available_amount]<>c.[total_balance_amount]-c.[reserved_amount]));
             """;
-        await using var command = CreateCommand(connection, null, sql);
-        command.Parameters.Add("@portfolio_id", SqlDbType.BigInt).Value = portfolio.PortfolioId;
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        var balances = new List<CashLedgerSnapshotV1>();
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            balances.Add(new CashLedgerSnapshotV1(
-                portfolio.PortfolioCode,
-                reader.GetString(0),
-                reader.GetDecimal(1),
-                reader.GetDecimal(2),
-                reader.GetDecimal(3),
-                reader.GetDecimal(4),
-                reader.GetDecimal(5),
-                reader.GetDecimal(6),
-                reader.GetInt32(7),
-                reader.GetInt64(8),
-                ReadUtc(reader, 9)));
-        }
-
-        return balances;
+        await using var command=Command(connection,transaction,sql);
+        command.Parameters.Add("@account",SqlDbType.BigInt).Value=portfolio.BrokerAccountId;
+        command.Parameters.Add("@strategy",SqlDbType.VarChar,100).Value=portfolio.Strategy;
+        command.Parameters.Add("@portfolio",SqlDbType.BigInt).Value=portfolio.Id;
+        await using var reader=await command.ExecuteReaderAsync(cancellationToken);await reader.ReadAsync(cancellationToken);
+        var rows=new List<LedgerDiscrepancyV1>();
+        AddCountDiscrepancy(rows,reader.GetInt32(0),"FILL_MISMATCH","Persisted fills are missing position projections.",portfolio.Code);
+        AddCountDiscrepancy(rows,reader.GetInt32(1),"POSITION_MISMATCH","Position quantities differ from FIFO lots.",portfolio.Code);
+        AddCountDiscrepancy(rows,reader.GetInt32(2),"FUNDS_MISMATCH","Cash balance identities are inconsistent.",portfolio.Code);
+        return rows;
     }
 
-    private async Task FindUnprojectedFillsAsync(
-        SqlConnection connection,
-        SqlTransaction transaction,
-        PortfolioContext portfolio,
-        ICollection<LedgerDiscrepancyV1> discrepancies,
-        CancellationToken cancellationToken)
+    private static void AddCountDiscrepancy(
+        ICollection<LedgerDiscrepancyV1> rows,int count,string type,string description,string scope)
     {
-        const string sql = """
-            SELECT f.[fill_uid], e.[exchange_code], i.[canonical_symbol], f.[fill_quantity]
-            FROM [execution].[fills] f
-            INNER JOIN [risk].[trade_plans] tp ON tp.[trade_plan_id] = f.[trade_plan_id]
-            INNER JOIN [intelligence].[signals] s ON s.[signal_id] = tp.[signal_id]
-            INNER JOIN [reference].[instruments] i ON i.[instrument_id] = f.[instrument_id]
-            INNER JOIN [reference].[exchanges] e ON e.[exchange_id] = i.[exchange_id]
-            LEFT JOIN [portfolio].[position_events] pe ON pe.[fill_id] = f.[fill_id]
-            WHERE f.[broker_account_id] = @broker_account_id
-              AND f.[environment] = 'PAPER'
-              AND s.[strategy_code] = @strategy_code
-              AND pe.[position_event_id] IS NULL;
-            """;
-        await using var command = CreateCommand(connection, transaction, sql);
-        command.Parameters.Add("@broker_account_id", SqlDbType.BigInt).Value =
-            portfolio.BrokerAccountId;
-        command.Parameters.Add("@strategy_code", SqlDbType.VarChar, 100).Value =
-            portfolio.StrategyCode;
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            discrepancies.Add(new LedgerDiscrepancyV1(
-                Guid.NewGuid(),
-                "FILL_MISMATCH",
-                "HIGH",
-                reader.GetGuid(0).ToString("D"),
-                $"Fill for {reader.GetString(1)}|{reader.GetString(2)} has no position event.",
-                reader.GetDecimal(3),
-                0m,
-                null,
-                null,
-                true,
-                true));
-        }
+        if(count>0) rows.Add(new LedgerDiscrepancyV1(
+            Guid.NewGuid(),type,type=="FUNDS_MISMATCH"?"CRITICAL":"HIGH",scope,
+            $"{description} Count: {count}.",null,null,count,0m,true,true));
     }
 
-    private async Task FindPositionMismatchesAsync(
-        SqlConnection connection,
-        SqlTransaction transaction,
-        PortfolioContext portfolio,
-        ICollection<LedgerDiscrepancyV1> discrepancies,
+    private async Task<long> SaveReconciliationRunAsync(
+        SqlConnection connection, SqlTransaction transaction, LedgerReconciliationRequestV1 request,
+        PortfolioRow portfolio,string trigger,Guid uid,IReadOnlyCollection<LedgerDiscrepancyV1> discrepancies,
         CancellationToken cancellationToken)
     {
-        const string sql = """
-            SELECT
-                p.[position_uid], e.[exchange_code], i.[canonical_symbol],
-                p.[quantity], COALESCE(SUM(l.[remaining_quantity]), 0)
-            FROM [portfolio].[positions] p
-            INNER JOIN [reference].[instruments] i ON i.[instrument_id] = p.[instrument_id]
-            INNER JOIN [reference].[exchanges] e ON e.[exchange_id] = i.[exchange_id]
-            LEFT JOIN [portfolio].[position_lots] l ON l.[position_id] = p.[position_id]
-            WHERE p.[portfolio_id] = @portfolio_id
-            GROUP BY p.[position_uid], e.[exchange_code], i.[canonical_symbol], p.[quantity]
-            HAVING p.[quantity] <> COALESCE(SUM(l.[remaining_quantity]), 0);
-            """;
-        await using var command = CreateCommand(connection, transaction, sql);
-        command.Parameters.Add("@portfolio_id", SqlDbType.BigInt).Value = portfolio.PortfolioId;
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            discrepancies.Add(new LedgerDiscrepancyV1(
-                Guid.NewGuid(),
-                "POSITION_MISMATCH",
-                "HIGH",
-                reader.GetGuid(0).ToString("D"),
-                $"Position quantity for {reader.GetString(1)}|{reader.GetString(2)} differs from FIFO lots.",
-                reader.GetDecimal(4),
-                reader.GetDecimal(3),
-                null,
-                null,
-                true,
-                true));
-        }
-    }
-
-    private async Task FindCashMismatchesAsync(
-        SqlConnection connection,
-        SqlTransaction transaction,
-        PortfolioContext portfolio,
-        ICollection<LedgerDiscrepancyV1> discrepancies,
-        CancellationToken cancellationToken)
-    {
-        const string sql = """
-            SELECT
-                [currency_code], [total_balance_amount],
-                [settled_amount] + [unsettled_receivable_amount] - [unsettled_payable_amount],
-                [available_amount], [total_balance_amount] - [reserved_amount]
-            FROM [portfolio].[cash_balances]
-            WHERE [portfolio_id] = @portfolio_id
-              AND
-              (
-                  [total_balance_amount] <>
-                      [settled_amount] + [unsettled_receivable_amount] - [unsettled_payable_amount]
-                  OR [available_amount] <> [total_balance_amount] - [reserved_amount]
-              );
-            """;
-        await using var command = CreateCommand(connection, transaction, sql);
-        command.Parameters.Add("@portfolio_id", SqlDbType.BigInt).Value = portfolio.PortfolioId;
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            discrepancies.Add(new LedgerDiscrepancyV1(
-                Guid.NewGuid(),
-                "FUNDS_MISMATCH",
-                "CRITICAL",
-                reader.GetString(0),
-                "Cash balance identity is inconsistent.",
-                null,
-                null,
-                reader.GetDecimal(2),
-                reader.GetDecimal(1),
-                true,
-                true));
-        }
-    }
-
-    private async Task<long> InsertReconciliationRunAsync(
-        SqlConnection connection,
-        SqlTransaction transaction,
-        LedgerReconciliationRequestV1 request,
-        PortfolioContext portfolio,
-        string trigger,
-        Guid runUid,
-        IReadOnlyCollection<LedgerDiscrepancyV1> discrepancies,
-        CancellationToken cancellationToken)
-    {
-        const string sql = """
+        const string sql="""
             INSERT INTO [execution].[reconciliation_runs]
-            (
-                [reconciliation_run_uid], [broker_account_id], [environment],
-                [trigger_type], [scope_type], [scope_reference], [status],
-                [started_at_utc], [completed_at_utc], [observation_count],
-                [discrepancy_count], [unresolved_material_count],
-                [source_service], [source_version], [correlation_id],
-                [created_by], [updated_by]
-            )
+            ([reconciliation_run_uid],[broker_account_id],[environment],[trigger_type],
+             [scope_type],[scope_reference],[status],[started_at_utc],[completed_at_utc],
+             [observation_count],[discrepancy_count],[unresolved_material_count],
+             [source_service],[source_version],[correlation_id],[created_by],[updated_by])
             OUTPUT INSERTED.[reconciliation_run_id]
-            VALUES
-            (
-                @run_uid, @broker_account_id, 'PAPER',
-                @trigger_type, 'ACCOUNT', @scope_reference, @status,
-                @started_at_utc, @started_at_utc, @observation_count,
-                @discrepancy_count, @discrepancy_count,
-                @source_service, @source_version, @correlation_id,
-                @actor, @actor
-            );
+            VALUES(@uid,@account,'PAPER',@trigger,'ACCOUNT',@scope,@status,@at,@at,3,@count,@count,
+                   @service,@version,@correlation,@actor,@actor);
             """;
-        await using var command = CreateCommand(connection, transaction, sql);
-        command.Parameters.Add("@run_uid", SqlDbType.UniqueIdentifier).Value = runUid;
-        command.Parameters.Add("@broker_account_id", SqlDbType.BigInt).Value =
-            portfolio.BrokerAccountId;
-        command.Parameters.Add("@trigger_type", SqlDbType.VarChar, 40).Value = trigger;
-        command.Parameters.Add("@scope_reference", SqlDbType.VarChar, 200).Value =
-            request.PortfolioCode;
-        command.Parameters.Add("@status", SqlDbType.VarChar, 20).Value =
-            discrepancies.Count == 0 ? "SUCCEEDED" : "PARTIAL";
-        AddDateTime(command, "@started_at_utc", request.AsOfUtc);
-        command.Parameters.Add("@observation_count", SqlDbType.Int).Value =
-            discrepancies.Count + 1;
-        command.Parameters.Add("@discrepancy_count", SqlDbType.Int).Value =
-            discrepancies.Count;
-        command.Parameters.Add("@source_service", SqlDbType.VarChar, 100).Value = _options.Actor;
-        command.Parameters.Add("@source_version", SqlDbType.VarChar, 50).Value = _options.SourceVersion;
-        command.Parameters.Add("@correlation_id", SqlDbType.UniqueIdentifier).Value =
-            SqlServerMessageValues.ToDatabaseGuid(
-                request.CorrelationId,
-                nameof(request.CorrelationId));
-        command.Parameters.Add("@actor", SqlDbType.NVarChar, 256).Value = _options.Actor;
-        return Convert.ToInt64(
-            await command.ExecuteScalarAsync(cancellationToken),
-            System.Globalization.CultureInfo.InvariantCulture);
+        await using var command=Command(connection,transaction,sql);
+        command.Parameters.Add("@uid",SqlDbType.UniqueIdentifier).Value=uid;
+        command.Parameters.Add("@account",SqlDbType.BigInt).Value=portfolio.BrokerAccountId;
+        command.Parameters.Add("@trigger",SqlDbType.VarChar,40).Value=trigger;
+        command.Parameters.Add("@scope",SqlDbType.VarChar,200).Value=portfolio.Code;
+        command.Parameters.Add("@status",SqlDbType.VarChar,20).Value=discrepancies.Count==0?"SUCCEEDED":"PARTIAL";
+        Time(command,"@at",request.AsOfUtc);command.Parameters.Add("@count",SqlDbType.Int).Value=discrepancies.Count;
+        command.Parameters.Add("@service",SqlDbType.VarChar,100).Value=_options.Actor;
+        command.Parameters.Add("@version",SqlDbType.VarChar,50).Value=_options.SourceVersion;
+        command.Parameters.Add("@correlation",SqlDbType.UniqueIdentifier).Value=
+            SqlServerMessageValues.ToDatabaseGuid(request.CorrelationId,nameof(request.CorrelationId));
+        command.Parameters.Add("@actor",SqlDbType.NVarChar,256).Value=_options.Actor;
+        return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken),System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    private async Task InsertDiscrepanciesAsync(
-        SqlConnection connection,
-        SqlTransaction transaction,
-        long runId,
-        IReadOnlyCollection<LedgerDiscrepancyV1> discrepancies,
-        DateTimeOffset detectedAtUtc,
-        CancellationToken cancellationToken)
+    private async Task SaveDiscrepanciesAsync(
+        SqlConnection connection,SqlTransaction transaction,long runId,
+        IReadOnlyCollection<LedgerDiscrepancyV1> rows,DateTimeOffset at,CancellationToken cancellationToken)
     {
-        const string sql = """
+        const string sql="""
             INSERT INTO [execution].[reconciliation_discrepancies]
-            (
-                [reconciliation_discrepancy_uid], [reconciliation_run_id],
-                [discrepancy_type], [severity], [status], [description],
-                [detected_at_utc], [blocks_new_exposure],
-                [allows_risk_reducing_exits], [created_by], [updated_by]
-            )
-            VALUES
-            (
-                @discrepancy_uid, @run_id,
-                @type, @severity, 'OPEN', @description,
-                @detected_at_utc, @blocks_new_exposure,
-                @allows_exits, @actor, @actor
-            );
+            ([reconciliation_discrepancy_uid],[reconciliation_run_id],[discrepancy_type],
+             [severity],[status],[description],[detected_at_utc],[blocks_new_exposure],
+             [allows_risk_reducing_exits],[created_by],[updated_by])
+            VALUES(@uid,@run,@type,@severity,'OPEN',@description,@at,1,1,@actor,@actor);
             """;
-        foreach (var discrepancy in discrepancies)
+        foreach(var row in rows)
         {
-            await using var command = CreateCommand(connection, transaction, sql);
-            command.Parameters.Add("@discrepancy_uid", SqlDbType.UniqueIdentifier).Value =
-                discrepancy.DiscrepancyUid;
-            command.Parameters.Add("@run_id", SqlDbType.BigInt).Value = runId;
-            command.Parameters.Add("@type", SqlDbType.VarChar, 50).Value = discrepancy.Type;
-            command.Parameters.Add("@severity", SqlDbType.VarChar, 20).Value =
-                discrepancy.Severity;
-            command.Parameters.Add("@description", SqlDbType.NVarChar, 2000).Value =
-                discrepancy.Description;
-            AddDateTime(command, "@detected_at_utc", detectedAtUtc);
-            command.Parameters.Add("@blocks_new_exposure", SqlDbType.Bit).Value =
-                discrepancy.BlocksNewExposure;
-            command.Parameters.Add("@allows_exits", SqlDbType.Bit).Value =
-                discrepancy.AllowsRiskReducingExits;
-            command.Parameters.Add("@actor", SqlDbType.NVarChar, 256).Value = _options.Actor;
+            await using var command=Command(connection,transaction,sql);
+            command.Parameters.Add("@uid",SqlDbType.UniqueIdentifier).Value=row.DiscrepancyUid;
+            command.Parameters.Add("@run",SqlDbType.BigInt).Value=runId;
+            command.Parameters.Add("@type",SqlDbType.VarChar,50).Value=row.Type;
+            command.Parameters.Add("@severity",SqlDbType.VarChar,20).Value=row.Severity;
+            command.Parameters.Add("@description",SqlDbType.NVarChar,2000).Value=row.Description;
+            Time(command,"@at",at);command.Parameters.Add("@actor",SqlDbType.NVarChar,256).Value=_options.Actor;
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
     }
 
-    private static PortfolioFillProjectionResultV1 RejectProjection(
-        PortfolioFillProjectionRequestV1 request,
-        string reason) =>
-        new(
-            request.RequestUid,
-            request.FillUid,
-            PortfolioLedgerContractV1.Rejected,
-            [reason],
-            null,
-            null,
-            request.AsOfUtc);
-
-    private static void ValidateProjectionRequest(PortfolioFillProjectionRequestV1 request)
+    private async Task<PortfolioFillProjectionResultV1> DuplicateAsync(
+        PortfolioFillProjectionRequestV1 request,string? instrumentKey,CancellationToken cancellationToken)
     {
-        if (request.RequestUid == Guid.Empty || request.FillUid == Guid.Empty)
-        {
-            throw new ArgumentException("Request and fill UIDs are required.", nameof(request));
-        }
+        var snapshot=await GetSnapshotAsync(request.PortfolioCode,request.AsOfUtc,cancellationToken);
+        return new PortfolioFillProjectionResultV1(
+            request.RequestUid,request.FillUid,PortfolioLedgerContractV1.Duplicate,Array.Empty<string>(),
+            snapshot?.Positions.FirstOrDefault(p=>instrumentKey is null||
+                string.Equals(p.InstrumentKey,instrumentKey,StringComparison.OrdinalIgnoreCase)),snapshot,request.AsOfUtc);
+    }
 
+    private static PortfolioFillProjectionResultV1 Rejected(PortfolioFillProjectionRequestV1 request,string reason)=>
+        new(request.RequestUid,request.FillUid,PortfolioLedgerContractV1.Rejected,[reason],null,null,request.AsOfUtc);
+
+    private static void Validate(PortfolioFillProjectionRequestV1 request)
+    {
+        if(request.RequestUid==Guid.Empty||request.FillUid==Guid.Empty)
+            throw new ArgumentException("Request and fill UIDs are required.",nameof(request));
         ArgumentException.ThrowIfNullOrWhiteSpace(request.PortfolioCode);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.CorrelationId);
     }
 
-    private SqlCommand CreateCommand(
-        SqlConnection connection,
-        SqlTransaction? transaction,
-        string sql) =>
-        new(sql, connection, transaction)
-        {
-            CommandTimeout = _options.CommandTimeoutSeconds,
-        };
+    private SqlCommand Command(SqlConnection connection,SqlTransaction? transaction,string sql)=>
+        new(sql,connection,transaction){CommandTimeout=_options.CommandTimeoutSeconds};
 
-    private static EvidenceDirectionV1 ParseDirection(string value) => value switch
+    private static EvidenceDirectionV1 Direction(string value)=>value switch
     {
-        "LONG" => EvidenceDirectionV1.Long,
-        "SHORT" => EvidenceDirectionV1.Short,
-        "FLAT" => EvidenceDirectionV1.Neutral,
-        _ => throw new InvalidOperationException($"Unknown position side '{value}'."),
+        "LONG"=>EvidenceDirectionV1.Long,"SHORT"=>EvidenceDirectionV1.Short,
+        "FLAT"=>EvidenceDirectionV1.Neutral,_=>throw new InvalidOperationException($"Unknown side {value}.")
     };
-
-    private static string ToSide(EvidenceDirectionV1 direction) => direction switch
+    private static string Side(EvidenceDirectionV1 direction)=>direction switch
     {
-        EvidenceDirectionV1.Long => "LONG",
-        EvidenceDirectionV1.Short => "SHORT",
-        EvidenceDirectionV1.Neutral => "FLAT",
-        _ => throw new ArgumentOutOfRangeException(nameof(direction)),
+        EvidenceDirectionV1.Long=>"LONG",EvidenceDirectionV1.Short=>"SHORT",
+        EvidenceDirectionV1.Neutral=>"FLAT",_=>throw new ArgumentOutOfRangeException(nameof(direction))
     };
+    private static void Decimal(SqlCommand command,string name,decimal value)
+    {var p=command.Parameters.Add(name,SqlDbType.Decimal);p.Precision=19;p.Scale=6;p.Value=value;}
+    private static void NullableDecimal(SqlCommand command,string name,decimal? value)
+    {var p=command.Parameters.Add(name,SqlDbType.Decimal);p.Precision=19;p.Scale=6;p.Value=(object?)value??DBNull.Value;}
+    private static void Time(SqlCommand command,string name,DateTimeOffset value)=>
+        command.Parameters.Add(name,SqlDbType.DateTime2).Value=value.UtcDateTime;
+    private static void NullableTime(SqlCommand command,string name,DateTimeOffset? value)=>
+        command.Parameters.Add(name,SqlDbType.DateTime2).Value=value is null?DBNull.Value:value.Value.UtcDateTime;
+    private static DateTimeOffset Utc(SqlDataReader reader,int ordinal)=>
+        new(DateTime.SpecifyKind(reader.GetDateTime(ordinal),DateTimeKind.Utc));
 
-    private static void AddDateTime(
-        SqlCommand command,
-        string name,
-        DateTimeOffset value) =>
-        command.Parameters.Add(name, SqlDbType.DateTime2).Value = value.UtcDateTime;
-
-    private static void AddNullableDateTime(
-        SqlCommand command,
-        string name,
-        DateTimeOffset? value) =>
-        command.Parameters.Add(name, SqlDbType.DateTime2).Value =
-            value is null ? DBNull.Value : value.Value.UtcDateTime;
-
-    private static void AddDecimal(
-        SqlCommand command,
-        string name,
-        decimal value,
-        byte precision,
-        byte scale)
-    {
-        var parameter = command.Parameters.Add(name, SqlDbType.Decimal);
-        parameter.Precision = precision;
-        parameter.Scale = scale;
-        parameter.Value = value;
-    }
-
-    private static void AddNullableDecimal(
-        SqlCommand command,
-        string name,
-        decimal? value,
-        byte precision,
-        byte scale)
-    {
-        var parameter = command.Parameters.Add(name, SqlDbType.Decimal);
-        parameter.Precision = precision;
-        parameter.Scale = scale;
-        parameter.Value = (object?)value ?? DBNull.Value;
-    }
-
-    private static DateTimeOffset ReadUtc(SqlDataReader reader, int ordinal) =>
-        new(DateTime.SpecifyKind(reader.GetDateTime(ordinal), DateTimeKind.Utc));
-
-    private sealed record FillContext(
-        long FillId,
-        Guid FillUid,
-        long OrderId,
-        long BrokerAccountId,
-        long InstrumentId,
-        long PortfolioId,
-        Guid PortfolioUid,
-        string PortfolioCode,
-        string Environment,
-        string AccountingMethod,
-        string CurrencyCode,
-        string InstrumentKey,
-        string ProductType,
-        string Side,
-        decimal Quantity,
-        decimal Price,
-        decimal FeesAmount,
-        decimal TaxesAmount,
-        DateTimeOffset FillAtUtc,
-        Guid CorrelationId);
-
-    private sealed record PositionContext(
-        long? PositionId,
-        Guid PositionUid,
-        PositionAccountingState State,
-        IReadOnlyCollection<PositionLotState> Lots,
-        DateTimeOffset? OpenedAtUtc,
-        DateTimeOffset? LastFillAtUtc,
-        DateTimeOffset? ClosedAtUtc,
-        decimal MarketValueAmount,
-        decimal UnrealizedPnlAmount);
-
-    private sealed record PortfolioContext(
-        long PortfolioId,
-        Guid PortfolioUid,
-        string PortfolioCode,
-        string Environment,
-        long BrokerAccountId,
-        string StrategyCode,
-        string CurrencyCode,
-        string AccountingMethod);
+    private sealed record FillRow(
+        long FillId,Guid FillUid,long OrderId,long InstrumentId,long PortfolioId,Guid PortfolioUid,
+        string PortfolioCode,string Environment,string AccountingMethod,string Currency,
+        string InstrumentKey,string ProductType,string Side,decimal Quantity,decimal Price,
+        decimal Fees,decimal Taxes,DateTimeOffset FilledAtUtc,Guid CorrelationId,long BrokerAccountId);
+    private sealed record PositionRow(
+        long? Id,Guid Uid,PositionAccountingState State,IReadOnlyCollection<PositionLotState> Lots,
+        DateTimeOffset? OpenedAtUtc);
+    private sealed record PortfolioRow(
+        long Id,Guid Uid,string Code,string Environment,long BrokerAccountId,string Strategy,
+        string Currency,string AccountingMethod);
 }

@@ -97,12 +97,14 @@ public sealed class InMemoryMarketDataStore(
                 }
 
                 var identity = BuildCandleIdentity(candle);
-                if (!_candles.TryAdd(identity, candle))
+                if (_candles.TryGetValue(identity, out var existing) &&
+                    CandleValuesEqual(existing, candle))
                 {
                     duplicates++;
                     continue;
                 }
 
+                _candles[identity] = candle;
                 accepted++;
             }
         }
@@ -162,6 +164,17 @@ public sealed class InMemoryMarketDataStore(
                 {
                     duplicates++;
                     continue;
+                }
+
+                foreach (var snapshot in update.CandleSnapshots)
+                {
+                    var candle = ToCanonicalCandle(update, snapshot);
+                    var identity = BuildCandleIdentity(candle);
+                    if (!_candles.TryGetValue(identity, out var existing) ||
+                        !CandleValuesEqual(existing, candle))
+                    {
+                        _candles[identity] = candle;
+                    }
                 }
 
                 accepted++;
@@ -244,6 +257,45 @@ public sealed class InMemoryMarketDataStore(
             return Task.FromResult(result);
         }
     }
+
+    private static CanonicalCandleV1 ToCanonicalCandle(
+        CanonicalLiveMarketUpdateV1 update,
+        CanonicalLiveCandleV1 snapshot)
+    {
+        var closeAtUtc = snapshot.OpenAtUtc.Add(
+            MarketDataContractV1.GetDuration(snapshot.Timeframe));
+        var isClosed = closeAtUtc <= update.EventAtUtc;
+        return new CanonicalCandleV1(
+            update.ProviderCode,
+            update.ProviderInstrumentKey,
+            $"{update.SourceEventId}|{snapshot.Timeframe}|{snapshot.OpenAtUtc:O}",
+            snapshot.Timeframe,
+            snapshot.OpenAtUtc,
+            closeAtUtc,
+            snapshot.OpenPrice,
+            snapshot.HighPrice,
+            snapshot.LowPrice,
+            snapshot.ClosePrice,
+            snapshot.VolumeQuantity,
+            update.OpenInterest,
+            null,
+            null,
+            isClosed,
+            update.PublishedAtUtc,
+            update.ReceivedAtUtc,
+            update.SourceVersion,
+            update.RawPayloadJson);
+    }
+
+    private static bool CandleValuesEqual(
+        CanonicalCandleV1 left,
+        CanonicalCandleV1 right) =>
+        left.OpenPrice == right.OpenPrice &&
+        left.HighPrice == right.HighPrice &&
+        left.LowPrice == right.LowPrice &&
+        left.ClosePrice == right.ClosePrice &&
+        left.VolumeQuantity == right.VolumeQuantity &&
+        left.IsClosed == right.IsClosed;
 
     private static string BuildCandleIdentity(CanonicalCandleV1 candle) =>
         $"{candle.ProviderCode}|{candle.ProviderInstrumentKey}|" +

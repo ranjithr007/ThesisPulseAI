@@ -14,23 +14,14 @@ public static class UpstoxServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        var apiBaseUrl = configuration["Upstox:ApiBaseUrl"]
-            ?? "https://api.upstox.com";
-        var instrumentMasterUrl = configuration["Upstox:InstrumentMasterUrl"]
-            ?? "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz";
+        var apiBaseUrl = configuration["Upstox:ApiBaseUrl"] ?? "https://api.upstox.com";
+        var instrumentMasterUrl = configuration["Upstox:InstrumentMasterUrl"] ??
+            "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz";
 
-        if (!Uri.TryCreate(apiBaseUrl, UriKind.Absolute, out var apiBaseUri))
+        if (!Uri.TryCreate(apiBaseUrl, UriKind.Absolute, out var apiBaseUri) ||
+            !Uri.TryCreate(instrumentMasterUrl, UriKind.Absolute, out var instrumentMasterUri))
         {
-            throw new InvalidOperationException("Upstox API base URL must be absolute.");
-        }
-
-        if (!Uri.TryCreate(
-                instrumentMasterUrl,
-                UriKind.Absolute,
-                out var instrumentMasterUri))
-        {
-            throw new InvalidOperationException(
-                "Upstox instrument master URL must be absolute.");
+            throw new InvalidOperationException("Upstox URLs must be absolute.");
         }
 
         var options = new UpstoxMarketDataOptions
@@ -38,63 +29,42 @@ public static class UpstoxServiceCollectionExtensions
             Enabled = configuration.GetValue("Upstox:Enabled", false),
             ApiBaseUrl = apiBaseUri,
             InstrumentMasterUrl = instrumentMasterUri,
-            HistoricalPathTemplate = configuration["Upstox:HistoricalPathTemplate"]
-                ?? "/v3/historical-candle/{instrumentKey}/{unit}/{interval}/{toDate}/{fromDate}",
-            MarketFeedAuthorizePath = configuration["Upstox:MarketFeedAuthorizePath"]
-                ?? "/v3/feed/market-data-feed/authorize",
+            HistoricalPathTemplate = configuration["Upstox:HistoricalPathTemplate"] ??
+                "/v3/historical-candle/{instrumentKey}/{unit}/{interval}/{toDate}/{fromDate}",
+            MarketFeedAuthorizePath = configuration["Upstox:MarketFeedAuthorizePath"] ??
+                "/v3/feed/market-data-feed/authorize",
             AccessToken = configuration["Upstox:AccessToken"],
             TickSizeDivisor = configuration.GetValue("Upstox:TickSizeDivisor", 100m),
-            RequestTimeoutSeconds = configuration.GetValue(
-                "Upstox:RequestTimeoutSeconds",
-                30),
-            MaximumInstrumentCount = configuration.GetValue(
-                "Upstox:MaximumInstrumentCount",
-                500_000),
+            RequestTimeoutSeconds = configuration.GetValue("Upstox:RequestTimeoutSeconds", 30),
+            MaximumInstrumentCount = configuration.GetValue("Upstox:MaximumInstrumentCount", 500_000),
         };
         options.Validate();
 
-        var instrumentKeys = configuration
-            .GetSection("Upstox:LiveFeed:InstrumentKeys")
-            .GetChildren()
-            .Select(item => item.Value)
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Cast<string>()
-            .ToArray();
+        var instrumentKeys = configuration.GetSection("Upstox:LiveFeed:InstrumentKeys")
+            .GetChildren().Select(item => item.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value)).Cast<string>().ToArray();
         var liveFeedOptions = new UpstoxLiveFeedOptions
         {
             Enabled = configuration.GetValue("Upstox:LiveFeed:Enabled", false),
-            Mode = configuration["Upstox:LiveFeed:Mode"]
-                ?? UpstoxLiveFeedModes.Full,
+            Mode = configuration["Upstox:LiveFeed:Mode"] ?? UpstoxLiveFeedModes.Full,
             InstrumentKeys = instrumentKeys,
-            ConnectTimeoutSeconds = configuration.GetValue(
-                "Upstox:LiveFeed:ConnectTimeoutSeconds",
-                20),
-            MessageSilenceTimeoutSeconds = configuration.GetValue(
-                "Upstox:LiveFeed:MessageSilenceTimeoutSeconds",
-                45),
-            ClosedMarketMessageSilenceTimeoutSeconds = configuration.GetValue(
-                "Upstox:LiveFeed:ClosedMarketMessageSilenceTimeoutSeconds",
-                300),
-            KeepAliveSeconds = configuration.GetValue(
-                "Upstox:LiveFeed:KeepAliveSeconds",
-                20),
-            InitialReconnectDelayMilliseconds = configuration.GetValue(
-                "Upstox:LiveFeed:InitialReconnectDelayMilliseconds",
-                1_000),
-            MaximumReconnectDelayMilliseconds = configuration.GetValue(
-                "Upstox:LiveFeed:MaximumReconnectDelayMilliseconds",
-                60_000),
-            StableConnectionResetSeconds = configuration.GetValue(
-                "Upstox:LiveFeed:StableConnectionResetSeconds",
-                60),
-            ReceiveBufferBytes = configuration.GetValue(
-                "Upstox:LiveFeed:ReceiveBufferBytes",
-                64 * 1024),
-            MaximumMessageBytes = configuration.GetValue(
-                "Upstox:LiveFeed:MaximumMessageBytes",
-                4 * 1024 * 1024),
+            ConnectTimeoutSeconds = configuration.GetValue("Upstox:LiveFeed:ConnectTimeoutSeconds", 20),
+            MessageSilenceTimeoutSeconds = configuration.GetValue("Upstox:LiveFeed:MessageSilenceTimeoutSeconds", 45),
+            ClosedMarketMessageSilenceTimeoutSeconds = configuration.GetValue("Upstox:LiveFeed:ClosedMarketMessageSilenceTimeoutSeconds", 300),
+            KeepAliveSeconds = configuration.GetValue("Upstox:LiveFeed:KeepAliveSeconds", 20),
+            InitialReconnectDelayMilliseconds = configuration.GetValue("Upstox:LiveFeed:InitialReconnectDelayMilliseconds", 1_000),
+            MaximumReconnectDelayMilliseconds = configuration.GetValue("Upstox:LiveFeed:MaximumReconnectDelayMilliseconds", 60_000),
+            StableConnectionResetSeconds = configuration.GetValue("Upstox:LiveFeed:StableConnectionResetSeconds", 60),
+            ReceiveBufferBytes = configuration.GetValue("Upstox:LiveFeed:ReceiveBufferBytes", 64 * 1024),
+            MaximumMessageBytes = configuration.GetValue("Upstox:LiveFeed:MaximumMessageBytes", 4 * 1024 * 1024),
         };
-        liveFeedOptions.Validate(options.Enabled);
+        var usesSqlSubscriptions = string.Equals(
+            configuration["MarketData:Persistence:Provider"],
+            "SqlServer",
+            StringComparison.OrdinalIgnoreCase);
+        liveFeedOptions.Validate(
+            options.Enabled,
+            requireConfiguredInstrumentKeys: !usesSqlSubscriptions);
 
         services.AddSingleton(options);
         services.AddSingleton(liveFeedOptions);
@@ -102,18 +72,16 @@ public static class UpstoxServiceCollectionExtensions
         services.AddSingleton<IUpstoxCredentialProvider, ConfigurationUpstoxCredentialProvider>();
         services.AddSingleton<IUpstoxLiveFeedNormalizer, UpstoxLiveFeedNormalizer>();
         services.AddSingleton<IUpstoxMarketDataFeedDecoder, UpstoxMarketDataFeedDecoder>();
-        services.AddSingleton<IUpstoxSubscriptionProvider, ConfigurationUpstoxSubscriptionProvider>();
+        services.AddSingleton<IUpstoxSubscriptionProvider, CatalogUpstoxSubscriptionProvider>();
         services.AddSingleton<IUpstoxSubscriptionCommandBuilder, UpstoxSubscriptionCommandBuilder>();
         services.AddSingleton<IUpstoxWebSocketConnectionFactory, UpstoxWebSocketConnectionFactory>();
         services.AddSingleton<UpstoxLiveFeedHealthState>();
-        services.AddSingleton<IUpstoxLiveFeedHealthState>(serviceProvider =>
-            serviceProvider.GetRequiredService<UpstoxLiveFeedHealthState>());
+        services.AddSingleton<IUpstoxLiveFeedHealthState>(sp => sp.GetRequiredService<UpstoxLiveFeedHealthState>());
         services.AddHttpClient<IMarketDataProvider, UpstoxMarketDataProvider>(client =>
         {
             client.BaseAddress = apiBaseUri;
             client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd(
-                "ThesisPulseAI-MarketData/0.2.0");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("ThesisPulseAI-MarketData/0.3.0");
         });
 
         if (liveFeedOptions.Enabled)

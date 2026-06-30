@@ -42,7 +42,9 @@ public sealed record UpstoxLiveFeedOptions
     public int ReceiveBufferBytes { get; init; } = 64 * 1024;
     public int MaximumMessageBytes { get; init; } = 4 * 1024 * 1024;
 
-    public void Validate(bool providerEnabled)
+    public void Validate(
+        bool providerEnabled,
+        bool requireConfiguredInstrumentKeys = true)
     {
         if (!UpstoxLiveFeedModes.Supported.Contains(Mode))
         {
@@ -57,10 +59,10 @@ public sealed record UpstoxLiveFeedOptions
         }
 
         var keys = GetNormalizedInstrumentKeys();
-        if (Enabled && keys.Length == 0)
+        if (Enabled && requireConfiguredInstrumentKeys && keys.Length == 0)
         {
             throw new InvalidOperationException(
-                "At least one Upstox live-feed instrument key is required.");
+                "At least one configured Upstox live-feed instrument key is required.");
         }
 
         var maximum = UpstoxLiveFeedModes.GetMaximumInstrumentCount(Mode);

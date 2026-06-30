@@ -133,6 +133,16 @@ public sealed partial class SqlServerMarketDataStore
                             ? "STALE"
                             : "HEALTHY",
                         cancellationToken);
+                    await PersistLiveCandleSnapshotsAsync(
+                        connection,
+                        transaction,
+                        batch,
+                        sourceId,
+                        mapping,
+                        sessionId,
+                        update,
+                        correlationId,
+                        cancellationToken);
 
                     accepted++;
                 }

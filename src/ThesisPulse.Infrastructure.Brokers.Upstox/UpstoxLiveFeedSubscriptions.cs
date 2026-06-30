@@ -1,6 +1,5 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
+using ThesisPulse.Shared.Infrastructure.MarketData;
 
 namespace ThesisPulse.Infrastructure.Brokers.Upstox;
 
@@ -24,22 +23,34 @@ public interface IUpstoxSubscriptionCommandBuilder
     UpstoxSubscriptionCommand BuildSubscribe(UpstoxSubscriptionSnapshot subscription);
 }
 
-public sealed class ConfigurationUpstoxSubscriptionProvider(
-    UpstoxLiveFeedOptions options) : IUpstoxSubscriptionProvider
+public sealed class CatalogUpstoxSubscriptionProvider(
+    UpstoxLiveFeedOptions options,
+    IMarketDataSubscriptionCatalog catalog) : IUpstoxSubscriptionProvider
 {
-    public ValueTask<UpstoxSubscriptionSnapshot> GetSubscriptionAsync(
+    public async ValueTask<UpstoxSubscriptionSnapshot> GetSubscriptionAsync(
         CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        var keys = options.GetNormalizedInstrumentKeys();
-        var versionInput = $"{options.Mode}|{string.Join('|', keys)}";
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(versionInput));
-        var version = Convert.ToHexString(hash[..8]);
+        var plan = await catalog.GetPlanAsync(
+            "UPSTOX",
+            options.Mode,
+            cancellationToken);
+        var keys = plan.Items
+            .OrderBy(item => item.Priority)
+            .ThenBy(item => item.ProviderInstrumentKey, StringComparer.OrdinalIgnoreCase)
+            .Select(item => item.ProviderInstrumentKey)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
-        return ValueTask.FromResult(new UpstoxSubscriptionSnapshot(
+        if (keys.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "The active Upstox subscription plan contains no instrument keys.");
+        }
+
+        return new UpstoxSubscriptionSnapshot(
             options.Mode.ToLowerInvariant(),
             keys,
-            version));
+            plan.Version);
     }
 }
 

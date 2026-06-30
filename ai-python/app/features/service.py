@@ -15,6 +15,7 @@ from app.features.sql_store import SqlServerFeatureFactoryStore
 from app.features.store import FeatureFactoryStore, InMemoryFeatureFactoryStore
 from app.order_flow.service import OrderFlowService
 from app.regime.service import MarketRegimeService
+from app.smart_money.service import SmartMoneyConceptsService
 from app.workflow.calculator import (
     FusionReadyEvidenceCalculator,
     FusionReadyEvidenceOptions,
@@ -30,6 +31,7 @@ class FeatureFactoryService:
         regime_service: MarketRegimeService | None = None,
         confirmation_service: MultiTimeframeConfirmationService | None = None,
         order_flow_service: OrderFlowService | None = None,
+        smart_money_service: SmartMoneyConceptsService | None = None,
     ) -> None:
         self._settings = settings
         options = FeatureFactoryOptions(
@@ -48,6 +50,7 @@ class FeatureFactoryService:
             self._regime,
         )
         self._order_flow = order_flow_service or OrderFlowService(settings)
+        self._smart_money = smart_money_service or SmartMoneyConceptsService(settings)
         self._workflow_calculator = FusionReadyEvidenceCalculator(
             FusionReadyEvidenceOptions(
                 weight_configuration_version=(
@@ -97,6 +100,10 @@ class FeatureFactoryService:
     def order_flow(self) -> OrderFlowService:
         return self._order_flow
 
+    @property
+    def smart_money(self) -> SmartMoneyConceptsService:
+        return self._smart_money
+
     def process_candle(
         self,
         delivery: MarketCandleDeliveryV1,
@@ -112,12 +119,14 @@ class FeatureFactoryService:
         regime = None
         directional = None
         order_flow = None
+        smart_money = None
         confirmation = None
         workflow_evidence = None
         if stored is not None:
             regime = self._regime.process_feature(stored, processed_at)
             directional = self._directional.process_feature(stored, processed_at)
             order_flow = self._order_flow.process_candle(delivery, processed_at)
+            smart_money = self._smart_money.process_candle(delivery, processed_at)
             confirmation = self._confirmation.process_instrument(
                 delivery.envelope.payload.instrument_key,
                 processed_at,
@@ -126,6 +135,7 @@ class FeatureFactoryService:
                 delivery,
                 confirmation,
                 order_flow,
+                smart_money,
                 processed_at,
             )
         return FeatureProcessingResultV1(
@@ -136,6 +146,7 @@ class FeatureFactoryService:
             regime=regime,
             directional=directional,
             order_flow=order_flow,
+            smart_money=smart_money,
             confirmation=confirmation,
             workflow_evidence=workflow_evidence,
             reason=outcome.reason,
@@ -157,6 +168,7 @@ class FeatureFactoryService:
         delivery: MarketCandleDeliveryV1,
         confirmation_result,
         order_flow_result,
+        smart_money_result,
         processed_at: datetime,
     ):
         payload = delivery.envelope.payload
@@ -192,6 +204,9 @@ class FeatureFactoryService:
         order_flow_output = (
             None if order_flow_result is None else order_flow_result.output
         )
+        smart_money_output = (
+            None if smart_money_result is None else smart_money_result.output
+        )
         try:
             return self._workflow_calculator.calculate(
                 delivery,
@@ -201,6 +216,7 @@ class FeatureFactoryService:
                 regime_by_timeframe,
                 processed_at,
                 order_flow_output,
+                smart_money_output,
             )
         except ValueError:
             return None

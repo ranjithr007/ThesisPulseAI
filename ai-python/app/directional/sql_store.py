@@ -380,10 +380,14 @@ class SqlServerDirectionalIntelligenceStore:
     ) -> int:
         raw_json = output.model_dump_json(by_alias=True)
         contract_hash = hashlib.sha256(raw_json.encode("utf-8")).hexdigest().upper()
-        delay_ms = max(
-            0,
-            int((output.generated_at_utc - source.snapshot.generated_at_utc).total_seconds() * 1000),
+        elapsed_seconds = Decimal(
+            str(
+                (
+                    output.generated_at_utc - source.snapshot.generated_at_utc
+                ).total_seconds()
+            )
         )
+        delay_ms = max(0, int(elapsed_seconds * Decimal("1000")))
         freshness_ms = source.snapshot.freshness_milliseconds + delay_ms
         metadata_json = json.dumps(
             {

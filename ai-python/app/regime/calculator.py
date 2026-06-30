@@ -73,7 +73,10 @@ class DeterministicMarketRegimeCalculator:
         )
         score_sign = _sign(score)
         alignment = _alignment(score_sign, components)
-        trend_strength = _clamp_unit((abs(score) * Decimal("0.70")) + (alignment * Decimal("0.30")))
+        trend_strength = _clamp_unit(
+            (abs(score) * Decimal("0.70"))
+            + (alignment * Decimal("0.30"))
+        )
 
         realized_volatility = abs(values["realized_volatility_20"] or ZERO)
         atr_ratio = abs((values["atr_14"] or ZERO) / sma_20)
@@ -285,6 +288,11 @@ def _evidence(
     volatility_score: Decimal,
 ) -> list[RegimeEvidenceV1]:
     sign = _sign(score)
+    alignment_impact = (
+        _directional_impact(sign)
+        if structure_regime.startswith("TRENDING")
+        else "NEUTRAL"
+    )
     return [
         RegimeEvidenceV1(
             code="REGIME_TREND_BIAS",
@@ -296,7 +304,7 @@ def _evidence(
         RegimeEvidenceV1(
             code="REGIME_TREND_ALIGNMENT",
             message=f"Directional component alignment is {_quantize(alignment)}",
-            impact=_directional_impact(sign) if structure_regime.startswith("TRENDING") else "NEUTRAL",
+            impact=alignment_impact,
             weight=REGIME_EVIDENCE_WEIGHTS["REGIME_TREND_ALIGNMENT"],
             contribution=_quantize(alignment * Decimal(sign)),
         ),
@@ -310,7 +318,9 @@ def _evidence(
         RegimeEvidenceV1(
             code="REGIME_TRANSITION_RISK",
             message=f"Transition risk score is {_quantize(transition_score)}",
-            impact="CONTRADICTS" if structure_regime == "TRANSITION" else "NEUTRAL",
+            impact=(
+                "CONTRADICTS" if structure_regime == "TRANSITION" else "NEUTRAL"
+            ),
             weight=REGIME_EVIDENCE_WEIGHTS["REGIME_TRANSITION_RISK"],
             contribution=_quantize(-transition_score),
         ),

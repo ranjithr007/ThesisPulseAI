@@ -1,6 +1,6 @@
-from collections.abc import Protocol
 from datetime import UTC, datetime
 from threading import RLock
+from typing import Protocol
 
 from app.contracts.v1.market_data import MarketCandleDeliveryV1
 from app.features.calculator import DeterministicFeatureCalculator

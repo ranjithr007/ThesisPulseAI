@@ -1,19 +1,35 @@
+using ThesisPulse.Shared.Contracts.Thesis.V1;
 using ThesisPulse.Shared.Observability.Hosting;
+using ThesisPulse.Thesis.Service;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration["Platform:ConfigurationVersion"] ??= "platform-foundation-v1.0.0";
 builder.Services.AddThesisPulsePlatformFoundation();
+builder.Services.Configure<DeterministicFusionOptions>(
+    builder.Configuration.GetSection(DeterministicFusionOptions.SectionName));
+builder.Services.AddSingleton<IThesisFusionEngine, DeterministicThesisFusionEngine>();
 
 var app = builder.Build();
 app.UseThesisPulsePlatformFoundation();
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Thesis.Service");
 app.MapGet("/api/v1/status", () => Results.Ok(new
 {
-    mode = "FOUNDATION",
+    mode = "DETERMINISTIC_FUSION",
     environment = "PAPER",
     immutableVersioningRequired = true,
-    evaluationEnabled = false,
+    evaluationEnabled = true,
+    authority = "CANDIDATE_ONLY",
+    riskAuthority = false,
+    tradePlanAuthority = false,
+    executionAuthority = false,
 }));
+app.MapPost("/api/v1/theses/evaluate", (ThesisFusionRequestV1 request, IThesisFusionEngine engine) =>
+{
+    var result = engine.Evaluate(request);
+    return result.Candidate is null
+        ? Results.UnprocessableEntity(result)
+        : Results.Ok(result);
+});
 app.Run();
 
 public partial class Program

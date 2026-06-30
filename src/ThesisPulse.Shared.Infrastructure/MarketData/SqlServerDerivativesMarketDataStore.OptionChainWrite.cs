@@ -133,6 +133,7 @@ public sealed partial class SqlServerDerivativesMarketDataStore
                 qualityStatus,
                 pointInTimeEligible,
                 accepted,
+                warnings,
                 cancellationToken);
             foreach (var resolved in accepted)
             {
@@ -220,6 +221,7 @@ public sealed partial class SqlServerDerivativesMarketDataStore
         string qualityStatus,
         bool pointInTimeEligible,
         IReadOnlyCollection<ResolvedOptionEntry> accepted,
+        IReadOnlyCollection<string> warnings,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -229,15 +231,15 @@ public sealed partial class SqlServerDerivativesMarketDataStore
              [revision], [event_at_utc], [published_at_utc], [received_at_utc],
              [underlying_price], [snapshot_status], [quality_status],
              [is_point_in_time_eligible], [contract_count], [strike_count],
-             [source_version], [calculation_source_version], [payload_hash],
-             [raw_payload_json], [correlation_id], [created_by])
+             [source_version], [calculation_source_version], [warnings_json],
+             [payload_hash], [raw_payload_json], [correlation_id], [created_by])
             OUTPUT INSERTED.[option_chain_snapshot_id]
             VALUES
             (@uid, @source_id, @underlying_id, @expiry_schedule_id, @expiry_date,
              @source_event_id, @revision, @event_at, @published_at, @received_at,
              @underlying_price, @snapshot_status, @quality_status, @point_in_time,
              @contract_count, @strike_count, @source_version, @calculation_version,
-             @payload_hash, @raw_json, @correlation_id, @actor);
+             @warnings_json, @payload_hash, @raw_json, @correlation_id, @actor);
             """;
         await using var command = CreateCommand(connection, transaction, sql);
         command.Parameters.Add("@uid", SqlDbType.UniqueIdentifier).Value = snapshotUid;
@@ -272,6 +274,8 @@ public sealed partial class SqlServerDerivativesMarketDataStore
             snapshot.SourceVersion;
         command.Parameters.Add("@calculation_version", SqlDbType.VarChar, 100).Value =
             DbValue(snapshot.CalculationSourceVersion);
+        command.Parameters.Add("@warnings_json", SqlDbType.NVarChar, -1).Value =
+            SerializeWarnings(warnings);
         command.Parameters.Add("@payload_hash", SqlDbType.Char, 64).Value =
             HashPayload(snapshot.RawPayloadJson);
         command.Parameters.Add("@raw_json", SqlDbType.NVarChar, -1).Value =

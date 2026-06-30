@@ -1,9 +1,16 @@
+import hmac
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 
+from app.contracts.v1.market_data import (
+    FeatureProcessingResultV1,
+    FeatureSnapshotV1,
+    MarketCandleDeliveryV1,
+)
 from app.contracts.v1.signals import (
     MessageMetadataV1,
     MockSignalRequest,
@@ -12,8 +19,10 @@ from app.contracts.v1.signals import (
     SignalGeneratedV1,
 )
 from app.core.settings import load_settings
+from app.features.service import FeatureFactoryService
 
 settings = load_settings()
+feature_factory = FeatureFactoryService(settings)
 started_at_utc = datetime.now(UTC)
 
 app = FastAPI(
@@ -41,7 +50,19 @@ async def liveness() -> dict[str, str]:
 
 
 @app.get("/health/ready", tags=["health"])
-async def readiness() -> dict[str, str]:
+async def readiness() -> JSONResponse | dict[str, str]:
+    if feature_factory.enabled:
+        try:
+            feature_factory.get_status()
+        except Exception as exception:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "Unhealthy",
+                    "dependency": "FeatureFactoryStore",
+                    "detail": str(exception)[:500],
+                },
+            )
     return {"status": "Healthy"}
 
 
@@ -62,6 +83,9 @@ async def service_info() -> dict[str, str | bool]:
         "configurationVersion": settings.configuration_version,
         "environment": settings.environment,
         "liveExecutionEnabled": settings.live_execution_enabled,
+        "featureFactoryEnabled": settings.feature_factory_enabled,
+        "featureFactoryProvider": settings.feature_factory_provider,
+        "featureSetVersion": settings.feature_set_version,
         "startedAtUtc": started_at_utc.isoformat(),
         "currentTimeUtc": datetime.now(UTC).isoformat(),
     }
@@ -69,7 +93,72 @@ async def service_info() -> dict[str, str | bool]:
 
 @app.get("/api/v1/engines", tags=["engines"])
 async def list_engines() -> dict[str, list[object]]:
-    return {"engines": []}
+    return {
+        "engines": [
+            {
+                "engineCode": settings.feature_factory_engine_code,
+                "engineRole": "CONTEXT_PROVIDER",
+                "enabled": settings.feature_factory_enabled,
+                "featureSetVersion": settings.feature_set_version,
+                "canCreateSignals": False,
+                "canExecuteOrders": False,
+            }
+        ]
+    }
+
+
+@app.post(
+    "/internal/v1/market-data/candles",
+    response_model=FeatureProcessingResultV1,
+    tags=["feature-factory"],
+)
+def process_market_candle(
+    delivery: MarketCandleDeliveryV1,
+    internal_key: str | None = Header(
+        default=None,
+        alias="X-ThesisPulse-Internal-Key",
+    ),
+) -> FeatureProcessingResultV1:
+    _authorize_feature_factory(internal_key)
+    try:
+        return feature_factory.process_candle(delivery)
+    except ValueError as exception:
+        raise HTTPException(status_code=422, detail=str(exception)) from exception
+    except RuntimeError as exception:
+        raise HTTPException(status_code=409, detail=str(exception)) from exception
+
+
+@app.get("/api/v1/features/status", tags=["feature-factory"])
+def feature_factory_status() -> dict[str, object]:
+    status = feature_factory.get_status()
+    return {
+        "enabled": feature_factory.enabled,
+        "provider": status.provider,
+        "featureSetVersion": settings.feature_set_version,
+        "requiredInputCount": settings.feature_required_input_count,
+        "maximumInputCount": settings.feature_maximum_input_count,
+        "processedMessages": status.processed_messages,
+        "snapshotCount": status.snapshot_count,
+        "latestProcessedAtUtc": status.latest_processed_at_utc,
+        "latestError": status.latest_error,
+    }
+
+
+@app.get(
+    "/api/v1/features/latest/{instrument_key:path}",
+    response_model=FeatureSnapshotV1,
+    tags=["feature-factory"],
+)
+def latest_feature_snapshot(
+    instrument_key: str,
+    timeframe: str = "5m",
+) -> FeatureSnapshotV1:
+    if timeframe not in {"1m", "5m", "15m", "1h", "1d"}:
+        raise HTTPException(status_code=422, detail="Unsupported timeframe")
+    snapshot = feature_factory.get_latest(instrument_key, timeframe)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Feature snapshot was not found")
+    return snapshot
 
 
 @app.post(
@@ -140,3 +229,11 @@ async def create_mock_signal(
         ),
         payload=signal,
     )
+
+
+def _authorize_feature_factory(supplied_key: str | None) -> None:
+    if not feature_factory.enabled:
+        raise HTTPException(status_code=503, detail="Feature Factory is disabled")
+    expected = feature_factory.internal_api_key
+    if not supplied_key or not expected or not hmac.compare_digest(supplied_key, expected):
+        raise HTTPException(status_code=401, detail="Unauthorized")

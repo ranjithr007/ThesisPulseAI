@@ -27,6 +27,7 @@ pythonpath = ["."]
 testpaths = ["tests"]
 
 [tool.ruff]
+required-version = "==0.15.20"
 target-version = "py311"
 line-length = 100
 

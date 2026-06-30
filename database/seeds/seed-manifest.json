@@ -55,6 +55,12 @@
       "path": "database/seeds/intelligence/S0009__seed_technical_directional_engine.sql",
       "scope": "paper_intelligence",
       "activation": "directional_voter_only"
+    },
+    {
+      "sequence": 10,
+      "path": "database/seeds/intelligence/S0010__seed_market_regime_engine.sql",
+      "scope": "paper_intelligence",
+      "activation": "context_provider_only"
     }
   ],
   "excluded": [

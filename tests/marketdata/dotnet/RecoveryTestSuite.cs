@@ -98,7 +98,7 @@ internal static class RecoveryTestSuite
         ExecuteAsync(failures, "live provisional candle is revised by final candle", async () =>
         {
             var store = new InMemoryMarketDataStore(freshnessEvaluator);
-            var openAt = new DateTimeOffset(2026, 6, 29, 4, 0, 0, TimeSpan.Zero);
+            var openAt = DateTimeOffset.UtcNow.AddMinutes(-6);
             var live = new CanonicalLiveMarketUpdateV1(
                 "UPSTOX",
                 "NSE_INDEX|Nifty 50",
@@ -143,11 +143,12 @@ internal static class RecoveryTestSuite
                 openAt.AddMinutes(6),
                 "test-rest",
                 "[1,100,103,99,102,700]");
+            var tradeDate = DateOnly.FromDateTime(openAt.UtcDateTime);
             var request = new HistoricalCandleRequestV1(
                 finalCandle.ProviderInstrumentKey,
                 "5m",
-                new DateOnly(2026, 6, 29),
-                new DateOnly(2026, 6, 29),
+                tradeDate,
+                tradeDate,
                 Guid.NewGuid().ToString("D"));
             await store.PersistHistoricalCandlesAsync(request, new[] { finalCandle });
 

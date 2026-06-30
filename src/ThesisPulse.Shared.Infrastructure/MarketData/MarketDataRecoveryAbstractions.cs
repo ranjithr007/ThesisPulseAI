@@ -1,3 +1,5 @@
+using ThesisPulse.Shared.Contracts.MarketData.V1;
+
 namespace ThesisPulse.Shared.Infrastructure.MarketData;
 
 public sealed record MarketDataSubscriptionItem(

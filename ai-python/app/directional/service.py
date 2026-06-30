@@ -7,7 +7,7 @@ from app.contracts.v1.directional import (
 from app.core.settings import Settings
 from app.directional.calculator import DeterministicDirectionalCalculator
 from app.directional.definitions import DirectionalEngineOptions
-from app.directional.models import DirectionalStoreStatus
+from app.directional.models import DirectionalStoreStatus, StoredDirectionalOutput
 from app.directional.sql_store import SqlServerDirectionalIntelligenceStore
 from app.directional.store import (
     DirectionalIntelligenceStore,
@@ -76,8 +76,15 @@ class DirectionalIntelligenceService:
         instrument_key: str,
         timeframe: str,
     ) -> DirectionalEngineOutputV1 | None:
-        stored = self._store.get_latest(instrument_key, timeframe)
+        stored = self.get_latest_stored(instrument_key, timeframe)
         return None if stored is None else stored.output
+
+    def get_latest_stored(
+        self,
+        instrument_key: str,
+        timeframe: str,
+    ) -> StoredDirectionalOutput | None:
+        return self._store.get_latest(instrument_key, timeframe)
 
     def get_status(self) -> DirectionalStoreStatus:
         return self._store.get_status()

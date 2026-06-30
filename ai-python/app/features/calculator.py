@@ -209,7 +209,7 @@ class DeterministicFeatureCalculator:
             return False
         expected = TIMEFRAME_DURATIONS[timeframe]
         tolerance = expected + (expected / 2)
-        for previous, current in zip(candles, candles[1:]):
+        for previous, current in zip(candles, candles[1:], strict=False):
             if previous.open_at_utc.date() != current.open_at_utc.date():
                 continue
             if current.open_at_utc - previous.open_at_utc > tolerance:

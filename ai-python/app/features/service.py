@@ -12,6 +12,7 @@ from app.features.definitions import FeatureFactoryOptions
 from app.features.models import FeatureStoreStatus, StoredFeatureSnapshot
 from app.features.sql_store import SqlServerFeatureFactoryStore
 from app.features.store import FeatureFactoryStore, InMemoryFeatureFactoryStore
+from app.regime.service import MarketRegimeService
 
 
 class FeatureFactoryService:
@@ -20,6 +21,7 @@ class FeatureFactoryService:
         settings: Settings,
         store: FeatureFactoryStore | None = None,
         directional_service: DirectionalIntelligenceService | None = None,
+        regime_service: MarketRegimeService | None = None,
     ) -> None:
         self._settings = settings
         options = FeatureFactoryOptions(
@@ -31,6 +33,7 @@ class FeatureFactoryService:
         self._calculator = DeterministicFeatureCalculator(options)
         self._store = store or _create_store(settings)
         self._directional = directional_service or DirectionalIntelligenceService(settings)
+        self._regime = regime_service or MarketRegimeService(settings)
 
     @property
     def enabled(self) -> bool:
@@ -44,6 +47,10 @@ class FeatureFactoryService:
     def directional(self) -> DirectionalIntelligenceService:
         return self._directional
 
+    @property
+    def regime(self) -> MarketRegimeService:
+        return self._regime
+
     def process_candle(
         self,
         delivery: MarketCandleDeliveryV1,
@@ -56,14 +63,17 @@ class FeatureFactoryService:
             outcome.snapshot,
             outcome.outcome,
         )
+        regime = None
         directional = None
         if stored is not None:
+            regime = self._regime.process_feature(stored, processed_at)
             directional = self._directional.process_feature(stored, processed_at)
         return FeatureProcessingResultV1(
             outcome=outcome.outcome,
             stream_position=delivery.stream_position,
             message_uid=delivery.envelope.metadata.message_id,
             snapshot=outcome.snapshot,
+            regime=regime,
             directional=directional,
             reason=outcome.reason,
         )

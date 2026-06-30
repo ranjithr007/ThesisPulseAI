@@ -9,6 +9,7 @@ from pydantic.alias_generators import to_camel
 from app.contracts.v1.confirmation import ConfirmationProcessingResultV1
 from app.contracts.v1.directional import DirectionalProcessingResultV1
 from app.contracts.v1.regime import RegimeProcessingResultV1
+from app.contracts.v1.workflow import FusionReadyEvidenceV1
 
 
 class ContractModel(BaseModel):
@@ -123,4 +124,5 @@ class FeatureProcessingResultV1(ContractModel):
     regime: RegimeProcessingResultV1 | None = None
     directional: DirectionalProcessingResultV1 | None = None
     confirmation: ConfirmationProcessingResultV1 | None = None
+    workflow_evidence: FusionReadyEvidenceV1 | None = None
     reason: str | None = None

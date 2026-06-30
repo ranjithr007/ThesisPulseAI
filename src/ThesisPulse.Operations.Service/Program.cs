@@ -23,6 +23,7 @@ builder.Services.AddThesisPulsePlatformFoundation();
 builder.Services.AddSignalExpiryScheduler(builder.Configuration);
 builder.Services.AddPlatformHealthAggregation(builder.Configuration);
 builder.Services.AddPaperWorkflowOrchestration(builder.Configuration);
+builder.Services.AddAutomaticPaperWorkflowIntake(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddCors(options =>
 {
@@ -40,6 +41,7 @@ app.UseThesisPulsePlatformFoundation();
 app.UseCors(frontendCorsPolicy);
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Operations.Service");
 app.MapPaperWorkflowEndpoints();
+app.MapAutomaticPaperWorkflowIntake();
 
 app.MapGet(
     "/api/v1/status",
@@ -47,6 +49,7 @@ app.MapGet(
         SignalExpiryOptions expiryOptions,
         SignalExpiryJobState expiryState,
         PaperWorkflowOptions workflowOptions,
+        AutomaticPaperWorkflowOptions automaticOptions,
         IConfiguration configuration) => Results.Ok(new
     {
         mode = "PAPER_INTEGRATION_ORCHESTRATION",
@@ -75,6 +78,16 @@ app.MapGet(
             tradePlanAuthority = false,
             executionAuthority = false,
             brokerAuthority = false,
+            liveExecutionAuthority = false,
+        },
+        automaticIntelligenceIntake = new
+        {
+            enabled = automaticOptions.Enabled,
+            portfolioCode = automaticOptions.PortfolioCode,
+            primaryTimeframe = "5m",
+            newExposureEnabled = automaticOptions.NewExposureEnabled,
+            sessionCalendarHealthy = automaticOptions.SessionCalendarHealthy,
+            authority = "INTAKE_AND_ENRICHMENT_ONLY",
             liveExecutionAuthority = false,
         },
         healthAggregationEnabled = true,

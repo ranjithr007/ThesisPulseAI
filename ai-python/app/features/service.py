@@ -14,6 +14,10 @@ from app.features.models import FeatureStoreStatus, StoredFeatureSnapshot
 from app.features.sql_store import SqlServerFeatureFactoryStore
 from app.features.store import FeatureFactoryStore, InMemoryFeatureFactoryStore
 from app.regime.service import MarketRegimeService
+from app.workflow.calculator import (
+    FusionReadyEvidenceCalculator,
+    FusionReadyEvidenceOptions,
+)
 
 
 class FeatureFactoryService:
@@ -40,6 +44,30 @@ class FeatureFactoryService:
             settings,
             self._directional,
             self._regime,
+        )
+        self._workflow_calculator = FusionReadyEvidenceCalculator(
+            FusionReadyEvidenceOptions(
+                weight_configuration_version=(
+                    settings.workflow_weight_configuration_version
+                ),
+                proposal_policy_version=settings.workflow_proposal_policy_version,
+                stop_atr_multiple=settings.workflow_stop_atr_multiple,
+                first_target_risk_reward=(
+                    settings.workflow_first_target_risk_reward
+                ),
+                entry_band_atr_fraction=(
+                    settings.workflow_entry_band_atr_fraction
+                ),
+                minimum_entry_band_fraction=(
+                    settings.workflow_minimum_entry_band_fraction
+                ),
+                maximum_entry_band_fraction=(
+                    settings.workflow_maximum_entry_band_fraction
+                ),
+                maximum_slippage_fraction=(
+                    settings.workflow_maximum_slippage_fraction
+                ),
+            )
         )
 
     @property
@@ -77,11 +105,17 @@ class FeatureFactoryService:
         regime = None
         directional = None
         confirmation = None
+        workflow_evidence = None
         if stored is not None:
             regime = self._regime.process_feature(stored, processed_at)
             directional = self._directional.process_feature(stored, processed_at)
             confirmation = self._confirmation.process_instrument(
                 delivery.envelope.payload.instrument_key,
+                processed_at,
+            )
+            workflow_evidence = self._build_workflow_evidence(
+                delivery,
+                confirmation,
                 processed_at,
             )
         return FeatureProcessingResultV1(
@@ -92,6 +126,7 @@ class FeatureFactoryService:
             regime=regime,
             directional=directional,
             confirmation=confirmation,
+            workflow_evidence=workflow_evidence,
             reason=outcome.reason,
         )
 
@@ -105,6 +140,54 @@ class FeatureFactoryService:
 
     def get_status(self) -> FeatureStoreStatus:
         return self._store.get_status()
+
+    def _build_workflow_evidence(
+        self,
+        delivery: MarketCandleDeliveryV1,
+        confirmation_result,
+        processed_at: datetime,
+    ):
+        payload = delivery.envelope.payload
+        if not self._settings.workflow_evidence_enabled:
+            return None
+        if payload.timeframe != "5m":
+            return None
+        if confirmation_result is None or confirmation_result.output is None:
+            return None
+        confirmation = confirmation_result.output
+        if not confirmation.is_eligible_for_fusion:
+            return None
+        primary_feature = self.get_latest(payload.instrument_key, "5m")
+        if primary_feature is None:
+            return None
+
+        directional_by_timeframe = {}
+        regime_by_timeframe = {}
+        for item in confirmation.timeframe_confirmations:
+            directional = self._directional.get_latest(
+                payload.instrument_key,
+                item.timeframe,
+            )
+            regime = self._regime.get_latest(
+                payload.instrument_key,
+                item.timeframe,
+            )
+            if directional is not None:
+                directional_by_timeframe[item.timeframe] = directional
+            if regime is not None:
+                regime_by_timeframe[item.timeframe] = regime
+
+        try:
+            return self._workflow_calculator.calculate(
+                delivery,
+                primary_feature,
+                confirmation,
+                directional_by_timeframe,
+                regime_by_timeframe,
+                processed_at,
+            )
+        except ValueError:
+            return None
 
     def _resolve_stored_snapshot(
         self,

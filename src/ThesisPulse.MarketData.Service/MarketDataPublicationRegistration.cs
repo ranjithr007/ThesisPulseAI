@@ -20,6 +20,10 @@ public static class MarketDataPublicationRegistration
                 "MarketData:Publication:AiFeatureFactoryEnabled", false),
             AiServiceBaseUrl = CreateOptionalUri(
                 configuration["MarketData:Publication:AiServiceBaseUrl"]),
+            AutomaticPaperWorkflowEnabled = configuration.GetValue(
+                "MarketData:Publication:AutomaticPaperWorkflowEnabled", false),
+            OperationsServiceBaseUrl = CreateOptionalUri(
+                configuration["MarketData:Publication:OperationsServiceBaseUrl"]),
             BatchSize = configuration.GetValue(
                 "MarketData:Publication:BatchSize", 100),
             PollIntervalMilliseconds = configuration.GetValue(
@@ -30,6 +34,7 @@ public static class MarketDataPublicationRegistration
         services.AddHttpClient("SignalServiceMarketData");
         services.AddHttpClient("TradingApiMarketData");
         services.AddHttpClient("AiFeatureFactoryMarketData");
+        services.AddHttpClient("OperationsAutomaticPaperWorkflow");
         services.AddSingleton<MarketDataFanoutClient>();
 
         var provider = configuration["Messaging:Provider"] ?? "InMemory";

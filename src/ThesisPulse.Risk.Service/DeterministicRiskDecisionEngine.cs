@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using ThesisPulse.Shared.Contracts.Common.V1;
 using ThesisPulse.Shared.Contracts.Risk.V1;
 using ThesisPulse.Shared.Contracts.Thesis.V1;
 
@@ -23,58 +24,40 @@ public sealed class DeterministicRiskDecisionEngine : IRiskDecisionEngine
         var checks = new List<RiskCheckV1>();
         var now = request.AsOfUtc;
 
-        AddCheck(
-            checks,
-            "RISK_POLICY_VERSION",
+        AddCheck(checks, "RISK_POLICY_VERSION",
             string.Equals(request.RiskPolicyVersion, _policy.RiskPolicyVersion, StringComparison.Ordinal),
-            null,
-            null,
+            null, null,
             $"Requested '{request.RiskPolicyVersion}', active '{_policy.RiskPolicyVersion}'.");
 
-        AddCheck(
-            checks,
-            "CANONICAL_CANDIDATE_REQUIRED",
+        AddCheck(checks, "CANONICAL_CANDIDATE_REQUIRED",
             string.Equals(request.Candidate.Status, ThesisFusionContractV1.CandidateStatus, StringComparison.Ordinal) &&
             request.Candidate.SignalUid != Guid.Empty &&
             request.Candidate.ThesisUid != Guid.Empty &&
             request.Candidate.Direction != EvidenceDirectionV1.Neutral &&
             !string.IsNullOrWhiteSpace(request.Candidate.InstrumentKey) &&
             !string.IsNullOrWhiteSpace(request.Candidate.FusionPolicyVersion),
-            null,
-            null,
+            null, null,
             "Risk evaluates only a non-neutral canonical CANDIDATE linked to a thesis and fusion policy.");
 
         var candidateAgeSeconds = (decimal)(now - request.Candidate.GeneratedAtUtc).TotalSeconds;
-        AddCheck(
-            checks,
-            "CANDIDATE_FRESHNESS",
+        AddCheck(checks, "CANDIDATE_FRESHNESS",
             candidateAgeSeconds >= 0 && candidateAgeSeconds <= _policy.MaximumCandidateAgeSeconds,
-            candidateAgeSeconds,
-            _policy.MaximumCandidateAgeSeconds,
+            candidateAgeSeconds, _policy.MaximumCandidateAgeSeconds,
             "Candidate must not be future-dated or stale.");
 
-        AddCheck(
-            checks,
-            "CANDIDATE_STRENGTH",
+        AddCheck(checks, "CANDIDATE_STRENGTH",
             request.Candidate.Strength >= _policy.MinimumCandidateStrength,
-            request.Candidate.Strength,
-            _policy.MinimumCandidateStrength,
+            request.Candidate.Strength, _policy.MinimumCandidateStrength,
             "Candidate strength must satisfy the operational risk floor.");
 
-        AddCheck(
-            checks,
-            "CANDIDATE_CONFIDENCE",
+        AddCheck(checks, "CANDIDATE_CONFIDENCE",
             request.Candidate.Confidence >= _policy.MinimumCandidateConfidence,
-            request.Candidate.Confidence,
-            _policy.MinimumCandidateConfidence,
+            request.Candidate.Confidence, _policy.MinimumCandidateConfidence,
             "Candidate confidence must satisfy the operational risk floor.");
 
-        AddCheck(
-            checks,
-            "ENVIRONMENT_ALLOWED",
+        AddCheck(checks, "ENVIRONMENT_ALLOWED",
             _policy.AllowedEnvironments.Contains(request.Portfolio.Environment, StringComparer.OrdinalIgnoreCase),
-            null,
-            null,
+            null, null,
             $"Environment '{request.Portfolio.Environment}' is not enabled by this risk policy.");
 
         AddCheck(checks, "KILL_SWITCH_CLEAR", !request.Operations.KillSwitchActive, null, null, "Kill switch blocks every new exposure.");
@@ -86,30 +69,21 @@ public sealed class DeterministicRiskDecisionEngine : IRiskDecisionEngine
 
         var portfolioAgeSeconds = (decimal)(now - request.Portfolio.ObservedAtUtc).TotalSeconds;
         var operationsAgeSeconds = (decimal)(now - request.Operations.ObservedAtUtc).TotalSeconds;
-        AddCheck(
-            checks,
-            "PORTFOLIO_SNAPSHOT_FRESHNESS",
+        AddCheck(checks, "PORTFOLIO_SNAPSHOT_FRESHNESS",
             portfolioAgeSeconds >= 0 && portfolioAgeSeconds <= _policy.MaximumSnapshotAgeSeconds,
-            portfolioAgeSeconds,
-            _policy.MaximumSnapshotAgeSeconds,
+            portfolioAgeSeconds, _policy.MaximumSnapshotAgeSeconds,
             "Portfolio snapshot must be current.");
-        AddCheck(
-            checks,
-            "OPERATIONS_SNAPSHOT_FRESHNESS",
+        AddCheck(checks, "OPERATIONS_SNAPSHOT_FRESHNESS",
             operationsAgeSeconds >= 0 && operationsAgeSeconds <= _policy.MaximumSnapshotAgeSeconds,
-            operationsAgeSeconds,
-            _policy.MaximumSnapshotAgeSeconds,
+            operationsAgeSeconds, _policy.MaximumSnapshotAgeSeconds,
             "Operational state must be current.");
 
         AddCheck(checks, "POSITIVE_EQUITY", request.Portfolio.Equity > 0, request.Portfolio.Equity, 0, "Account equity must be positive.");
         AddCheck(checks, "NON_NEGATIVE_AVAILABLE_CASH", request.Portfolio.AvailableCash >= 0, request.Portfolio.AvailableCash, 0, "Available cash cannot be negative.");
         AddCheck(checks, "NON_NEGATIVE_GROSS_EXPOSURE", request.Portfolio.GrossExposure >= 0, request.Portfolio.GrossExposure, 0, "Gross exposure cannot be negative.");
-        AddCheck(
-            checks,
-            "POSITION_COUNT_CONSISTENT",
+        AddCheck(checks, "POSITION_COUNT_CONSISTENT",
             request.Portfolio.OpenPositionCount >= 0 && request.Portfolio.OpenPositionCount == request.Portfolio.Positions.Count,
-            request.Portfolio.OpenPositionCount,
-            request.Portfolio.Positions.Count,
+            request.Portfolio.OpenPositionCount, request.Portfolio.Positions.Count,
             "Position count must match the supplied position snapshot.");
 
         var equity = request.Portfolio.Equity;
@@ -118,40 +92,26 @@ public sealed class DeterministicRiskDecisionEngine : IRiskDecisionEngine
         var dailyLossPercent = equity > 0 ? dailyLossAmount / equity * 100m : 100m;
         var grossExposurePercent = equity > 0 ? request.Portfolio.GrossExposure / equity * 100m : 100m;
 
-        AddCheck(
-            checks,
-            "DAILY_LOSS_LIMIT",
+        AddCheck(checks, "DAILY_LOSS_LIMIT",
             dailyLossPercent < _policy.MaximumDailyLossPercent,
-            Math.Round(dailyLossPercent, 4),
-            _policy.MaximumDailyLossPercent,
+            Math.Round(dailyLossPercent, 4), _policy.MaximumDailyLossPercent,
             "Daily realized and unrealized loss must remain below the configured limit.");
-        AddCheck(
-            checks,
-            "DRAWDOWN_LIMIT",
+        AddCheck(checks, "DRAWDOWN_LIMIT",
             request.Portfolio.CurrentDrawdownPercent >= 0 && request.Portfolio.CurrentDrawdownPercent < _policy.MaximumDrawdownPercent,
-            request.Portfolio.CurrentDrawdownPercent,
-            _policy.MaximumDrawdownPercent,
+            request.Portfolio.CurrentDrawdownPercent, _policy.MaximumDrawdownPercent,
             "Current account drawdown must remain below the configured limit.");
-        AddCheck(
-            checks,
-            "GROSS_EXPOSURE_LIMIT",
+        AddCheck(checks, "GROSS_EXPOSURE_LIMIT",
             grossExposurePercent < _policy.MaximumGrossExposurePercent,
-            Math.Round(grossExposurePercent, 4),
-            _policy.MaximumGrossExposurePercent,
+            Math.Round(grossExposurePercent, 4), _policy.MaximumGrossExposurePercent,
             "Current gross exposure must leave capacity for new exposure.");
-        AddCheck(
-            checks,
-            "OPEN_POSITION_LIMIT",
+        AddCheck(checks, "OPEN_POSITION_LIMIT",
             request.Portfolio.OpenPositionCount < _policy.MaximumOpenPositions,
-            request.Portfolio.OpenPositionCount,
-            _policy.MaximumOpenPositions,
+            request.Portfolio.OpenPositionCount, _policy.MaximumOpenPositions,
             "Open position count must remain below the configured maximum.");
 
         var existingInstrumentPosition = request.Portfolio.Positions.Any(position =>
             string.Equals(position.InstrumentKey, request.Candidate.InstrumentKey, StringComparison.OrdinalIgnoreCase));
-        AddCheck(
-            checks,
-            "INSTRUMENT_CONCENTRATION",
+        AddCheck(checks, "INSTRUMENT_CONCENTRATION",
             _policy.AllowPyramiding || !existingInstrumentPosition,
             existingInstrumentPosition ? 1 : 0,
             _policy.AllowPyramiding ? 1 : 0,
@@ -185,7 +145,7 @@ public sealed class DeterministicRiskDecisionEngine : IRiskDecisionEngine
             : null;
 
         return new RiskDecisionV1(
-            Guid.NewGuid(),
+            DeterministicGuidV1.Create(request.RequestUid, "risk-decision.v1"),
             request.RequestUid,
             request.CorrelationId,
             request.Candidate.SignalUid,

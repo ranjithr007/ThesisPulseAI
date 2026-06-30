@@ -191,6 +191,8 @@ public sealed class DeterministicRiskDecisionEngine : IRiskDecisionEngine
             request.Candidate.SignalUid,
             request.Candidate.ThesisUid,
             request.Candidate.InstrumentKey,
+            request.Portfolio.Environment,
+            request.Candidate.Direction,
             approved ? RiskDecisionContractV1.Approved : RiskDecisionContractV1.Rejected,
             failures,
             checks,

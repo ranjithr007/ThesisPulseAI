@@ -61,7 +61,7 @@ public sealed class MarketDataGapDetector(
         if (latest is null)
         {
             var gapStart = GetSessionOpenUtc(expectedCloseUtc.Value);
-            var count = CalculateExpectedCount(
+            var count = CalculateSessionCount(
                 gapStart,
                 expectedCloseUtc.Value,
                 duration);
@@ -82,19 +82,15 @@ public sealed class MarketDataGapDetector(
             return null;
         }
 
-        var expectedCount = CalculateExpectedCount(
+        var expectedCount = CalculateInclusiveCloseCount(
             nextExpectedClose,
             expectedCloseUtc.Value,
             duration);
-        if (expectedCount <= 0)
-        {
-            return null;
-        }
 
         return new MarketDataGap(
             subscription.ProviderInstrumentKey,
             subscription.RecoveryTimeframe,
-            nextExpectedClose.Subtract(duration),
+            latest.CloseAtUtc,
             expectedCloseUtc.Value,
             Math.Min(expectedCount, options.MaximumGapCandles),
             "MISSING_CLOSED_CANDLES");
@@ -104,20 +100,20 @@ public sealed class MarketDataGapDetector(
         DateTimeOffset evaluatedAtUtc,
         TimeSpan duration)
     {
-        var IndiaNow = TimeZoneInfo.ConvertTime(evaluatedAtUtc, IndiaTimeZone);
-        if (IndiaNow.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        var indiaNow = TimeZoneInfo.ConvertTime(evaluatedAtUtc, IndiaTimeZone);
+        if (indiaNow.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
         {
             return null;
         }
 
-        var localDate = DateOnly.FromDateTime(IndiaNow.DateTime);
+        var localDate = DateOnly.FromDateTime(indiaNow.DateTime);
         var openLocal = localDate.ToDateTime(
             options.SessionOpenIndia,
             DateTimeKind.Unspecified);
         var closeLocal = localDate.ToDateTime(
             options.SessionCloseIndia,
             DateTimeKind.Unspecified);
-        var effectiveLocal = IndiaNow.DateTime.AddSeconds(-options.GracePeriodSeconds);
+        var effectiveLocal = indiaNow.DateTime.AddSeconds(-options.GracePeriodSeconds);
 
         if (effectiveLocal < openLocal.Add(duration))
         {
@@ -156,18 +152,34 @@ public sealed class MarketDataGapDetector(
         return new DateTimeOffset(local, offset).ToUniversalTime();
     }
 
-    private static int CalculateExpectedCount(
-        DateTimeOffset startUtc,
-        DateTimeOffset endUtc,
+    private static int CalculateSessionCount(
+        DateTimeOffset sessionOpenUtc,
+        DateTimeOffset expectedCloseUtc,
         TimeSpan duration)
     {
-        if (endUtc <= startUtc)
+        if (expectedCloseUtc <= sessionOpenUtc)
         {
             return 0;
         }
 
         return checked((int)Math.Floor(
-            (endUtc - startUtc).TotalMilliseconds /
+            (expectedCloseUtc - sessionOpenUtc).TotalMilliseconds /
             duration.TotalMilliseconds));
+    }
+
+    private static int CalculateInclusiveCloseCount(
+        DateTimeOffset firstMissingCloseUtc,
+        DateTimeOffset finalMissingCloseUtc,
+        TimeSpan duration)
+    {
+        if (finalMissingCloseUtc < firstMissingCloseUtc)
+        {
+            return 0;
+        }
+
+        return checked(
+            (int)Math.Floor(
+                (finalMissingCloseUtc - firstMissingCloseUtc).TotalMilliseconds /
+                duration.TotalMilliseconds) + 1);
     }
 }

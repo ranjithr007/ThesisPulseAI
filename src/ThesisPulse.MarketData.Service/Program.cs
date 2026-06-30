@@ -1,6 +1,7 @@
 using ThesisPulse.Infrastructure.Brokers.Upstox;
 using ThesisPulse.MarketData.Service;
 using ThesisPulse.Shared.Infrastructure.DependencyInjection;
+using ThesisPulse.Shared.Infrastructure.MarketData;
 using ThesisPulse.Shared.Observability.Hosting;
 
 const string serviceName = "ThesisPulse.MarketData.Service";
@@ -26,6 +27,13 @@ builder.Services.AddUpstoxMarketDataAdapter(builder.Configuration);
 builder.Services.AddSingleton(operationsOptions);
 builder.Services.AddSingleton<MarketDataJobState>();
 builder.Services.AddSingleton<MarketDataOrchestrator>();
+builder.Services.AddSingleton<MarketDataRecoveryHealthState>();
+
+if (builder.Configuration.GetValue("MarketData:Recovery:Enabled", false))
+{
+    builder.Services.AddHostedService<MarketDataRecoveryWorker>();
+}
+
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
@@ -38,9 +46,10 @@ app.MapGet(
     "/api/v1/status",
     (
         IConfiguration configuration,
-        IUpstoxLiveFeedHealthState liveFeedHealthState) => Results.Ok(new
+        IUpstoxLiveFeedHealthState liveFeedHealthState,
+        MarketDataRecoveryHealthState recoveryHealthState) => Results.Ok(new
         {
-            mode = "MARKET_DATA_LIVE_FEED",
+            mode = "MARKET_DATA_RECOVERY",
             environment = "PAPER",
             provider = "UPSTOX",
             providerEnabled = configuration.GetValue("Upstox:Enabled", false),
@@ -54,7 +63,11 @@ app.MapGet(
             liveWebSocketWorkerEnabled = configuration.GetValue(
                 "Upstox:LiveFeed:Enabled",
                 false),
+            recoveryWorkerEnabled = configuration.GetValue(
+                "MarketData:Recovery:Enabled",
+                false),
             liveFeed = liveFeedHealthState.GetSnapshot(),
+            recovery = recoveryHealthState.GetSnapshot(),
             brokerConnectivityEnabled = configuration.GetValue(
                 "Upstox:Enabled",
                 false),

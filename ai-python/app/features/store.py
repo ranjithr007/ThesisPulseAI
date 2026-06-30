@@ -2,10 +2,7 @@ from collections.abc import Protocol
 from datetime import UTC, datetime
 from threading import RLock
 
-from app.contracts.v1.market_data import (
-    FeatureSnapshotV1,
-    MarketCandleDeliveryV1,
-)
+from app.contracts.v1.market_data import MarketCandleDeliveryV1
 from app.features.calculator import DeterministicFeatureCalculator
 from app.features.models import (
     CandleInput,

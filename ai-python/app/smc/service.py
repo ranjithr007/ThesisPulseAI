@@ -6,6 +6,7 @@ from app.core.settings import Settings
 from app.smc.calculator import DeterministicSmcCalculator
 from app.smc.models import SmcStore, SmcStoreStatus
 from app.smc.runtime import load_smc_options, smc_enabled
+from app.smc.sql_store import SqlServerSmcStore
 from app.smc.store import InMemorySmcStore
 
 
@@ -20,7 +21,7 @@ class SmartMoneyConceptsService:
         self._settings = settings
         self._enabled = smc_enabled() if enabled is None else enabled
         self._calculator = DeterministicSmcCalculator(load_smc_options())
-        self._store = store or InMemorySmcStore()
+        self._store = store or _create_store(settings, self._calculator.options.engine_code)
 
     @property
     def enabled(self) -> bool:
@@ -61,3 +62,15 @@ class SmartMoneyConceptsService:
 
     def get_status(self) -> SmcStoreStatus:
         return self._store.get_status()
+
+
+def _create_store(settings: Settings, engine_code: str) -> SmcStore:
+    if settings.feature_factory_provider == "SqlServer":
+        return SqlServerSmcStore(
+            settings.operational_database_connection_string or "",
+            engine_code=engine_code,
+            broker_code=settings.feature_factory_broker_code,
+            service_version=settings.service_version,
+            command_timeout_seconds=settings.sql_command_timeout_seconds,
+        )
+    return InMemorySmcStore()

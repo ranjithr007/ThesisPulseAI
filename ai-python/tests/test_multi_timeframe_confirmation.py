@@ -3,7 +3,6 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-
 from app.confirmation.calculator import (
     DeterministicMultiTimeframeConfirmationCalculator,
 )

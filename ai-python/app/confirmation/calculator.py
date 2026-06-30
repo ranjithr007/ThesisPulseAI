@@ -35,14 +35,26 @@ class DeterministicMultiTimeframeConfirmationCalculator:
         revision: int,
     ) -> MultiTimeframeConfirmationOutputV1:
         pairs = {pair.timeframe: pair for pair in bundle.pairs}
+        if len(pairs) != len(bundle.pairs):
+            raise ValueError("Each timeframe may appear only once")
         if "5m" not in pairs:
             raise ValueError("Primary 5m directional and regime outputs are required")
-        if any(pair.directional.output.instrument_key != bundle.instrument_key for pair in bundle.pairs):
+        if any(
+            pair.directional.output.instrument_key != bundle.instrument_key
+            for pair in bundle.pairs
+        ):
             raise ValueError("Directional inputs must belong to one instrument")
-        if any(pair.regime.output.instrument_key != bundle.instrument_key for pair in bundle.pairs):
+        if any(
+            pair.regime.output.instrument_key != bundle.instrument_key
+            for pair in bundle.pairs
+        ):
             raise ValueError("Regime inputs must belong to one instrument")
 
         primary = pairs["5m"].directional.output
+        generated_at = _as_utc(generated_at_utc)
+        if generated_at < _as_utc(primary.as_of_utc):
+            raise ValueError("Confirmation cannot be generated before the primary cutoff")
+
         primary_sign = _sign(primary.score)
         confirmations: list[TimeframeConfirmationV1] = []
         weighted_sum = ZERO
@@ -58,6 +70,12 @@ class DeterministicMultiTimeframeConfirmationCalculator:
                 continue
             directional = pair.directional.output
             regime = pair.regime.output
+            if directional.timeframe != timeframe or regime.timeframe != timeframe:
+                raise ValueError(f"Source timeframe mismatch for {timeframe}")
+            if directional.as_of_utc != regime.as_of_utc:
+                raise ValueError(f"Directional and regime cutoffs differ for {timeframe}")
+            if directional.as_of_utc > primary.as_of_utc:
+                raise ValueError(f"Future intelligence cannot confirm the 5m cutoff: {timeframe}")
             if directional.is_stale or regime.is_stale:
                 warnings.append(f"STALE_TIMEFRAME_{timeframe.upper()}")
                 continue
@@ -65,20 +83,26 @@ class DeterministicMultiTimeframeConfirmationCalculator:
                 warnings.append(f"INELIGIBLE_TIMEFRAME_{timeframe.upper()}")
                 continue
 
-            weight = TIMEFRAME_WEIGHTS[timeframe]
-            modifier = _regime_modifier(regime.structure_regime, regime.volatility_regime)
-            contribution = _clamp(directional.score * modifier)
-            effective_weight = _quantize(weight)
-            signed_contribution = _quantize(contribution)
-            contribution_sign = _sign(contribution)
+            base_weight = TIMEFRAME_WEIGHTS[timeframe]
+            modifier = _regime_modifier(
+                regime.structure_regime,
+                regime.volatility_regime,
+            )
+            blended_score = _clamp(
+                (directional.score * Decimal("0.75"))
+                + (regime.score * Decimal("0.25"))
+            )
+            effective_weight = _quantize(base_weight * modifier)
+            signed_contribution = _quantize(blended_score * modifier)
+            contribution_sign = _sign(blended_score)
             agrees = primary_sign == 0 or contribution_sign in {0, primary_sign}
             if agrees:
-                aligned_weight += weight
+                aligned_weight += base_weight
             elif contribution_sign != 0:
-                contradiction_weight += weight
+                contradiction_weight += base_weight
 
-            present_weight += weight
-            weighted_sum += contribution * weight
+            present_weight += base_weight
+            weighted_sum += blended_score * effective_weight
             confirmations.append(
                 TimeframeConfirmationV1(
                     timeframe=timeframe,
@@ -132,7 +156,6 @@ class DeterministicMultiTimeframeConfirmationCalculator:
         if direction == "NEUTRAL":
             warnings.append("CONFIRMATION_CONVICTION_BELOW_THRESHOLD")
 
-        generated_at = _as_utc(generated_at_utc)
         source_identity = "|".join(
             sorted(
                 f"{item.timeframe}:{item.directional_output_uid}:{item.regime_output_uid}"
@@ -239,8 +262,9 @@ class DeterministicMultiTimeframeConfirmationCalculator:
         revision: int,
     ) -> UUID:
         identity = (
-            f"multi-timeframe-confirmation|{instrument_key}|{_as_utc(as_of_utc).isoformat()}|"
-            f"{source_identity}|{policy_version}|{revision}"
+            f"multi-timeframe-confirmation|{instrument_key}|"
+            f"{_as_utc(as_of_utc).isoformat()}|{source_identity}|"
+            f"{policy_version}|{revision}"
         )
         return uuid5(NAMESPACE_URL, identity)
 

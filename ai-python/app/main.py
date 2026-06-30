@@ -50,7 +50,7 @@ async def liveness() -> dict[str, str]:
 
 
 @app.get("/health/ready", tags=["health"])
-async def readiness() -> JSONResponse | dict[str, str]:
+async def readiness() -> JSONResponse:
     if feature_factory.enabled:
         try:
             feature_factory.get_status()
@@ -63,7 +63,7 @@ async def readiness() -> JSONResponse | dict[str, str]:
                     "detail": str(exception)[:500],
                 },
             )
-    return {"status": "Healthy"}
+    return JSONResponse(status_code=200, content={"status": "Healthy"})
 
 
 @app.get("/health/startup", tags=["health"])

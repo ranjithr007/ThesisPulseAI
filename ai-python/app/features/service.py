@@ -13,6 +13,7 @@ from app.features.definitions import FeatureFactoryOptions
 from app.features.models import FeatureStoreStatus, StoredFeatureSnapshot
 from app.features.sql_store import SqlServerFeatureFactoryStore
 from app.features.store import FeatureFactoryStore, InMemoryFeatureFactoryStore
+from app.order_flow.service import OrderFlowService
 from app.regime.service import MarketRegimeService
 from app.workflow.calculator import (
     FusionReadyEvidenceCalculator,
@@ -28,6 +29,7 @@ class FeatureFactoryService:
         directional_service: DirectionalIntelligenceService | None = None,
         regime_service: MarketRegimeService | None = None,
         confirmation_service: MultiTimeframeConfirmationService | None = None,
+        order_flow_service: OrderFlowService | None = None,
     ) -> None:
         self._settings = settings
         options = FeatureFactoryOptions(
@@ -45,6 +47,7 @@ class FeatureFactoryService:
             self._directional,
             self._regime,
         )
+        self._order_flow = order_flow_service or OrderFlowService(settings)
         self._workflow_calculator = FusionReadyEvidenceCalculator(
             FusionReadyEvidenceOptions(
                 weight_configuration_version=(
@@ -90,6 +93,10 @@ class FeatureFactoryService:
     def confirmation(self) -> MultiTimeframeConfirmationService:
         return self._confirmation
 
+    @property
+    def order_flow(self) -> OrderFlowService:
+        return self._order_flow
+
     def process_candle(
         self,
         delivery: MarketCandleDeliveryV1,
@@ -104,11 +111,13 @@ class FeatureFactoryService:
         )
         regime = None
         directional = None
+        order_flow = None
         confirmation = None
         workflow_evidence = None
         if stored is not None:
             regime = self._regime.process_feature(stored, processed_at)
             directional = self._directional.process_feature(stored, processed_at)
+            order_flow = self._order_flow.process_candle(delivery, processed_at)
             confirmation = self._confirmation.process_instrument(
                 delivery.envelope.payload.instrument_key,
                 processed_at,
@@ -116,6 +125,7 @@ class FeatureFactoryService:
             workflow_evidence = self._build_workflow_evidence(
                 delivery,
                 confirmation,
+                order_flow,
                 processed_at,
             )
         return FeatureProcessingResultV1(
@@ -125,6 +135,7 @@ class FeatureFactoryService:
             snapshot=outcome.snapshot,
             regime=regime,
             directional=directional,
+            order_flow=order_flow,
             confirmation=confirmation,
             workflow_evidence=workflow_evidence,
             reason=outcome.reason,
@@ -145,6 +156,7 @@ class FeatureFactoryService:
         self,
         delivery: MarketCandleDeliveryV1,
         confirmation_result,
+        order_flow_result,
         processed_at: datetime,
     ):
         payload = delivery.envelope.payload
@@ -177,6 +189,9 @@ class FeatureFactoryService:
             if regime is not None:
                 regime_by_timeframe[item.timeframe] = regime
 
+        order_flow_output = (
+            None if order_flow_result is None else order_flow_result.output
+        )
         try:
             return self._workflow_calculator.calculate(
                 delivery,
@@ -185,6 +200,7 @@ class FeatureFactoryService:
                 directional_by_timeframe,
                 regime_by_timeframe,
                 processed_at,
+                order_flow_output,
             )
         except ValueError:
             return None

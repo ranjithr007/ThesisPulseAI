@@ -90,6 +90,8 @@ public static class MarketDataServiceCollectionExtensions
                 serviceProvider.GetRequiredService<InMemoryMarketDataStore>());
             services.AddSingleton<IMarketDataStore>(serviceProvider =>
                 serviceProvider.GetRequiredService<InMemoryMarketDataStore>());
+            services.AddSingleton<IDerivativesMarketDataStore,
+                InMemoryDerivativesMarketDataStore>();
             services.AddSingleton<IMarketDataSubscriptionCatalog,
                 ConfiguredMarketDataSubscriptionCatalog>();
             services.AddSingleton<IMarketDataRecoveryStateStore,
@@ -129,6 +131,8 @@ public static class MarketDataServiceCollectionExtensions
         services.AddSingleton(sqlOptions);
         services.AddSingleton<IInstrumentCatalogStore, SqlServerInstrumentCatalogStore>();
         services.AddSingleton<IMarketDataStore, SqlServerMarketDataStore>();
+        services.AddSingleton<IDerivativesMarketDataStore,
+            SqlServerDerivativesMarketDataStore>();
         services.AddSingleton<IMarketDataSubscriptionCatalog,
             SqlServerMarketDataSubscriptionCatalog>();
         services.AddSingleton<IMarketDataRecoveryStateStore,

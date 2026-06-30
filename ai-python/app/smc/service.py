@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 from app.contracts.v1.market_data import MarketCandleDeliveryV1
-from app.contracts.v1.smc import SmcProcessingResultV1, SmartMoneyConceptsOutputV1
+from app.contracts.v1.smc import SmartMoneyConceptsOutputV1, SmcProcessingResultV1
 from app.core.settings import Settings
 from app.smc.calculator import DeterministicSmcCalculator
 from app.smc.models import SmcStore, SmcStoreStatus
@@ -21,7 +21,10 @@ class SmartMoneyConceptsService:
         self._settings = settings
         self._enabled = smc_enabled() if enabled is None else enabled
         self._calculator = DeterministicSmcCalculator(load_smc_options())
-        self._store = store or _create_store(settings, self._calculator.options.engine_code)
+        self._store = store or _create_store(
+            settings,
+            self._calculator.options.engine_code,
+        )
 
     @property
     def enabled(self) -> bool:

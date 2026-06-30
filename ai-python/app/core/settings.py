@@ -1,13 +1,14 @@
 import os
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 
 
 @dataclass(frozen=True, slots=True)
 class Settings:
     service_name: str = "ThesisPulse.AI"
-    service_version: str = "0.5.0"
+    service_version: str = "0.6.0"
     contract_version: str = "v1"
-    configuration_version: str = "multi-timeframe-confirmation-v1.0.0"
+    configuration_version: str = "automatic-intelligence-intake-v1.0.0"
     environment: str = "PAPER"
     live_execution_enabled: bool = False
     feature_factory_enabled: bool = False
@@ -36,6 +37,15 @@ class Settings:
     confirmation_engine_version: str = "1.0.0"
     confirmation_policy_version: str = "multi-timeframe-confirmation-v1.0.0"
     confirmation_engine_actor: str = "ThesisPulse.AI.Confirmation"
+    workflow_evidence_enabled: bool = False
+    workflow_weight_configuration_version: str = "fusion-weights-v1.0.0"
+    workflow_proposal_policy_version: str = "atr-trade-proposal-v1.0.0"
+    workflow_stop_atr_multiple: Decimal = Decimal("1.50")
+    workflow_first_target_risk_reward: Decimal = Decimal("2.00")
+    workflow_entry_band_atr_fraction: Decimal = Decimal("0.25")
+    workflow_minimum_entry_band_fraction: Decimal = Decimal("0.0005")
+    workflow_maximum_entry_band_fraction: Decimal = Decimal("0.0050")
+    workflow_maximum_slippage_fraction: Decimal = Decimal("0.0010")
     sql_command_timeout_seconds: int = 30
 
 
@@ -59,6 +69,10 @@ def load_settings() -> Settings:
     regime_enabled = _read_bool("THESISPULSE_REGIME_ENGINE_ENABLED", False)
     confirmation_enabled = _read_bool(
         "THESISPULSE_CONFIRMATION_ENGINE_ENABLED",
+        False,
+    )
+    workflow_evidence_enabled = _read_bool(
+        "THESISPULSE_WORKFLOW_EVIDENCE_ENABLED",
         False,
     )
     internal_key = _optional("THESISPULSE_FEATURE_FACTORY_INTERNAL_API_KEY")
@@ -110,16 +124,20 @@ def load_settings() -> Settings:
         raise RuntimeError(
             "Multi-timeframe confirmation requires the Market Regime Engine"
         )
+    if workflow_evidence_enabled and not confirmation_enabled:
+        raise RuntimeError(
+            "Workflow evidence requires multi-timeframe confirmation"
+        )
     if provider.casefold() == "sqlserver" and not connection_string:
         raise RuntimeError(
             "SqlServer intelligence requires THESISPULSE_OPERATIONAL_DATABASE"
         )
 
     return Settings(
-        service_version=os.getenv("THESISPULSE_SERVICE_VERSION", "0.5.0"),
+        service_version=os.getenv("THESISPULSE_SERVICE_VERSION", "0.6.0"),
         configuration_version=os.getenv(
             "THESISPULSE_CONFIGURATION_VERSION",
-            "multi-timeframe-confirmation-v1.0.0",
+            "automatic-intelligence-intake-v1.0.0",
         ),
         environment=environment,
         live_execution_enabled=False,
@@ -199,6 +217,51 @@ def load_settings() -> Settings:
             "THESISPULSE_CONFIRMATION_ENGINE_ACTOR",
             "ThesisPulse.AI.Confirmation",
         ),
+        workflow_evidence_enabled=workflow_evidence_enabled,
+        workflow_weight_configuration_version=os.getenv(
+            "THESISPULSE_WORKFLOW_WEIGHT_CONFIGURATION_VERSION",
+            "fusion-weights-v1.0.0",
+        ),
+        workflow_proposal_policy_version=os.getenv(
+            "THESISPULSE_WORKFLOW_PROPOSAL_POLICY_VERSION",
+            "atr-trade-proposal-v1.0.0",
+        ),
+        workflow_stop_atr_multiple=_read_decimal(
+            "THESISPULSE_WORKFLOW_STOP_ATR_MULTIPLE",
+            Decimal("1.50"),
+            minimum=Decimal("0.01"),
+            maximum=Decimal("20"),
+        ),
+        workflow_first_target_risk_reward=_read_decimal(
+            "THESISPULSE_WORKFLOW_FIRST_TARGET_RISK_REWARD",
+            Decimal("2.00"),
+            minimum=Decimal("0.01"),
+            maximum=Decimal("20"),
+        ),
+        workflow_entry_band_atr_fraction=_read_decimal(
+            "THESISPULSE_WORKFLOW_ENTRY_BAND_ATR_FRACTION",
+            Decimal("0.25"),
+            minimum=Decimal("0"),
+            maximum=Decimal("10"),
+        ),
+        workflow_minimum_entry_band_fraction=_read_decimal(
+            "THESISPULSE_WORKFLOW_MINIMUM_ENTRY_BAND_FRACTION",
+            Decimal("0.0005"),
+            minimum=Decimal("0"),
+            maximum=Decimal("1"),
+        ),
+        workflow_maximum_entry_band_fraction=_read_decimal(
+            "THESISPULSE_WORKFLOW_MAXIMUM_ENTRY_BAND_FRACTION",
+            Decimal("0.0050"),
+            minimum=Decimal("0.000001"),
+            maximum=Decimal("1"),
+        ),
+        workflow_maximum_slippage_fraction=_read_decimal(
+            "THESISPULSE_WORKFLOW_MAXIMUM_SLIPPAGE_FRACTION",
+            Decimal("0.0010"),
+            minimum=Decimal("0"),
+            maximum=Decimal("1"),
+        ),
         sql_command_timeout_seconds=command_timeout,
     )
 
@@ -221,6 +284,23 @@ def _read_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
         value = default if raw is None else int(raw)
     except ValueError as exception:
         raise RuntimeError(f"{name} must be an integer") from exception
+    if value < minimum or value > maximum:
+        raise RuntimeError(f"{name} must be between {minimum} and {maximum}")
+    return value
+
+
+def _read_decimal(
+    name: str,
+    default: Decimal,
+    *,
+    minimum: Decimal,
+    maximum: Decimal,
+) -> Decimal:
+    raw = os.getenv(name)
+    try:
+        value = default if raw is None else Decimal(raw)
+    except InvalidOperation as exception:
+        raise RuntimeError(f"{name} must be a decimal value") from exception
     if value < minimum or value > maximum:
         raise RuntimeError(f"{name} must be between {minimum} and {maximum}")
     return value

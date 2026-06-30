@@ -244,7 +244,7 @@ public static class DeterministicPositionAccounting
         }
 
         var costBasisAfter = allLots.Sum(lot => lot.RemainingQuantity * lot.OpenPrice);
-        var averageAfter = quantityAfter == 0
+        decimal? averageAfter = quantityAfter == 0
             ? null
             : costBasisAfter / quantityAfter;
         var marketValue = quantityAfter * fill.Price;

@@ -85,12 +85,15 @@ class FeatureFactoryService:
         snapshot: FeatureSnapshotV1 | None,
         outcome: str,
     ) -> StoredFeatureSnapshot | None:
+        if snapshot is None and outcome != "DUPLICATE":
+            return None
+
         latest = self._store.get_latest(
             delivery.envelope.payload.instrument_key,
             delivery.envelope.payload.timeframe,
         )
         if snapshot is None:
-            if outcome != "DUPLICATE" or latest is None:
+            if latest is None:
                 return None
             if latest.snapshot.message_uid != delivery.envelope.metadata.message_id:
                 return None

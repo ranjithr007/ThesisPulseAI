@@ -2,6 +2,7 @@ using System.Data;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
+using ThesisPulse.Shared.Contracts.Intelligence.V1;
 using ThesisPulse.Shared.Contracts.MarketData.V1;
 using ThesisPulse.Shared.Contracts.Messaging.V1;
 using ThesisPulse.Shared.Infrastructure.Messaging;
@@ -17,6 +18,8 @@ public sealed record MarketDataDispatchOptions
     public Uri? TradingApiBaseUrl { get; init; }
     public bool AiFeatureFactoryEnabled { get; init; }
     public Uri? AiServiceBaseUrl { get; init; }
+    public bool AutomaticPaperWorkflowEnabled { get; init; }
+    public Uri? OperationsServiceBaseUrl { get; init; }
     public int BatchSize { get; init; } = 100;
     public int PollIntervalMilliseconds { get; init; } = 1000;
 
@@ -31,6 +34,8 @@ public sealed record MarketDataDispatchOptions
             SignalServiceBaseUrl is null ||
             TradingApiBaseUrl is null ||
             (AiFeatureFactoryEnabled && AiServiceBaseUrl is null) ||
+            (AutomaticPaperWorkflowEnabled &&
+                (!AiFeatureFactoryEnabled || OperationsServiceBaseUrl is null)) ||
             BatchSize is < 1 or > 1000 ||
             PollIntervalMilliseconds is < 100 or > 60000)
         {
@@ -188,51 +193,110 @@ public sealed class MarketDataFanoutClient(
             _ => throw new InvalidOperationException(
                 $"Unsupported market event '{message.Metadata.EventType}'."),
         };
+        var delivery = BuildDelivery(message);
 
         await SendToAsync(
             "SignalServiceMarketData",
             options.SignalServiceBaseUrl!,
             path,
-            message,
+            message.Metadata.CorrelationId,
+            delivery,
             cancellationToken);
         await SendToAsync(
             "TradingApiMarketData",
             options.TradingApiBaseUrl!,
             path,
-            message,
+            message.Metadata.CorrelationId,
+            delivery,
             cancellationToken);
 
-        if (options.AiFeatureFactoryEnabled &&
-            message.Metadata.EventType.Equals(
+        if (!options.AiFeatureFactoryEnabled ||
+            !message.Metadata.EventType.Equals(
                 MarketDataPublicationContractV1.CandleEventType,
                 StringComparison.OrdinalIgnoreCase))
         {
-            await SendToAsync(
-                "AiFeatureFactoryMarketData",
-                options.AiServiceBaseUrl!,
-                "/internal/v1/market-data/candles",
-                message,
-                cancellationToken);
+            return;
         }
+
+        var response = await SendToAndReadAsync<AiFeatureProcessingResponseV1>(
+            "AiFeatureFactoryMarketData",
+            options.AiServiceBaseUrl!,
+            "/internal/v1/market-data/candles",
+            message.Metadata.CorrelationId,
+            delivery,
+            cancellationToken);
+        if (!options.AutomaticPaperWorkflowEnabled ||
+            response.WorkflowEvidence is null)
+        {
+            return;
+        }
+
+        await SendToAsync(
+            "OperationsAutomaticPaperWorkflow",
+            options.OperationsServiceBaseUrl!,
+            "/internal/v1/paper-workflows/intelligence",
+            message.Metadata.CorrelationId,
+            response.WorkflowEvidence,
+            cancellationToken);
     }
 
     private async Task SendToAsync(
         string clientName,
         Uri baseUrl,
         string path,
-        OutboxMessage message,
+        string correlationId,
+        object payload,
+        CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(
+            clientName,
+            baseUrl,
+            path,
+            correlationId,
+            payload,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private async Task<T> SendToAndReadAsync<T>(
+        string clientName,
+        Uri baseUrl,
+        string path,
+        string correlationId,
+        object payload,
+        CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(
+            clientName,
+            baseUrl,
+            path,
+            correlationId,
+            payload,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<T>(
+            options: JsonOptions,
+            cancellationToken: cancellationToken)
+            ?? throw new InvalidDataException(
+                $"{clientName} returned an empty response.");
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(
+        string clientName,
+        Uri baseUrl,
+        string path,
+        string correlationId,
+        object payload,
         CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             new Uri(baseUrl, path));
         request.Headers.Add("X-ThesisPulse-Internal-Key", options.InternalApiKey);
-        request.Content = JsonContent.Create(
-            BuildDelivery(message),
-            options: JsonOptions);
+        request.Headers.Add("X-Correlation-ID", correlationId);
+        request.Content = JsonContent.Create(payload, options: JsonOptions);
         var client = httpClientFactory.CreateClient(clientName);
-        using var response = await client.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        return await client.SendAsync(request, cancellationToken);
     }
 
     private static object BuildDelivery(OutboxMessage message)

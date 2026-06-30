@@ -16,13 +16,33 @@ public static class MarketDataPublicationServiceCollectionExtensions
             Enabled = configuration.GetValue("MarketData:Publication:Enabled", false),
             Environment = configuration["Platform:Environment"] ?? "PAPER",
             Producer = serviceName,
-            ProducerVersion = "0.4.0",
-            ConfigurationVersion = configuration["Platform:ConfigurationVersion"] ?? "platform-foundation-v1.0.0",
+            ProducerVersion = configuration["MarketData:Publication:ProducerVersion"]
+                ?? "0.4.0",
+            ConfigurationVersion = configuration["Platform:ConfigurationVersion"]
+                ?? "platform-foundation-v1.0.0",
         };
         options.Validate();
         services.AddSingleton(options);
         services.AddSingleton<MarketDataPublicationFactory>();
-        services.AddSingleton<IMarketDataPublicationWriter, MarketDataPublicationWriter>();
+        services.AddSingleton<IMarketDataPublicationWriter,
+            MarketDataPublicationWriter>();
+
+        var provider = configuration["Messaging:Provider"] ?? "InMemory";
+        if (provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddSingleton<IMarketDataReplayStore,
+                SqlServerMarketDataReplayStore>();
+            services.AddSingleton<IMarketDataConsumerCheckpointStore,
+                SqlServerMarketDataConsumerCheckpointStore>();
+        }
+        else
+        {
+            services.AddSingleton<IMarketDataReplayStore,
+                InMemoryMarketDataReplayStore>();
+            services.AddSingleton<IMarketDataConsumerCheckpointStore,
+                InMemoryMarketDataConsumerCheckpointStore>();
+        }
+
         return services;
     }
 }

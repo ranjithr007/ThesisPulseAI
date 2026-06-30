@@ -242,7 +242,7 @@ class SqlServerDirectionalIntelligenceStore:
         snapshot = source.snapshot
         if not source_row.is_current:
             raise RuntimeError("Feature output is no longer current")
-        if not source_row.is_eligible or not snapshot.is_eligible_for_engines:
+        if not snapshot.is_eligible_for_engines:
             raise ValueError("Feature output is not eligible for directional processing")
         if source_row.data_quality_status != "VALID" or source_row.is_stale:
             raise ValueError("Feature output must be valid and fresh")

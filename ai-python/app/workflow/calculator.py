@@ -8,6 +8,7 @@ from app.contracts.v1.directional import DirectionalEngineOutputV1
 from app.contracts.v1.market_data import FeatureSnapshotV1, MarketCandleDeliveryV1
 from app.contracts.v1.order_flow import OrderFlowEngineOutputV1
 from app.contracts.v1.regime import MarketRegimeOutputV1
+from app.contracts.v1.smart_money import SmartMoneyConceptsOutputV1
 from app.contracts.v1.workflow import (
     FusionDirectionalEvidenceV1,
     FusionReadyEvidenceV1,
@@ -73,6 +74,7 @@ class FusionReadyEvidenceCalculator:
         regime_by_timeframe: dict[str, MarketRegimeOutputV1],
         generated_at_utc: datetime,
         order_flow: OrderFlowEngineOutputV1 | None = None,
+        smart_money: SmartMoneyConceptsOutputV1 | None = None,
     ) -> FusionReadyEvidenceV1:
         payload = delivery.envelope.payload
         if payload.timeframe != "5m":
@@ -129,12 +131,8 @@ class FusionReadyEvidenceCalculator:
                     confidence=_percent(directional.confidence),
                     is_closed_candle=True,
                     observed_at_utc=directional.as_of_utc,
-                    reasons=[
-                        evidence.message for evidence in directional.evidence
-                    ]
-                    + [
-                        evidence.message for evidence in regime.evidence
-                    ],
+                    reasons=[evidence.message for evidence in directional.evidence]
+                    + [evidence.message for evidence in regime.evidence],
                 )
             )
 
@@ -152,6 +150,27 @@ class FusionReadyEvidenceCalculator:
                         confidence=_percent(order_flow.confidence),
                         observed_at_utc=order_flow.as_of_utc,
                         reasons=[item.message for item in order_flow.evidence],
+                    )
+                )
+
+        if smart_money is not None:
+            _validate_smart_money(
+                smart_money,
+                payload.instrument_key,
+                payload.close_at_utc,
+            )
+            if smart_money.is_eligible_for_fusion:
+                directional_evidence.append(
+                    FusionDirectionalEvidenceV1(
+                        output_uid=smart_money.output_uid,
+                        engine_code="SMART_MONEY_CONCEPTS",
+                        engine_version=smart_money.engine_version,
+                        timeframe=smart_money.timeframe,
+                        direction=smart_money.direction,
+                        score=_percent(abs(smart_money.score)),
+                        confidence=_percent(smart_money.confidence),
+                        observed_at_utc=smart_money.as_of_utc,
+                        reasons=[item.message for item in smart_money.evidence],
                     )
                 )
 
@@ -189,6 +208,9 @@ class FusionReadyEvidenceCalculator:
                     str(delivery.envelope.metadata.message_id),
                     str(confirmation.output_uid),
                     str(order_flow.output_uid) if order_flow is not None else "NO_ORDER_FLOW",
+                    str(smart_money.output_uid)
+                    if smart_money is not None
+                    else "NO_SMART_MONEY",
                     self._options.weight_configuration_version,
                     self._options.proposal_policy_version,
                 ]
@@ -209,6 +231,7 @@ class FusionReadyEvidenceCalculator:
                     for warning in output.warnings
                 ]
                 + ([] if order_flow is None else order_flow.warnings)
+                + ([] if smart_money is None else smart_money.warnings)
             )
         )
         return FusionReadyEvidenceV1(
@@ -284,6 +307,21 @@ def _validate_order_flow(
         raise ValueError("Order Flow cutoff must match the source candle")
     if output.is_stale or output.data_quality_status == "INVALID":
         raise ValueError("Order Flow output is not usable")
+
+
+def _validate_smart_money(
+    output: SmartMoneyConceptsOutputV1,
+    instrument_key: str,
+    as_of_utc: datetime,
+) -> None:
+    if output.instrument_key != instrument_key:
+        raise ValueError("Smart Money instrument lineage mismatch")
+    if output.timeframe != "5m":
+        raise ValueError("Smart Money timeframe must be 5m")
+    if output.as_of_utc != as_of_utc:
+        raise ValueError("Smart Money cutoff must match the source candle")
+    if output.is_stale or output.data_quality_status == "INVALID":
+        raise ValueError("Smart Money output is not usable")
 
 
 def _directional_votes(

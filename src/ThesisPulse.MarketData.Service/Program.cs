@@ -12,7 +12,9 @@ var operationsOptions = new MarketDataOperationsOptions
 {
     Enabled = builder.Configuration.GetValue("MarketData:Operations:Enabled", false),
     InternalApiKey = builder.Configuration["MarketData:Operations:InternalApiKey"],
-    MaximumHistoricalDays = builder.Configuration.GetValue("MarketData:Operations:MaximumHistoricalDays", 366),
+    MaximumHistoricalDays = builder.Configuration.GetValue(
+        "MarketData:Operations:MaximumHistoricalDays",
+        366),
 };
 operationsOptions.Validate();
 
@@ -37,6 +39,8 @@ app.UseExceptionHandler();
 app.UseThesisPulsePlatformFoundation();
 app.MapThesisPulsePlatformEndpoints(serviceName);
 app.MapMarketDataEndpoints();
+app.MapDerivativesIngestionEndpoints();
+app.MapDerivativesQueryEndpoints();
 app.MapMarketDataPublicationEndpoints();
 app.MapGet("/api/v1/status", (
     IConfiguration configuration,
@@ -55,6 +59,11 @@ app.MapGet("/api/v1/status", (
     publicationEnabled = publication.Enabled,
     publicationDispatchEnabled = dispatch.Enabled,
     replayEnabled = true,
+    derivativesDataFoundationEnabled = true,
+    derivativeContractSelectionAuthority = false,
+    optionChainIngestionEnabled = true,
+    futuresBasisIngestionEnabled = true,
+    derivativesExecutionAuthority = false,
     liveFeed = liveFeedHealthState.GetSnapshot(),
     recovery = recoveryHealthState.GetSnapshot(),
 }));

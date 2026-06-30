@@ -8,6 +8,9 @@ from pydantic.alias_generators import to_camel
 
 from app.contracts.v1.confirmation import ConfirmationProcessingResultV1
 from app.contracts.v1.directional import DirectionalProcessingResultV1
+from app.contracts.v1.liquidity_derivatives import (
+    LiquidityDerivativesProcessingResultV1,
+)
 from app.contracts.v1.order_flow import (
     OrderFlowProcessingResultV1,
     OrderFlowQuoteProcessingResultV1,
@@ -169,6 +172,7 @@ class FeatureProcessingResultV1(ContractModel):
     directional: DirectionalProcessingResultV1 | None = None
     order_flow: OrderFlowProcessingResultV1 | None = None
     smart_money: SmartMoneyProcessingResultV1 | None = None
+    liquidity_derivatives: LiquidityDerivativesProcessingResultV1 | None = None
     confirmation: ConfirmationProcessingResultV1 | None = None
     workflow_evidence: FusionReadyEvidenceV1 | None = None
     reason: str | None = None

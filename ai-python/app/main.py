@@ -9,6 +9,9 @@ from fastapi.responses import JSONResponse
 from app.confirmation.service import MultiTimeframeConfirmationService
 from app.contracts.v1.confirmation import MultiTimeframeConfirmationOutputV1
 from app.contracts.v1.directional import DirectionalEngineOutputV1
+from app.contracts.v1.liquidity_derivatives import (
+    LiquidityDerivativesContextOutputV1,
+)
 from app.contracts.v1.market_data import (
     FeatureProcessingResultV1,
     FeatureSnapshotV1,
@@ -29,6 +32,9 @@ from app.contracts.v1.smart_money import SmartMoneyConceptsOutputV1
 from app.core.settings import load_settings
 from app.directional.service import DirectionalIntelligenceService
 from app.features.service import FeatureFactoryService
+from app.liquidity_derivatives.service import (
+    LiquidityDerivativesContextService,
+)
 from app.order_flow.service import OrderFlowService
 from app.regime.service import MarketRegimeService
 from app.smart_money.service import SmartMoneyConceptsService
@@ -38,6 +44,7 @@ directional_intelligence = DirectionalIntelligenceService(settings)
 market_regime = MarketRegimeService(settings)
 order_flow = OrderFlowService(settings)
 smart_money = SmartMoneyConceptsService(settings)
+liquidity_derivatives = LiquidityDerivativesContextService(settings)
 multi_timeframe_confirmation = MultiTimeframeConfirmationService(
     settings,
     directional_intelligence,
@@ -50,6 +57,7 @@ feature_factory = FeatureFactoryService(
     confirmation_service=multi_timeframe_confirmation,
     order_flow_service=order_flow,
     smart_money_service=smart_money,
+    liquidity_derivatives_service=liquidity_derivatives,
 )
 started_at_utc = datetime.now(UTC)
 
@@ -90,6 +98,8 @@ async def readiness() -> JSONResponse:
                 order_flow.get_status()
             if smart_money.enabled:
                 smart_money.get_status()
+            if liquidity_derivatives.enabled:
+                liquidity_derivatives.get_status()
             if multi_timeframe_confirmation.enabled:
                 multi_timeframe_confirmation.get_status()
         except Exception as exception:
@@ -132,6 +142,8 @@ async def service_info() -> dict[str, str | bool]:
         "orderFlowPolicyVersion": settings.order_flow_policy_version,
         "smartMoneyEngineEnabled": smart_money.enabled,
         "smartMoneyPolicyVersion": smart_money.policy_version,
+        "liquidityDerivativesEngineEnabled": liquidity_derivatives.enabled,
+        "liquidityDerivativesPolicyVersion": liquidity_derivatives.policy_version,
         "confirmationEngineEnabled": settings.confirmation_engine_enabled,
         "confirmationPolicyVersion": settings.confirmation_policy_version,
         "startedAtUtc": started_at_utc.isoformat(),
@@ -186,6 +198,18 @@ async def list_engines() -> dict[str, list[object]]:
                 "engineVersion": smart_money.engine_version,
                 "policyVersion": smart_money.policy_version,
                 "methodology": "CONFIRMED_PIVOT_STRUCTURE_HEURISTIC",
+                "canCreateSignals": False,
+                "canExecuteOrders": False,
+            },
+            {
+                "engineCode": liquidity_derivatives.engine_code,
+                "engineRole": "DIRECTIONAL_VOTER",
+                "enabled": liquidity_derivatives.enabled,
+                "engineVersion": liquidity_derivatives.engine_version,
+                "policyVersion": liquidity_derivatives.policy_version,
+                "methodology": "PRICE_POOLS_AND_CANONICAL_OPEN_INTEREST",
+                "optionsChainAvailable": False,
+                "futuresBasisAvailable": False,
                 "canCreateSignals": False,
                 "canExecuteOrders": False,
             },
@@ -419,6 +443,55 @@ def latest_smart_money_output(
     output = smart_money.get_latest(instrument_key, timeframe)
     if output is None:
         raise HTTPException(status_code=404, detail="Smart Money output was not found")
+    return output
+
+
+@app.get(
+    "/api/v1/intelligence/liquidity-derivatives/status",
+    tags=["liquidity-derivatives"],
+)
+def liquidity_derivatives_status() -> dict[str, object]:
+    status = liquidity_derivatives.get_status()
+    return {
+        "enabled": liquidity_derivatives.enabled,
+        "provider": status.provider,
+        "engineCode": liquidity_derivatives.engine_code,
+        "engineVersion": liquidity_derivatives.engine_version,
+        "policyVersion": liquidity_derivatives.policy_version,
+        "methodology": "PRICE_POOLS_AND_CANONICAL_OPEN_INTEREST",
+        "requiredInputCount": liquidity_derivatives.required_input_count,
+        "maximumInputCount": liquidity_derivatives.maximum_input_count,
+        "candleCount": status.candle_count,
+        "outputCount": status.output_count,
+        "optionsChainAvailable": False,
+        "futuresBasisAvailable": False,
+        "latestProcessedAtUtc": status.latest_processed_at_utc,
+        "latestError": status.latest_error,
+        "canCreateSignals": False,
+        "canExecuteOrders": False,
+    }
+
+
+@app.get(
+    "/api/v1/intelligence/liquidity-derivatives/latest/{instrument_key:path}",
+    response_model=LiquidityDerivativesContextOutputV1,
+    tags=["liquidity-derivatives"],
+)
+def latest_liquidity_derivatives_output(
+    instrument_key: str,
+    timeframe: str = "5m",
+) -> LiquidityDerivativesContextOutputV1:
+    if timeframe != "5m":
+        raise HTTPException(
+            status_code=422,
+            detail="Liquidity Derivatives Context V1 supports only 5m",
+        )
+    output = liquidity_derivatives.get_latest(instrument_key, timeframe)
+    if output is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Liquidity Derivatives output was not found",
+        )
     return output
 
 

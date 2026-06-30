@@ -1,10 +1,16 @@
 from datetime import UTC, datetime
+from decimal import Decimal
+from uuid import NAMESPACE_URL, uuid5
 
 from app.confirmation.service import MultiTimeframeConfirmationService
 from app.contracts.v1.market_data import (
     FeatureProcessingResultV1,
     FeatureSnapshotV1,
     MarketCandleDeliveryV1,
+)
+from app.contracts.v1.workflow import (
+    FusionDirectionalEvidenceV1,
+    FusionReadyEvidenceV1,
 )
 from app.core.settings import Settings
 from app.directional.service import DirectionalIntelligenceService
@@ -13,6 +19,7 @@ from app.features.definitions import FeatureFactoryOptions
 from app.features.models import FeatureStoreStatus, StoredFeatureSnapshot
 from app.features.sql_store import SqlServerFeatureFactoryStore
 from app.features.store import FeatureFactoryStore, InMemoryFeatureFactoryStore
+from app.liquidity_derivatives.service import LiquidityDerivativesContextService
 from app.order_flow.service import OrderFlowService
 from app.regime.service import MarketRegimeService
 from app.smart_money.service import SmartMoneyConceptsService
@@ -20,6 +27,9 @@ from app.workflow.calculator import (
     FusionReadyEvidenceCalculator,
     FusionReadyEvidenceOptions,
 )
+
+SCORE_QUANTUM = Decimal("0.01")
+ONE_HUNDRED = Decimal("100")
 
 
 class FeatureFactoryService:
@@ -32,6 +42,7 @@ class FeatureFactoryService:
         confirmation_service: MultiTimeframeConfirmationService | None = None,
         order_flow_service: OrderFlowService | None = None,
         smart_money_service: SmartMoneyConceptsService | None = None,
+        liquidity_derivatives_service: LiquidityDerivativesContextService | None = None,
     ) -> None:
         self._settings = settings
         options = FeatureFactoryOptions(
@@ -51,6 +62,10 @@ class FeatureFactoryService:
         )
         self._order_flow = order_flow_service or OrderFlowService(settings)
         self._smart_money = smart_money_service or SmartMoneyConceptsService(settings)
+        self._liquidity_derivatives = (
+            liquidity_derivatives_service
+            or LiquidityDerivativesContextService(settings)
+        )
         self._workflow_calculator = FusionReadyEvidenceCalculator(
             FusionReadyEvidenceOptions(
                 weight_configuration_version=(
@@ -104,6 +119,10 @@ class FeatureFactoryService:
     def smart_money(self) -> SmartMoneyConceptsService:
         return self._smart_money
 
+    @property
+    def liquidity_derivatives(self) -> LiquidityDerivativesContextService:
+        return self._liquidity_derivatives
+
     def process_candle(
         self,
         delivery: MarketCandleDeliveryV1,
@@ -120,6 +139,7 @@ class FeatureFactoryService:
         directional = None
         order_flow = None
         smart_money = None
+        liquidity_derivatives = None
         confirmation = None
         workflow_evidence = None
         if stored is not None:
@@ -127,6 +147,10 @@ class FeatureFactoryService:
             directional = self._directional.process_feature(stored, processed_at)
             order_flow = self._order_flow.process_candle(delivery, processed_at)
             smart_money = self._smart_money.process_candle(delivery, processed_at)
+            liquidity_derivatives = self._liquidity_derivatives.process_candle(
+                delivery,
+                processed_at,
+            )
             confirmation = self._confirmation.process_instrument(
                 delivery.envelope.payload.instrument_key,
                 processed_at,
@@ -136,6 +160,7 @@ class FeatureFactoryService:
                 confirmation,
                 order_flow,
                 smart_money,
+                liquidity_derivatives,
                 processed_at,
             )
         return FeatureProcessingResultV1(
@@ -147,6 +172,7 @@ class FeatureFactoryService:
             directional=directional,
             order_flow=order_flow,
             smart_money=smart_money,
+            liquidity_derivatives=liquidity_derivatives,
             confirmation=confirmation,
             workflow_evidence=workflow_evidence,
             reason=outcome.reason,
@@ -169,8 +195,9 @@ class FeatureFactoryService:
         confirmation_result,
         order_flow_result,
         smart_money_result,
+        liquidity_derivatives_result,
         processed_at: datetime,
-    ):
+    ) -> FusionReadyEvidenceV1 | None:
         payload = delivery.envelope.payload
         if not self._settings.workflow_evidence_enabled:
             return None
@@ -207,8 +234,13 @@ class FeatureFactoryService:
         smart_money_output = (
             None if smart_money_result is None else smart_money_result.output
         )
+        liquidity_output = (
+            None
+            if liquidity_derivatives_result is None
+            else liquidity_derivatives_result.output
+        )
         try:
-            return self._workflow_calculator.calculate(
+            evidence = self._workflow_calculator.calculate(
                 delivery,
                 primary_feature,
                 confirmation,
@@ -218,8 +250,66 @@ class FeatureFactoryService:
                 order_flow_output,
                 smart_money_output,
             )
+            return self._append_liquidity_derivatives_evidence(
+                evidence,
+                liquidity_output,
+                payload.instrument_key,
+                payload.close_at_utc,
+            )
         except ValueError:
             return None
+
+    @staticmethod
+    def _append_liquidity_derivatives_evidence(
+        evidence: FusionReadyEvidenceV1,
+        output,
+        instrument_key: str,
+        as_of_utc: datetime,
+    ) -> FusionReadyEvidenceV1:
+        if output is None:
+            return evidence
+        if output.instrument_key != instrument_key:
+            raise ValueError("Liquidity Context instrument lineage mismatch")
+        if output.timeframe != "5m":
+            raise ValueError("Liquidity Context timeframe must be 5m")
+        if output.as_of_utc != as_of_utc:
+            raise ValueError("Liquidity Context cutoff must match the source candle")
+        if output.is_stale or output.data_quality_status == "INVALID":
+            raise ValueError("Liquidity Context output is not usable")
+
+        warnings = sorted(set(evidence.warnings + output.warnings))
+        if not output.is_eligible_for_fusion:
+            return evidence.model_copy(update={"warnings": warnings})
+
+        vote = FusionDirectionalEvidenceV1(
+            output_uid=output.output_uid,
+            engine_code="LIQUIDITY_DERIVATIVES_CONTEXT",
+            engine_version=output.engine_version,
+            timeframe=output.timeframe,
+            direction=output.direction,
+            score=(abs(output.score) * ONE_HUNDRED).quantize(SCORE_QUANTUM),
+            confidence=(output.confidence * ONE_HUNDRED).quantize(SCORE_QUANTUM),
+            observed_at_utc=output.as_of_utc,
+            reasons=[item.message for item in output.evidence],
+        )
+        evidence_uid = uuid5(
+            NAMESPACE_URL,
+            "|".join(
+                [
+                    "fusion-ready-evidence-liquidity-v1",
+                    str(evidence.evidence_uid),
+                    str(output.output_uid),
+                    evidence.weight_configuration_version,
+                ]
+            ),
+        )
+        return evidence.model_copy(
+            update={
+                "evidence_uid": evidence_uid,
+                "directional_evidence": evidence.directional_evidence + [vote],
+                "warnings": warnings,
+            }
+        )
 
     def _resolve_stored_snapshot(
         self,

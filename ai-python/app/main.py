@@ -13,7 +13,10 @@ from app.contracts.v1.market_data import (
     FeatureProcessingResultV1,
     FeatureSnapshotV1,
     MarketCandleDeliveryV1,
+    MarketQuoteDeliveryV1,
+    QuoteProcessingResponseV1,
 )
+from app.contracts.v1.order_flow import OrderFlowEngineOutputV1
 from app.contracts.v1.regime import MarketRegimeOutputV1
 from app.contracts.v1.signals import (
     MessageMetadataV1,
@@ -25,11 +28,13 @@ from app.contracts.v1.signals import (
 from app.core.settings import load_settings
 from app.directional.service import DirectionalIntelligenceService
 from app.features.service import FeatureFactoryService
+from app.order_flow.service import OrderFlowService
 from app.regime.service import MarketRegimeService
 
 settings = load_settings()
 directional_intelligence = DirectionalIntelligenceService(settings)
 market_regime = MarketRegimeService(settings)
+order_flow = OrderFlowService(settings)
 multi_timeframe_confirmation = MultiTimeframeConfirmationService(
     settings,
     directional_intelligence,
@@ -40,6 +45,7 @@ feature_factory = FeatureFactoryService(
     directional_service=directional_intelligence,
     regime_service=market_regime,
     confirmation_service=multi_timeframe_confirmation,
+    order_flow_service=order_flow,
 )
 started_at_utc = datetime.now(UTC)
 
@@ -76,6 +82,8 @@ async def readiness() -> JSONResponse:
                 directional_intelligence.get_status()
             if market_regime.enabled:
                 market_regime.get_status()
+            if order_flow.enabled:
+                order_flow.get_status()
             if multi_timeframe_confirmation.enabled:
                 multi_timeframe_confirmation.get_status()
         except Exception as exception:
@@ -114,6 +122,8 @@ async def service_info() -> dict[str, str | bool]:
         "directionalPolicyVersion": settings.directional_policy_version,
         "regimeEngineEnabled": settings.regime_engine_enabled,
         "regimePolicyVersion": settings.regime_policy_version,
+        "orderFlowEngineEnabled": settings.order_flow_engine_enabled,
+        "orderFlowPolicyVersion": settings.order_flow_policy_version,
         "confirmationEngineEnabled": settings.confirmation_engine_enabled,
         "confirmationPolicyVersion": settings.confirmation_policy_version,
         "startedAtUtc": started_at_utc.isoformat(),
@@ -152,6 +162,16 @@ async def list_engines() -> dict[str, list[object]]:
                 "canExecuteOrders": False,
             },
             {
+                "engineCode": settings.order_flow_engine_code,
+                "engineRole": "DIRECTIONAL_VOTER",
+                "enabled": settings.order_flow_engine_enabled,
+                "engineVersion": settings.order_flow_engine_version,
+                "policyVersion": settings.order_flow_policy_version,
+                "methodology": "PROXY_TICK_RULE_AND_BOOK_TOTALS",
+                "canCreateSignals": False,
+                "canExecuteOrders": False,
+            },
+            {
                 "engineCode": settings.confirmation_engine_code,
                 "engineRole": "META_CONTROLLER",
                 "enabled": settings.confirmation_engine_enabled,
@@ -162,6 +182,27 @@ async def list_engines() -> dict[str, list[object]]:
             },
         ]
     }
+
+
+@app.post(
+    "/internal/v1/market-data/quotes",
+    response_model=QuoteProcessingResponseV1,
+    tags=["order-flow"],
+)
+def process_market_quote(
+    delivery: MarketQuoteDeliveryV1,
+    internal_key: str | None = Header(
+        default=None,
+        alias="X-ThesisPulse-Internal-Key",
+    ),
+) -> QuoteProcessingResponseV1:
+    _authorize_feature_factory(internal_key)
+    result = order_flow.process_quote(delivery)
+    return QuoteProcessingResponseV1(
+        stream_position=delivery.stream_position,
+        message_uid=delivery.envelope.metadata.message_id,
+        order_flow=result,
+    )
 
 
 @app.post(
@@ -283,6 +324,42 @@ def latest_directional_output(
     output = directional_intelligence.get_latest(instrument_key, timeframe)
     if output is None:
         raise HTTPException(status_code=404, detail="Directional output was not found")
+    return output
+
+
+@app.get("/api/v1/intelligence/order-flow/status", tags=["order-flow"])
+def order_flow_status() -> dict[str, object]:
+    status = order_flow.get_status()
+    return {
+        "enabled": order_flow.enabled,
+        "provider": status.provider,
+        "engineCode": settings.order_flow_engine_code,
+        "engineVersion": settings.order_flow_engine_version,
+        "policyVersion": settings.order_flow_policy_version,
+        "methodology": "PROXY_TICK_RULE_AND_BOOK_TOTALS",
+        "quoteSampleCount": status.quote_sample_count,
+        "outputCount": status.output_count,
+        "latestProcessedAtUtc": status.latest_processed_at_utc,
+        "latestError": status.latest_error,
+        "canCreateSignals": False,
+        "canExecuteOrders": False,
+    }
+
+
+@app.get(
+    "/api/v1/intelligence/order-flow/latest/{instrument_key:path}",
+    response_model=OrderFlowEngineOutputV1,
+    tags=["order-flow"],
+)
+def latest_order_flow_output(
+    instrument_key: str,
+    timeframe: str = "5m",
+) -> OrderFlowEngineOutputV1:
+    if timeframe != "5m":
+        raise HTTPException(status_code=422, detail="Order Flow V1 supports only 5m")
+    output = order_flow.get_latest(instrument_key, timeframe)
+    if output is None:
+        raise HTTPException(status_code=404, detail="Order Flow output was not found")
     return output
 
 

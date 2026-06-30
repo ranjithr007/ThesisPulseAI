@@ -5,8 +5,11 @@ from uuid import UUID
 import pytest
 
 from app.contracts.v1.market_data import FeatureSnapshotV1, FeatureValueV1
+from app.core.settings import Settings
 from app.directional.calculator import DeterministicDirectionalCalculator
 from app.directional.definitions import DirectionalEngineOptions
+from app.directional.models import DirectionalStoreStatus
+from app.directional.service import DirectionalIntelligenceService
 from app.directional.store import InMemoryDirectionalIntelligenceStore
 from app.features.models import StoredFeatureSnapshot
 
@@ -146,6 +149,92 @@ def test_store_ignores_ineligible_feature_without_output() -> None:
     assert result.outcome == "IGNORED_INELIGIBLE"
     assert result.output is None
     assert store.get_status().output_count == 0
+
+
+def test_service_precheck_acks_ineligible_without_calling_store() -> None:
+    store = _FailingStore(AssertionError("store should not be called"))
+    service = DirectionalIntelligenceService(_enabled_settings(), store=store)
+    source = StoredFeatureSnapshot(
+        engine_output_id=1,
+        snapshot=_snapshot(8, {}, eligible=False),
+        input_candle_ids=tuple(),
+    )
+
+    result = service.process_feature(source, source.snapshot.generated_at_utc)
+
+    assert result.outcome == "IGNORED_INELIGIBLE"
+    assert result.output is None
+    assert store.process_calls == 0
+
+
+@pytest.mark.parametrize(
+    ("exception", "reason"),
+    [
+        (ValueError("Feature output expired before directional processing"), "expired"),
+        (RuntimeError("Feature output is no longer current"), "no longer current"),
+    ],
+)
+def test_service_acks_expected_source_rejections(
+    exception: Exception,
+    reason: str,
+) -> None:
+    store = _FailingStore(exception)
+    service = DirectionalIntelligenceService(_enabled_settings(), store=store)
+    source = StoredFeatureSnapshot(
+        engine_output_id=1,
+        snapshot=_snapshot(9, _long_values()),
+        input_candle_ids=tuple(),
+    )
+
+    result = service.process_feature(source, source.snapshot.generated_at_utc)
+
+    assert result.outcome == "IGNORED_INELIGIBLE"
+    assert result.output is None
+    assert reason in (result.reason or "")
+    assert store.process_calls == 1
+
+
+def test_service_reraises_infrastructure_failure_for_retry() -> None:
+    store = _FailingStore(RuntimeError("Operational database is unavailable"))
+    service = DirectionalIntelligenceService(_enabled_settings(), store=store)
+    source = StoredFeatureSnapshot(
+        engine_output_id=1,
+        snapshot=_snapshot(10, _long_values()),
+        input_candle_ids=tuple(),
+    )
+
+    with pytest.raises(RuntimeError, match="database is unavailable"):
+        service.process_feature(source, source.snapshot.generated_at_utc)
+
+
+def _enabled_settings() -> Settings:
+    return Settings(
+        feature_factory_enabled=True,
+        directional_engine_enabled=True,
+    )
+
+
+class _FailingStore:
+    provider_name = "Test"
+
+    def __init__(self, exception: Exception) -> None:
+        self._exception = exception
+        self.process_calls = 0
+
+    def process(self, source, calculator, processed_at_utc):
+        self.process_calls += 1
+        raise self._exception
+
+    def get_latest(self, instrument_key: str, timeframe: str):
+        return None
+
+    def get_status(self) -> DirectionalStoreStatus:
+        return DirectionalStoreStatus(
+            provider=self.provider_name,
+            output_count=0,
+            latest_processed_at_utc=None,
+            latest_error=None,
+        )
 
 
 def _long_values() -> dict[str, str]:

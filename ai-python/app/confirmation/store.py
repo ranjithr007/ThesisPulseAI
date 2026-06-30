@@ -36,7 +36,10 @@ class InMemoryMultiTimeframeConfirmationStore:
 
     def __init__(self) -> None:
         self._sync = RLock()
-        self._outputs: dict[str, list[StoredConfirmationOutput]] = {}
+        self._outputs: dict[
+            tuple[str, datetime],
+            list[StoredConfirmationOutput],
+        ] = {}
         self._source_identities: dict[str, StoredConfirmationOutput] = {}
         self._latest_processed_at_utc: datetime | None = None
         self._latest_error: str | None = None
@@ -49,7 +52,11 @@ class InMemoryMultiTimeframeConfirmationStore:
     ) -> ConfirmationStoreOutcome:
         processed_at = _as_utc(processed_at_utc)
         source_identity = _source_identity(bundle)
-        normalized = bundle.instrument_key.casefold()
+        primary_as_of = _primary_as_of(bundle)
+        output_key = (
+            bundle.instrument_key.casefold(),
+            primary_as_of,
+        )
         with self._sync:
             duplicate = self._source_identities.get(source_identity)
             if duplicate is not None:
@@ -60,7 +67,7 @@ class InMemoryMultiTimeframeConfirmationStore:
                     reason="The same directional and regime outputs were already confirmed",
                 )
 
-            revisions = self._outputs.setdefault(normalized, [])
+            revisions = self._outputs.setdefault(output_key, [])
             revision = len(revisions)
             output = calculator.calculate(bundle, processed_at, revision)
             source_ids = tuple(
@@ -91,9 +98,18 @@ class InMemoryMultiTimeframeConfirmationStore:
         self,
         instrument_key: str,
     ) -> StoredConfirmationOutput | None:
+        normalized = instrument_key.casefold()
         with self._sync:
-            revisions = self._outputs.get(instrument_key.casefold(), [])
-            return None if not revisions else revisions[-1]
+            candidates = [
+                revisions[-1]
+                for (key, _), revisions in self._outputs.items()
+                if key == normalized and revisions
+            ]
+            return max(
+                candidates,
+                key=lambda item: item.output.as_of_utc,
+                default=None,
+            )
 
     def get_status(self) -> ConfirmationStoreStatus:
         with self._sync:
@@ -103,6 +119,13 @@ class InMemoryMultiTimeframeConfirmationStore:
                 latest_processed_at_utc=self._latest_processed_at_utc,
                 latest_error=self._latest_error,
             )
+
+
+def _primary_as_of(bundle: ConfirmationInputBundle) -> datetime:
+    for pair in bundle.pairs:
+        if pair.timeframe == "5m":
+            return _as_utc(pair.directional.output.as_of_utc)
+    raise ValueError("Primary 5m intelligence pair is required")
 
 
 def _source_identity(bundle: ConfirmationInputBundle) -> str:

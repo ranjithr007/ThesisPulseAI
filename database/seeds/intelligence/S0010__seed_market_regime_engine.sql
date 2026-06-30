@@ -13,7 +13,7 @@ BEGIN TRY
 BEGIN TRANSACTION;
 
 IF OBJECT_ID(N'[intelligence].[engines]', N'U') IS NULL
-    THROW 610001, 'V0004 intelligence.engines is required.', 1;
+    THROW 61001, 'V0004 intelligence.engines is required.', 1;
 
 DECLARE @actor nvarchar(256) = N'ThesisPulse.Seed.S0010';
 DECLARE @seed_time datetime2(7) = '2026-06-30T00:00:00';
@@ -62,7 +62,7 @@ IF NOT EXISTS
       AND [can_execute_orders] = 0
       AND [is_active] = 1
 )
-    THROW 610002, 'Market regime engine seed drift detected.', 1;
+    THROW 61002, 'Market regime engine seed drift detected.', 1;
 
 COMMIT TRANSACTION;
 END TRY

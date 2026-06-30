@@ -58,7 +58,13 @@ public static class UpstoxServiceCollectionExtensions
             ReceiveBufferBytes = configuration.GetValue("Upstox:LiveFeed:ReceiveBufferBytes", 64 * 1024),
             MaximumMessageBytes = configuration.GetValue("Upstox:LiveFeed:MaximumMessageBytes", 4 * 1024 * 1024),
         };
-        liveFeedOptions.Validate(options.Enabled);
+        var usesSqlSubscriptions = string.Equals(
+            configuration["MarketData:Persistence:Provider"],
+            "SqlServer",
+            StringComparison.OrdinalIgnoreCase);
+        liveFeedOptions.Validate(
+            options.Enabled,
+            requireConfiguredInstrumentKeys: !usesSqlSubscriptions);
 
         services.AddSingleton(options);
         services.AddSingleton(liveFeedOptions);

@@ -2,15 +2,6 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-
-from app.contracts.v1.smart_money import (
-    SmartMoneyConceptsOutputV1,
-    SmartMoneyEvidenceV1,
-)
-from app.workflow.calculator import (
-    FusionReadyEvidenceCalculator,
-    FusionReadyEvidenceOptions,
-)
 from test_workflow_evidence import (
     BASE_TIME,
     INSTRUMENT,
@@ -20,6 +11,15 @@ from test_workflow_evidence import (
     _directional,
     _feature,
     _regime,
+)
+
+from app.contracts.v1.smart_money import (
+    SmartMoneyConceptsOutputV1,
+    SmartMoneyEvidenceV1,
+)
+from app.workflow.calculator import (
+    FusionReadyEvidenceCalculator,
+    FusionReadyEvidenceOptions,
 )
 
 

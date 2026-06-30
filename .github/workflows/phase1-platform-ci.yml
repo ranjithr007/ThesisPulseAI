@@ -57,6 +57,8 @@ jobs:
         run: dotnet run --project tests/risk/dotnet/ThesisPulse.Risk.Tests.csproj --configuration Release
       - name: Deterministic trade-plan tests
         run: dotnet run --project tests/tradeplans/dotnet/ThesisPulse.TradePlan.Tests.csproj --configuration Release
+      - name: Deterministic paper execution tests
+        run: dotnet run --project tests/execution/dotnet/ThesisPulse.Execution.Tests.csproj --configuration Release
       - name: Market Data recovery tests with diagnostics
         shell: bash
         run: |

@@ -5,7 +5,7 @@ using ThesisPulse.Shared.Contracts.Messaging.V1;
 
 namespace ThesisPulse.Shared.Infrastructure.Messaging;
 
-internal static class SqlServerMessageValues
+public static class SqlServerMessageValues
 {
     private const string ConfigurationVersionHeader = "configurationVersion";
 

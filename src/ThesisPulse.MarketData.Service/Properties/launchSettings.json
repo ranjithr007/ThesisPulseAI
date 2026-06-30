@@ -3,10 +3,11 @@
     "ThesisPulse.MarketData.Service": {
       "commandName": "Project",
       "launchBrowser": true,
+      "launchUrl": "api/v1/status",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "applicationUrl": "https://localhost:59486;http://localhost:59487"
+      "applicationUrl": "https://localhost:7101;http://localhost:5101"
     }
   }
 }

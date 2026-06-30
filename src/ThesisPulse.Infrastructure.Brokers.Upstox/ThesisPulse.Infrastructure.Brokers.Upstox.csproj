@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ThesisPulse.Infrastructure.Brokers.Upstox</RootNamespace>
+    <AssemblyName>ThesisPulse.Infrastructure.Brokers.Upstox</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\ThesisPulse.Shared.Contracts\ThesisPulse.Shared.Contracts.csproj" />
+    <ProjectReference Include="..\ThesisPulse.Shared.Infrastructure\ThesisPulse.Shared.Infrastructure.csproj" />
+    <PackageReference Include="Google.Protobuf" Version="3.27.3" />
+    <PackageReference Include="Grpc.Tools" Version="2.65.0" PrivateAssets="All" />
+  </ItemGroup>
+  <ItemGroup>
+    <Protobuf Include="Protos\MarketDataFeed.proto" GrpcServices="None" />
+  </ItemGroup>
+</Project>

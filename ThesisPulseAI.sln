@@ -30,6 +30,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThesisPulse.Portfolio.Servi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThesisPulse.Operations.Service", "src\ThesisPulse.Operations.Service\ThesisPulse.Operations.Service.csproj", "{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE011}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThesisPulse.Infrastructure.Brokers.Upstox", "src\ThesisPulse.Infrastructure.Brokers.Upstox\ThesisPulse.Infrastructure.Brokers.Upstox.csproj", "{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE012}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -92,5 +94,9 @@ Global
 		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE011}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE011}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE011}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE012}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE012}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE012}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9C61E4A-7F4D-4C58-8D87-5AC91C7AE012}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

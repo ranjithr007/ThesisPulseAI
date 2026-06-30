@@ -1,5 +1,6 @@
 using ThesisPulse.Shared.Contracts.Signals.V1;
 using ThesisPulse.Shared.Infrastructure.DependencyInjection;
+using ThesisPulse.Shared.Infrastructure.Messaging;
 using ThesisPulse.Shared.Observability.Hosting;
 using ThesisPulse.Signal.Service;
 
@@ -16,7 +17,6 @@ var allowedOrigins = builder.Configuration
     .Where(value => !string.IsNullOrWhiteSpace(value))
     .Cast<string>()
     .ToArray();
-
 if (allowedOrigins.Length == 0)
 {
     allowedOrigins = new[] { "http://localhost:5173" };
@@ -24,6 +24,8 @@ if (allowedOrigins.Length == 0)
 
 builder.Services.AddThesisPulsePlatformFoundation();
 builder.Services.AddThesisPulseMessaging(builder.Configuration, serviceName);
+builder.Services.AddThesisPulseMarketDataConsumerState(builder.Configuration);
+builder.Services.AddEventConsumerState();
 builder.Services.AddThesisPulseSignalStore(builder.Configuration, serviceName);
 builder.Services.AddSignalStreamPublisher(builder.Configuration);
 builder.Services.AddSignalMaintenance(builder.Configuration);
@@ -46,6 +48,7 @@ app.UseCors(frontendCorsPolicy);
 app.MapThesisPulsePlatformEndpoints(serviceName);
 app.MapSignalEndpoints();
 app.MapSignalMaintenance();
+app.MapMarketDataConsumerEndpoints();
 
 app.MapGet("/api/v1/status", (IConfiguration configuration) => Results.Ok(new
 {
@@ -55,6 +58,7 @@ app.MapGet("/api/v1/status", (IConfiguration configuration) => Results.Ok(new
     signalStatusTransitionsEnabled = true,
     signalMaintenanceEnabled = configuration.GetValue("SignalMaintenance:Enabled", false),
     signalPublishingEnabled = configuration.GetValue("SignalRealtime:Enabled", false),
+    marketDataConsumerEnabled = configuration.GetValue("MarketDataConsumer:Enabled", false),
     signalPersistence = configuration["SignalPersistence:Provider"] ?? "InMemory",
     messagingProvider = configuration["Messaging:Provider"] ?? "InMemory",
     creatorEngineCode = configuration["SignalPersistence:CreatorEngineCode"]

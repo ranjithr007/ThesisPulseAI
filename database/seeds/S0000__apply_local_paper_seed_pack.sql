@@ -22,7 +22,11 @@ GO
 GO
 :r $(SeedRoot)/intelligence/S0006__seed_mock_fusion_engine.sql
 GO
+:r $(SeedRoot)/reference/S0007__seed_upstox_market_data_sources.sql
+GO
 :r $(VerificationRoot)/S0001__verify_reference_seeds.sql
 GO
 :r $(VerificationRoot)/S0002__verify_signal_engine_seed.sql
+GO
+:r $(VerificationRoot)/S0003__verify_upstox_market_data_sources.sql
 GO

@@ -39,12 +39,6 @@ class InMemoryOrderFlowStore:
             if metadata.message_id in self._seen_quote_messages:
                 return "DUPLICATE"
             self._seen_quote_messages.add(metadata.message_id)
-            if (
-                payload.quality_status != "VALID"
-                or not payload.is_usable_for_new_exposure
-            ):
-                self._latest_processed_at_utc = processed_at
-                return "IGNORED_INELIGIBLE"
             samples = self._samples[payload.instrument_key]
             samples.append(
                 QuoteSample(
@@ -66,7 +60,12 @@ class InMemoryOrderFlowStore:
                 del samples[: len(samples) - self._maximum_samples]
             self._latest_processed_at_utc = processed_at
             self._latest_error = None
-            return "CREATED"
+            return (
+                "CREATED"
+                if payload.quality_status == "VALID"
+                and payload.is_usable_for_new_exposure
+                else "IGNORED_INELIGIBLE"
+            )
 
     def process_candle(
         self,

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using ThesisPulse.Shared.Infrastructure.MarketData;
 
 namespace ThesisPulse.Shared.Infrastructure.DependencyInjection;
@@ -14,6 +15,8 @@ public static class MarketDataServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentException.ThrowIfNullOrWhiteSpace(serviceName);
+
+        services.TryAddSingleton(TimeProvider.System);
 
         var freshnessOptions = new MarketDataFreshnessOptions
         {
@@ -39,6 +42,45 @@ public static class MarketDataServiceCollectionExtensions
         services.AddSingleton(freshnessOptions);
         services.AddSingleton<IMarketDataFreshnessEvaluator, MarketDataFreshnessEvaluator>();
 
+        var recoveryOptions = new MarketDataRecoveryOptions
+        {
+            Enabled = configuration.GetValue("MarketData:Recovery:Enabled", false),
+            PollIntervalSeconds = configuration.GetValue(
+                "MarketData:Recovery:PollIntervalSeconds",
+                60),
+            GracePeriodSeconds = configuration.GetValue(
+                "MarketData:Recovery:GracePeriodSeconds",
+                45),
+            MaximumGapCandles = configuration.GetValue(
+                "MarketData:Recovery:MaximumGapCandles",
+                500),
+            MaximumRecoveryDays = configuration.GetValue(
+                "MarketData:Recovery:MaximumRecoveryDays",
+                30),
+            SessionOpenIndia = TimeOnly.Parse(
+                configuration["MarketData:Recovery:SessionOpenIndia"] ?? "09:15"),
+            SessionCloseIndia = TimeOnly.Parse(
+                configuration["MarketData:Recovery:SessionCloseIndia"] ?? "15:30"),
+        };
+        recoveryOptions.Validate();
+        services.AddSingleton(recoveryOptions);
+        services.AddSingleton<IMarketDataGapDetector, MarketDataGapDetector>();
+
+        var configuredSubscriptions = new ConfiguredMarketDataSubscriptionOptions
+        {
+            ProviderCode = configuration["Upstox:ProviderCode"] ?? "UPSTOX",
+            FeedMode = configuration["Upstox:LiveFeed:Mode"] ?? "full",
+            RecoveryTimeframe = configuration["MarketData:Recovery:Timeframe"] ?? "5m",
+            InstrumentKeys = configuration
+                .GetSection("Upstox:LiveFeed:InstrumentKeys")
+                .GetChildren()
+                .Select(item => item.Value)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Cast<string>()
+                .ToArray(),
+        };
+        services.AddSingleton(configuredSubscriptions);
+
         var provider = configuration["MarketData:Persistence:Provider"] ?? "InMemory";
 
         if (provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase))
@@ -48,6 +90,10 @@ public static class MarketDataServiceCollectionExtensions
                 serviceProvider.GetRequiredService<InMemoryMarketDataStore>());
             services.AddSingleton<IMarketDataStore>(serviceProvider =>
                 serviceProvider.GetRequiredService<InMemoryMarketDataStore>());
+            services.AddSingleton<IMarketDataSubscriptionCatalog,
+                ConfiguredMarketDataSubscriptionCatalog>();
+            services.AddSingleton<IMarketDataRecoveryStateStore,
+                InMemoryMarketDataRecoveryStateStore>();
             return services;
         }
 
@@ -83,6 +129,10 @@ public static class MarketDataServiceCollectionExtensions
         services.AddSingleton(sqlOptions);
         services.AddSingleton<IInstrumentCatalogStore, SqlServerInstrumentCatalogStore>();
         services.AddSingleton<IMarketDataStore, SqlServerMarketDataStore>();
+        services.AddSingleton<IMarketDataSubscriptionCatalog,
+            SqlServerMarketDataSubscriptionCatalog>();
+        services.AddSingleton<IMarketDataRecoveryStateStore,
+            SqlServerMarketDataRecoveryStateStore>();
         return services;
     }
 }

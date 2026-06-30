@@ -6,9 +6,9 @@ from decimal import Decimal, InvalidOperation
 @dataclass(frozen=True, slots=True)
 class Settings:
     service_name: str = "ThesisPulse.AI"
-    service_version: str = "0.6.0"
+    service_version: str = "0.7.0"
     contract_version: str = "v1"
-    configuration_version: str = "automatic-intelligence-intake-v1.0.0"
+    configuration_version: str = "order-flow-foundation-v1.0.0"
     environment: str = "PAPER"
     live_execution_enabled: bool = False
     feature_factory_enabled: bool = False
@@ -37,6 +37,17 @@ class Settings:
     confirmation_engine_version: str = "1.0.0"
     confirmation_policy_version: str = "multi-timeframe-confirmation-v1.0.0"
     confirmation_engine_actor: str = "ThesisPulse.AI.Confirmation"
+    order_flow_engine_enabled: bool = False
+    order_flow_engine_code: str = "THESIS_PULSE_ORDER_FLOW"
+    order_flow_engine_version: str = "1.0.0"
+    order_flow_policy_version: str = "order-flow-proxy-v1.0.0"
+    order_flow_engine_actor: str = "ThesisPulse.AI.OrderFlow"
+    order_flow_minimum_quote_samples: int = 10
+    order_flow_minimum_usable_ratio: Decimal = Decimal("0.80")
+    order_flow_minimum_traded_quantity_coverage: Decimal = Decimal("0.02")
+    order_flow_maximum_quote_age_seconds: int = 30
+    order_flow_directional_threshold: Decimal = Decimal("0.20")
+    order_flow_fusion_confidence_threshold: Decimal = Decimal("0.55")
     workflow_evidence_enabled: bool = False
     workflow_weight_configuration_version: str = "fusion-weights-v1.0.0"
     workflow_proposal_policy_version: str = "atr-trade-proposal-v1.0.0"
@@ -71,6 +82,10 @@ def load_settings() -> Settings:
         "THESISPULSE_CONFIRMATION_ENGINE_ENABLED",
         False,
     )
+    order_flow_enabled = _read_bool(
+        "THESISPULSE_ORDER_FLOW_ENGINE_ENABLED",
+        False,
+    )
     workflow_evidence_enabled = _read_bool(
         "THESISPULSE_WORKFLOW_EVIDENCE_ENABLED",
         False,
@@ -95,6 +110,18 @@ def load_settings() -> Settings:
     )
     command_timeout = _read_int(
         "THESISPULSE_SQL_COMMAND_TIMEOUT_SECONDS",
+        30,
+        minimum=1,
+        maximum=300,
+    )
+    minimum_quote_samples = _read_int(
+        "THESISPULSE_ORDER_FLOW_MINIMUM_QUOTE_SAMPLES",
+        10,
+        minimum=2,
+        maximum=10000,
+    )
+    maximum_quote_age = _read_int(
+        "THESISPULSE_ORDER_FLOW_MAXIMUM_QUOTE_AGE_SECONDS",
         30,
         minimum=1,
         maximum=300,
@@ -124,6 +151,10 @@ def load_settings() -> Settings:
         raise RuntimeError(
             "Multi-timeframe confirmation requires the Market Regime Engine"
         )
+    if order_flow_enabled and not feature_enabled:
+        raise RuntimeError(
+            "Order Flow Engine requires canonical candle intake to be enabled"
+        )
     if workflow_evidence_enabled and not confirmation_enabled:
         raise RuntimeError(
             "Workflow evidence requires multi-timeframe confirmation"
@@ -134,10 +165,10 @@ def load_settings() -> Settings:
         )
 
     return Settings(
-        service_version=os.getenv("THESISPULSE_SERVICE_VERSION", "0.6.0"),
+        service_version=os.getenv("THESISPULSE_SERVICE_VERSION", "0.7.0"),
         configuration_version=os.getenv(
             "THESISPULSE_CONFIGURATION_VERSION",
-            "automatic-intelligence-intake-v1.0.0",
+            "order-flow-foundation-v1.0.0",
         ),
         environment=environment,
         live_execution_enabled=False,
@@ -216,6 +247,49 @@ def load_settings() -> Settings:
         confirmation_engine_actor=os.getenv(
             "THESISPULSE_CONFIRMATION_ENGINE_ACTOR",
             "ThesisPulse.AI.Confirmation",
+        ),
+        order_flow_engine_enabled=order_flow_enabled,
+        order_flow_engine_code=os.getenv(
+            "THESISPULSE_ORDER_FLOW_ENGINE_CODE",
+            "THESIS_PULSE_ORDER_FLOW",
+        ),
+        order_flow_engine_version=os.getenv(
+            "THESISPULSE_ORDER_FLOW_ENGINE_VERSION",
+            "1.0.0",
+        ),
+        order_flow_policy_version=os.getenv(
+            "THESISPULSE_ORDER_FLOW_POLICY_VERSION",
+            "order-flow-proxy-v1.0.0",
+        ),
+        order_flow_engine_actor=os.getenv(
+            "THESISPULSE_ORDER_FLOW_ENGINE_ACTOR",
+            "ThesisPulse.AI.OrderFlow",
+        ),
+        order_flow_minimum_quote_samples=minimum_quote_samples,
+        order_flow_minimum_usable_ratio=_read_decimal(
+            "THESISPULSE_ORDER_FLOW_MINIMUM_USABLE_RATIO",
+            Decimal("0.80"),
+            minimum=Decimal("0"),
+            maximum=Decimal("1"),
+        ),
+        order_flow_minimum_traded_quantity_coverage=_read_decimal(
+            "THESISPULSE_ORDER_FLOW_MINIMUM_TRADED_QUANTITY_COVERAGE",
+            Decimal("0.02"),
+            minimum=Decimal("0"),
+            maximum=Decimal("1"),
+        ),
+        order_flow_maximum_quote_age_seconds=maximum_quote_age,
+        order_flow_directional_threshold=_read_decimal(
+            "THESISPULSE_ORDER_FLOW_DIRECTIONAL_THRESHOLD",
+            Decimal("0.20"),
+            minimum=Decimal("0.01"),
+            maximum=Decimal("1"),
+        ),
+        order_flow_fusion_confidence_threshold=_read_decimal(
+            "THESISPULSE_ORDER_FLOW_FUSION_CONFIDENCE_THRESHOLD",
+            Decimal("0.55"),
+            minimum=Decimal("0"),
+            maximum=Decimal("1"),
         ),
         workflow_evidence_enabled=workflow_evidence_enabled,
         workflow_weight_configuration_version=os.getenv(

@@ -61,19 +61,39 @@ class DeterministicSmcCalculator:
 
         if current and prior and last_high:
             threshold = last_high.high_price * self._options.minimum_break_fraction
-            if prior.close_price <= last_high.high_price and current.close_price > last_high.high_price + threshold:
-                structure_event = "CHOCH_UP" if structure_state == "BEARISH" else "BOS_UP"
+            bullish_break = (
+                prior.close_price <= last_high.high_price
+                and current.close_price > last_high.high_price + threshold
+            )
+            high_sweep = (
+                current.high_price > last_high.high_price
+                and current.close_price <= last_high.high_price
+            )
+            if bullish_break:
+                structure_event = (
+                    "CHOCH_UP" if structure_state == "BEARISH" else "BOS_UP"
+                )
                 structure_signal = ONE
-            elif current.high_price > last_high.high_price and current.close_price <= last_high.high_price:
+            elif high_sweep:
                 liquidity_event = "SWEEP_HIGH"
                 liquidity_signal = -ONE
 
         if current and prior and last_low:
             threshold = last_low.low_price * self._options.minimum_break_fraction
-            if prior.close_price >= last_low.low_price and current.close_price < last_low.low_price - threshold:
-                structure_event = "CHOCH_DOWN" if structure_state == "BULLISH" else "BOS_DOWN"
+            bearish_break = (
+                prior.close_price >= last_low.low_price
+                and current.close_price < last_low.low_price - threshold
+            )
+            low_sweep = (
+                current.low_price < last_low.low_price
+                and current.close_price >= last_low.low_price
+            )
+            if bearish_break:
+                structure_event = (
+                    "CHOCH_DOWN" if structure_state == "BULLISH" else "BOS_DOWN"
+                )
                 structure_signal = -ONE
-            elif current.low_price < last_low.low_price and current.close_price >= last_low.low_price:
+            elif low_sweep:
                 liquidity_event = "SWEEP_LOW"
                 liquidity_signal = ONE
 
@@ -155,9 +175,13 @@ class DeterministicSmcCalculator:
             structure_state=structure_state,
             structure_event=structure_event,
             liquidity_event=liquidity_event,
-            last_swing_high=None if last_high is None else _q(last_high.high_price),
+            last_swing_high=(
+                None if last_high is None else _q(last_high.high_price)
+            ),
             last_swing_low=None if last_low is None else _q(last_low.low_price),
-            swing_high_at_utc=None if last_high is None else last_high.open_at_utc,
+            swing_high_at_utc=(
+                None if last_high is None else last_high.open_at_utc
+            ),
             swing_low_at_utc=None if last_low is None else last_low.open_at_utc,
             zones=zones,
             input_count=len(ordered),
@@ -171,21 +195,34 @@ class DeterministicSmcCalculator:
         )
 
 
-def _pivots(candles: list[CandleInput], left: int, right: int):
+def _pivots(
+    candles: list[CandleInput],
+    left: int,
+    right: int,
+) -> tuple[list[CandleInput], list[CandleInput]]:
     highs: list[CandleInput] = []
     lows: list[CandleInput] = []
     for index in range(left, len(candles) - right):
         item = candles[index]
         left_slice = candles[index - left:index]
         right_slice = candles[index + 1:index + right + 1]
-        if all(item.high_price > other.high_price for other in left_slice + right_slice):
+        if all(
+            item.high_price > other.high_price
+            for other in left_slice + right_slice
+        ):
             highs.append(item)
-        if all(item.low_price < other.low_price for other in left_slice + right_slice):
+        if all(
+            item.low_price < other.low_price
+            for other in left_slice + right_slice
+        ):
             lows.append(item)
     return highs, lows
 
 
-def _structure_state(highs: list[CandleInput], lows: list[CandleInput]) -> str:
+def _structure_state(
+    highs: list[CandleInput],
+    lows: list[CandleInput],
+) -> str:
     if len(highs) < 2 or len(lows) < 2:
         return "UNKNOWN"
     higher_high = highs[-1].high_price > highs[-2].high_price
@@ -199,30 +236,100 @@ def _structure_state(highs: list[CandleInput], lows: list[CandleInput]) -> str:
     return "RANGING"
 
 
-def _zones(candles: list[CandleInput], structure_event: str) -> list[SmcZoneV1]:
+def _zones(
+    candles: list[CandleInput],
+    structure_event: str,
+) -> list[SmcZoneV1]:
     zones: list[SmcZoneV1] = []
     for index in range(2, len(candles)):
         first = candles[index - 2]
         third = candles[index]
         if third.low_price > first.high_price:
-            zones.append(_zone("BULLISH_FVG", first.high_price, third.low_price, third, candles))
+            zones.append(
+                _zone(
+                    "BULLISH_FVG",
+                    first.high_price,
+                    third.low_price,
+                    third,
+                    candles,
+                )
+            )
         elif third.high_price < first.low_price:
-            zones.append(_zone("BEARISH_FVG", third.high_price, first.low_price, third, candles))
+            zones.append(
+                _zone(
+                    "BEARISH_FVG",
+                    third.high_price,
+                    first.low_price,
+                    third,
+                    candles,
+                )
+            )
     if structure_event in {"BOS_UP", "CHOCH_UP"}:
-        opposing = next((item for item in reversed(candles[:-1]) if item.close_price < item.open_price), None)
+        opposing = next(
+            (
+                item
+                for item in reversed(candles[:-1])
+                if item.close_price < item.open_price
+            ),
+            None,
+        )
         if opposing:
-            zones.append(_zone("BULLISH_ORDER_BLOCK", opposing.low_price, opposing.high_price, opposing, candles))
+            zones.append(
+                _zone(
+                    "BULLISH_ORDER_BLOCK",
+                    opposing.low_price,
+                    opposing.high_price,
+                    opposing,
+                    candles,
+                )
+            )
     elif structure_event in {"BOS_DOWN", "CHOCH_DOWN"}:
-        opposing = next((item for item in reversed(candles[:-1]) if item.close_price > item.open_price), None)
+        opposing = next(
+            (
+                item
+                for item in reversed(candles[:-1])
+                if item.close_price > item.open_price
+            ),
+            None,
+        )
         if opposing:
-            zones.append(_zone("BEARISH_ORDER_BLOCK", opposing.low_price, opposing.high_price, opposing, candles))
+            zones.append(
+                _zone(
+                    "BEARISH_ORDER_BLOCK",
+                    opposing.low_price,
+                    opposing.high_price,
+                    opposing,
+                    candles,
+                )
+            )
     return zones[-8:]
 
 
-def _zone(kind: str, lower: Decimal, upper: Decimal, source: CandleInput, candles: list[CandleInput]) -> SmcZoneV1:
-    later = [item for item in candles if item.open_at_utc > source.open_at_utc]
-    mitigated = any(item.low_price <= upper and item.high_price >= lower for item in later)
-    zone_uid = uuid5(NAMESPACE_URL, f"{kind}|{source.instrument_key}|{source.timeframe}|{source.open_at_utc.isoformat()}|{lower}|{upper}")
+def _zone(
+    kind: str,
+    lower: Decimal,
+    upper: Decimal,
+    source: CandleInput,
+    candles: list[CandleInput],
+) -> SmcZoneV1:
+    later = [
+        item for item in candles if item.open_at_utc > source.open_at_utc
+    ]
+    mitigated = any(
+        item.low_price <= upper and item.high_price >= lower
+        for item in later
+    )
+    identity = "|".join(
+        [
+            kind,
+            source.instrument_key,
+            source.timeframe,
+            source.open_at_utc.isoformat(),
+            str(lower),
+            str(upper),
+        ]
+    )
+    zone_uid = uuid5(NAMESPACE_URL, identity)
     return SmcZoneV1(
         zone_uid=zone_uid,
         zone_type=kind,
@@ -235,14 +342,37 @@ def _zone(kind: str, lower: Decimal, upper: Decimal, source: CandleInput, candle
 
 
 def _zone_signal(zones: list[SmcZoneV1], category: str) -> Decimal:
-    active = [item for item in zones if not item.is_mitigated and category in item.zone_type]
+    active = [
+        item
+        for item in zones
+        if not item.is_mitigated and category in item.zone_type
+    ]
     if not active:
         return ZERO
     latest = active[-1]
     return ONE if latest.zone_type.startswith("BULLISH") else -ONE
 
 
-def _evidence(structure_event, liquidity_event, zones, structure_signal, liquidity_signal, ob_signal, fvg_signal, options):
+def _evidence(
+    structure_event: str,
+    liquidity_event: str,
+    zones: list[SmcZoneV1],
+    structure_signal: Decimal,
+    liquidity_signal: Decimal,
+    ob_signal: Decimal,
+    fvg_signal: Decimal,
+    options: SmcOptions,
+) -> list[SmcEvidenceV1]:
+    active_order_blocks = sum(
+        1
+        for zone in zones
+        if "ORDER_BLOCK" in zone.zone_type and not zone.is_mitigated
+    )
+    active_fvgs = sum(
+        1
+        for zone in zones
+        if "FVG" in zone.zone_type and not zone.is_mitigated
+    )
     return [
         SmcEvidenceV1(
             code="MARKET_STRUCTURE",
@@ -260,14 +390,20 @@ def _evidence(structure_event, liquidity_event, zones, structure_signal, liquidi
         ),
         SmcEvidenceV1(
             code="ORDER_BLOCK_CONTEXT",
-            message=f"Active order-block bias from {len([z for z in zones if 'ORDER_BLOCK' in z.zone_type and not z.is_mitigated])} zone(s).",
+            message=(
+                "Active order-block bias from "
+                f"{active_order_blocks} zone(s)."
+            ),
             impact=_impact(ob_signal),
             weight=options.order_block_weight,
             contribution=_q(ob_signal * options.order_block_weight),
         ),
         SmcEvidenceV1(
             code="FAIR_VALUE_GAP_CONTEXT",
-            message=f"Active fair-value-gap bias from {len([z for z in zones if 'FVG' in z.zone_type and not z.is_mitigated])} zone(s).",
+            message=(
+                "Active fair-value-gap bias from "
+                f"{active_fvgs} zone(s)."
+            ),
             impact=_impact(fvg_signal),
             weight=options.fair_value_gap_weight,
             contribution=_q(fvg_signal * options.fair_value_gap_weight),

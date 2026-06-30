@@ -43,6 +43,12 @@
       "path": "database/seeds/reference/S0007__seed_upstox_market_data_sources.sql",
       "scope": "paper_market_data",
       "activation": "provider_identity_only"
+    },
+    {
+      "sequence": 8,
+      "path": "database/seeds/intelligence/S0008__seed_feature_factory_engine.sql",
+      "scope": "paper_intelligence",
+      "activation": "context_provider_only"
     }
   ],
   "excluded": [

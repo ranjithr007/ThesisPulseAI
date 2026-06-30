@@ -15,6 +15,8 @@ public sealed record MarketDataDispatchOptions
     public string? InternalApiKey { get; init; }
     public Uri? SignalServiceBaseUrl { get; init; }
     public Uri? TradingApiBaseUrl { get; init; }
+    public bool AiFeatureFactoryEnabled { get; init; }
+    public Uri? AiServiceBaseUrl { get; init; }
     public int BatchSize { get; init; } = 100;
     public int PollIntervalMilliseconds { get; init; } = 1000;
 
@@ -28,6 +30,7 @@ public sealed record MarketDataDispatchOptions
         if (string.IsNullOrWhiteSpace(InternalApiKey) ||
             SignalServiceBaseUrl is null ||
             TradingApiBaseUrl is null ||
+            (AiFeatureFactoryEnabled && AiServiceBaseUrl is null) ||
             BatchSize is < 1 or > 1000 ||
             PollIntervalMilliseconds is < 100 or > 60000)
         {
@@ -198,6 +201,19 @@ public sealed class MarketDataFanoutClient(
             path,
             message,
             cancellationToken);
+
+        if (options.AiFeatureFactoryEnabled &&
+            message.Metadata.EventType.Equals(
+                MarketDataPublicationContractV1.CandleEventType,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            await SendToAsync(
+                "AiFeatureFactoryMarketData",
+                options.AiServiceBaseUrl!,
+                "/internal/v1/market-data/candles",
+                message,
+                cancellationToken);
+        }
     }
 
     private async Task SendToAsync(

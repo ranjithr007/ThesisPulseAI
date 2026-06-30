@@ -139,4 +139,5 @@ public sealed record PaperOrderTransitionResultV1(
     bool IdempotentReplay,
     IReadOnlyCollection<string> Reasons,
     PaperOrderSnapshotV1? PaperOrder,
-    DateTimeOffset EvaluatedAtUtc);
+    DateTimeOffset EvaluatedAtUtc,
+    Guid? FillUid = null);

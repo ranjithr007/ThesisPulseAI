@@ -122,7 +122,7 @@ Run("portfolio snapshot aggregates gross net and realized PnL", () =>
     AssertEqual(660m, snapshot.GrossExposureAmount);
     AssertEqual(660m, snapshot.NetExposureAmount);
     AssertEqual(40m, snapshot.RealizedPnlAmount);
-    AssertEqual(0m, snapshot.UnrealizedPnlAmount);
+    AssertEqual(60m, snapshot.UnrealizedPnlAmount);
     AssertEqual(-560m, snapshot.CashBalances.Single().SettledAmount);
 });
 

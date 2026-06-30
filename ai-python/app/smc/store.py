@@ -15,14 +15,21 @@ class InMemorySmcStore:
         if maximum_candles_per_scope < 64:
             raise ValueError("maximum_candles_per_scope must be at least 64")
         self._maximum_candles = maximum_candles_per_scope
-        self._candles: dict[tuple[str, str], list[CandleInput]] = defaultdict(list)
+        self._candles: dict[tuple[str, str], list[CandleInput]] = defaultdict(
+            list
+        )
         self._outputs_by_source: dict[UUID, StoredSmcOutput] = {}
         self._latest_by_scope: dict[tuple[str, str], StoredSmcOutput] = {}
         self._sync = RLock()
         self._latest_processed_at_utc: datetime | None = None
         self._latest_error: str | None = None
 
-    def process(self, delivery: MarketCandleDeliveryV1, calculator, processed_at_utc: datetime) -> SmcStoreOutcome:
+    def process(
+        self,
+        delivery: MarketCandleDeliveryV1,
+        calculator,
+        processed_at_utc: datetime,
+    ) -> SmcStoreOutcome:
         processed_at = _as_utc(processed_at_utc)
         metadata = delivery.envelope.metadata
         payload = delivery.envelope.payload
@@ -65,7 +72,9 @@ class InMemorySmcStore:
                     revision=payload.revision,
                     received_at_utc=_as_utc(payload.received_at_utc),
                     quality_status=payload.quality_status,
-                    is_usable_for_new_exposure=payload.is_usable_for_new_exposure,
+                    is_usable_for_new_exposure=(
+                        payload.is_usable_for_new_exposure
+                    ),
                 )
             )
             candles.sort(key=lambda item: (item.open_at_utc, item.revision))
@@ -102,7 +111,11 @@ class InMemorySmcStore:
                 output=output,
             )
 
-    def get_latest(self, instrument_key: str, timeframe: str) -> StoredSmcOutput | None:
+    def get_latest(
+        self,
+        instrument_key: str,
+        timeframe: str,
+    ) -> StoredSmcOutput | None:
         with self._sync:
             return self._latest_by_scope.get((instrument_key, timeframe))
 

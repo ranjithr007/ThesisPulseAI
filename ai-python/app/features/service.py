@@ -6,9 +6,10 @@ from app.contracts.v1.market_data import (
     MarketCandleDeliveryV1,
 )
 from app.core.settings import Settings
+from app.directional.service import DirectionalIntelligenceService
 from app.features.calculator import DeterministicFeatureCalculator
 from app.features.definitions import FeatureFactoryOptions
-from app.features.models import FeatureStoreStatus
+from app.features.models import FeatureStoreStatus, StoredFeatureSnapshot
 from app.features.sql_store import SqlServerFeatureFactoryStore
 from app.features.store import FeatureFactoryStore, InMemoryFeatureFactoryStore
 
@@ -18,6 +19,7 @@ class FeatureFactoryService:
         self,
         settings: Settings,
         store: FeatureFactoryStore | None = None,
+        directional_service: DirectionalIntelligenceService | None = None,
     ) -> None:
         self._settings = settings
         options = FeatureFactoryOptions(
@@ -28,6 +30,9 @@ class FeatureFactoryService:
         )
         self._calculator = DeterministicFeatureCalculator(options)
         self._store = store or _create_store(settings)
+        self._directional = directional_service or DirectionalIntelligenceService(
+            settings
+        )
 
     @property
     def enabled(self) -> bool:
@@ -36,6 +41,10 @@ class FeatureFactoryService:
     @property
     def internal_api_key(self) -> str | None:
         return self._settings.feature_factory_internal_api_key
+
+    @property
+    def directional(self) -> DirectionalIntelligenceService:
+        return self._directional
 
     def process_candle(
         self,
@@ -48,11 +57,18 @@ class FeatureFactoryService:
             self._calculator,
             processed_at,
         )
+        stored = self._resolve_stored_snapshot(delivery, outcome.snapshot)
+        directional = (
+            None
+            if stored is None
+            else self._directional.process_feature(stored, processed_at)
+        )
         return FeatureProcessingResultV1(
             outcome=outcome.outcome,
             stream_position=delivery.stream_position,
             message_uid=delivery.envelope.metadata.message_id,
             snapshot=outcome.snapshot,
+            directional=directional,
             reason=outcome.reason,
         )
 
@@ -66,6 +82,25 @@ class FeatureFactoryService:
 
     def get_status(self) -> FeatureStoreStatus:
         return self._store.get_status()
+
+    def _resolve_stored_snapshot(
+        self,
+        delivery: MarketCandleDeliveryV1,
+        snapshot: FeatureSnapshotV1 | None,
+    ) -> StoredFeatureSnapshot | None:
+        if snapshot is None:
+            return None
+        latest = self._store.get_latest(
+            delivery.envelope.payload.instrument_key,
+            delivery.envelope.payload.timeframe,
+        )
+        if latest is None or latest.snapshot.snapshot_uid != snapshot.snapshot_uid:
+            return StoredFeatureSnapshot(
+                engine_output_id=None,
+                snapshot=snapshot,
+                input_candle_ids=tuple(),
+            )
+        return latest
 
 
 def _create_store(settings: Settings) -> FeatureFactoryStore:

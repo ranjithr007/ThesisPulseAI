@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import NAMESPACE_URL, uuid5
 
 from app.contracts.v1.confirmation import MultiTimeframeConfirmationOutputV1
 from app.contracts.v1.directional import DirectionalEngineOutputV1

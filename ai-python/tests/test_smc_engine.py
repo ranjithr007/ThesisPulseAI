@@ -8,12 +8,12 @@ from app.contracts.v1.market_data import (
     MarketCandlePublishedV1,
     MarketDataMessageMetadataV1,
 )
+from app.core.settings import Settings
 from app.features.models import CandleInput
 from app.smc.calculator import DeterministicSmcCalculator
 from app.smc.definitions import SmcOptions
 from app.smc.service import SmartMoneyConceptsService
 from app.smc.store import InMemorySmcStore
-from app.core.settings import Settings
 
 BASE_TIME = datetime(2026, 6, 30, 10, 0, tzinfo=UTC)
 INSTRUMENT = "NSE_EQ|INE002A01018"
@@ -24,8 +24,18 @@ def test_bullish_break_of_structure_is_deterministic() -> None:
     candles = _bos_up_candles()
     delivery = _delivery(candles[-1], message_int=900)
 
-    first = calculator.calculate(delivery, candles, candles[-1].close_at_utc, 0)
-    second = calculator.calculate(delivery, candles, candles[-1].close_at_utc, 0)
+    first = calculator.calculate(
+        delivery,
+        candles,
+        candles[-1].close_at_utc,
+        0,
+    )
+    second = calculator.calculate(
+        delivery,
+        candles,
+        candles[-1].close_at_utc,
+        0,
+    )
 
     assert first == second
     assert first.structure_event == "BOS_UP"
@@ -41,7 +51,12 @@ def test_low_liquidity_sweep_supports_long_without_future_candles() -> None:
     candles = _sweep_low_candles()
     delivery = _delivery(candles[-1], message_int=901)
 
-    output = calculator.calculate(delivery, candles, candles[-1].close_at_utc, 0)
+    output = calculator.calculate(
+        delivery,
+        candles,
+        candles[-1].close_at_utc,
+        0,
+    )
 
     assert output.liquidity_event == "SWEEP_LOW"
     assert output.direction == "LONG"
@@ -54,9 +69,16 @@ def test_three_candle_imbalance_creates_bullish_fvg_zone() -> None:
     candles = _fvg_candles()
     delivery = _delivery(candles[-1], message_int=902)
 
-    output = calculator.calculate(delivery, candles, candles[-1].close_at_utc, 0)
+    output = calculator.calculate(
+        delivery,
+        candles,
+        candles[-1].close_at_utc,
+        0,
+    )
 
-    bullish = [item for item in output.zones if item.zone_type == "BULLISH_FVG"]
+    bullish = [
+        item for item in output.zones if item.zone_type == "BULLISH_FVG"
+    ]
     assert bullish
     assert all(item.lower_price < item.upper_price for item in bullish)
     assert all(item.formed_at_utc <= output.as_of_utc for item in bullish)
@@ -67,7 +89,12 @@ def test_insufficient_history_fails_closed() -> None:
     candles = _bos_up_candles()[:6]
     delivery = _delivery(candles[-1], message_int=903)
 
-    output = calculator.calculate(delivery, candles, candles[-1].close_at_utc, 0)
+    output = calculator.calculate(
+        delivery,
+        candles,
+        candles[-1].close_at_utc,
+        0,
+    )
 
     assert output.data_quality_status == "INVALID"
     assert output.is_eligible_for_fusion is False
@@ -81,8 +108,9 @@ def test_service_is_idempotent_for_same_source_candle() -> None:
         store=store,
         enabled=True,
     )
+    candles = _bos_up_candles()
     results = []
-    for index, candle in enumerate(_bos_up_candles(), start=1):
+    for index, candle in enumerate(candles, start=1):
         results.append(
             service.process_candle(
                 _delivery(candle, message_int=1000 + index),
@@ -90,9 +118,10 @@ def test_service_is_idempotent_for_same_source_candle() -> None:
             )
         )
 
+    last_message_id = 1000 + len(candles)
     duplicate = service.process_candle(
-        _delivery(_bos_up_candles()[-1], message_int=1000 + len(_bos_up_candles())),
-        _bos_up_candles()[-1].close_at_utc,
+        _delivery(candles[-1], message_int=last_message_id),
+        candles[-1].close_at_utc,
     )
 
     assert results[-1].output is not None
@@ -173,7 +202,10 @@ def _candle(index: int, open_price, high, low, close) -> CandleInput:
     )
 
 
-def _delivery(candle: CandleInput, message_int: int) -> MarketCandleDeliveryV1:
+def _delivery(
+    candle: CandleInput,
+    message_int: int,
+) -> MarketCandleDeliveryV1:
     return MarketCandleDeliveryV1(
         stream_position=message_int,
         envelope=MarketCandleEnvelopeV1(

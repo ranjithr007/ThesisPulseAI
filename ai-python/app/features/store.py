@@ -36,7 +36,7 @@ class InMemoryFeatureFactoryStore:
 
     def __init__(self) -> None:
         self._sync = RLock()
-        self._messages: set[str] = set()
+        self._messages: dict[str, StoredFeatureSnapshot | None] = {}
         self._candles: dict[tuple[str, str, datetime], CandleInput] = {}
         self._snapshots: dict[
             tuple[str, str, datetime],
@@ -58,17 +58,21 @@ class InMemoryFeatureFactoryStore:
 
         with self._sync:
             if message_key in self._messages:
+                stored = self._messages[message_key]
                 return FeatureStoreProcessOutcome(
                     outcome="DUPLICATE",
-                    snapshot=None,
+                    snapshot=None if stored is None else stored.snapshot,
+                    source_engine_output_id=(
+                        None if stored is None else stored.engine_output_id
+                    ),
                     reason="Message was already processed",
                 )
 
-            self._messages.add(message_key)
             self._processed_messages += 1
             self._latest_processed_at_utc = processed_at_utc
 
             if not payload.is_closed or payload.is_provisional:
+                self._messages[message_key] = None
                 return FeatureStoreProcessOutcome(
                     outcome="IGNORED_PROVISIONAL",
                     snapshot=None,
@@ -82,12 +86,14 @@ class InMemoryFeatureFactoryStore:
             )
             existing_candle = self._candles.get(candle_key)
             if existing_candle is not None and payload.revision < existing_candle.revision:
+                self._messages[message_key] = None
                 return FeatureStoreProcessOutcome(
                     outcome="IGNORED_OUT_OF_ORDER",
                     snapshot=None,
                     reason="A newer candle revision is already present",
                 )
             if existing_candle is not None and payload.revision == existing_candle.revision:
+                self._messages[message_key] = None
                 return FeatureStoreProcessOutcome(
                     outcome="DUPLICATE",
                     snapshot=None,
@@ -115,16 +121,17 @@ class InMemoryFeatureFactoryStore:
                 processed_at_utc,
                 snapshot_revision,
             )
-            revisions.append(
-                StoredFeatureSnapshot(
-                    engine_output_id=None,
-                    snapshot=snapshot,
-                    input_candle_ids=tuple(),
-                )
+            stored = StoredFeatureSnapshot(
+                engine_output_id=None,
+                snapshot=snapshot,
+                input_candle_ids=tuple(),
             )
+            revisions.append(stored)
+            self._messages[message_key] = stored
             return FeatureStoreProcessOutcome(
                 outcome="CREATED" if snapshot_revision == 0 else "REVISED",
                 snapshot=snapshot,
+                source_engine_output_id=stored.engine_output_id,
             )
 
     def get_latest(

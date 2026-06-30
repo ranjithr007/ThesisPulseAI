@@ -21,7 +21,6 @@ from app.core.settings import Settings
 from app.directional.models import StoredDirectionalOutput
 from app.regime.models import StoredRegimeOutput
 
-
 INSTRUMENT = "NSE_INDEX|Nifty 50"
 BASE_TIME = datetime(2026, 6, 30, 10, 0, tzinfo=UTC)
 ALL_TIMEFRAMES = ("1m", "5m", "15m", "1h", "1d")

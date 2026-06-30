@@ -5,9 +5,9 @@ from dataclasses import dataclass
 @dataclass(frozen=True, slots=True)
 class Settings:
     service_name: str = "ThesisPulse.AI"
-    service_version: str = "0.3.0"
+    service_version: str = "0.4.0"
     contract_version: str = "v1"
-    configuration_version: str = "directional-intelligence-v1.0.0"
+    configuration_version: str = "market-regime-v1.0.0"
     environment: str = "PAPER"
     live_execution_enabled: bool = False
     feature_factory_enabled: bool = False
@@ -26,6 +26,11 @@ class Settings:
     directional_engine_version: str = "1.0.0"
     directional_policy_version: str = "technical-direction-v1.0.0"
     directional_engine_actor: str = "ThesisPulse.AI.Directional"
+    regime_engine_enabled: bool = False
+    regime_engine_code: str = "THESIS_PULSE_MARKET_REGIME"
+    regime_engine_version: str = "1.0.0"
+    regime_policy_version: str = "market-regime-v1.0.0"
+    regime_engine_actor: str = "ThesisPulse.AI.Regime"
     sql_command_timeout_seconds: int = 30
 
 
@@ -46,6 +51,7 @@ def load_settings() -> Settings:
         "THESISPULSE_DIRECTIONAL_ENGINE_ENABLED",
         False,
     )
+    regime_enabled = _read_bool("THESISPULSE_REGIME_ENGINE_ENABLED", False)
     internal_key = _optional("THESISPULSE_FEATURE_FACTORY_INTERNAL_API_KEY")
     provider = os.getenv(
         "THESISPULSE_FEATURE_FACTORY_PROVIDER",
@@ -83,6 +89,10 @@ def load_settings() -> Settings:
         raise RuntimeError(
             "Directional intelligence requires the Feature Factory to be enabled"
         )
+    if regime_enabled and not feature_enabled:
+        raise RuntimeError(
+            "Market Regime Engine requires the Feature Factory to be enabled"
+        )
     if provider.casefold() == "sqlserver" and not connection_string:
         raise RuntimeError(
             "SqlServer intelligence requires THESISPULSE_OPERATIONAL_DATABASE"
@@ -91,7 +101,7 @@ def load_settings() -> Settings:
     return Settings(
         configuration_version=os.getenv(
             "THESISPULSE_CONFIGURATION_VERSION",
-            "directional-intelligence-v1.0.0",
+            "market-regime-v1.0.0",
         ),
         environment=environment,
         live_execution_enabled=False,
@@ -139,6 +149,23 @@ def load_settings() -> Settings:
         directional_engine_actor=os.getenv(
             "THESISPULSE_DIRECTIONAL_ENGINE_ACTOR",
             "ThesisPulse.AI.Directional",
+        ),
+        regime_engine_enabled=regime_enabled,
+        regime_engine_code=os.getenv(
+            "THESISPULSE_REGIME_ENGINE_CODE",
+            "THESIS_PULSE_MARKET_REGIME",
+        ),
+        regime_engine_version=os.getenv(
+            "THESISPULSE_REGIME_ENGINE_VERSION",
+            "1.0.0",
+        ),
+        regime_policy_version=os.getenv(
+            "THESISPULSE_REGIME_POLICY_VERSION",
+            "market-regime-v1.0.0",
+        ),
+        regime_engine_actor=os.getenv(
+            "THESISPULSE_REGIME_ENGINE_ACTOR",
+            "ThesisPulse.AI.Regime",
         ),
         sql_command_timeout_seconds=command_timeout,
     )

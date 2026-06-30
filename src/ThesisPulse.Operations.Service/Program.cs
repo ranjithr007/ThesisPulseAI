@@ -22,6 +22,7 @@ if (allowedOrigins.Length == 0)
 builder.Services.AddThesisPulsePlatformFoundation();
 builder.Services.AddSignalExpiryScheduler(builder.Configuration);
 builder.Services.AddPlatformHealthAggregation(builder.Configuration);
+builder.Services.AddPaperWorkflowOrchestration(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddCors(options =>
 {
@@ -38,21 +39,43 @@ app.UseExceptionHandler();
 app.UseThesisPulsePlatformFoundation();
 app.UseCors(frontendCorsPolicy);
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Operations.Service");
+app.MapPaperWorkflowEndpoints();
 
 app.MapGet(
     "/api/v1/status",
-    (SignalExpiryOptions options, SignalExpiryJobState state) => Results.Ok(new
+    (
+        SignalExpiryOptions expiryOptions,
+        SignalExpiryJobState expiryState,
+        PaperWorkflowOptions workflowOptions,
+        IConfiguration configuration) => Results.Ok(new
     {
-        mode = "FOUNDATION",
+        mode = "PAPER_INTEGRATION_ORCHESTRATION",
         environment = "PAPER",
-        schedulerEnabled = options.Enabled,
+        schedulerEnabled = expiryOptions.Enabled,
         signalExpiry = new
         {
-            enabled = options.Enabled,
-            intervalSeconds = options.IntervalSeconds,
-            batchSize = options.BatchSize,
-            signalServiceBaseUrl = options.SignalServiceBaseUrl.ToString(),
-            lastRun = state.GetSnapshot(),
+            enabled = expiryOptions.Enabled,
+            intervalSeconds = expiryOptions.IntervalSeconds,
+            batchSize = expiryOptions.BatchSize,
+            signalServiceBaseUrl = expiryOptions.SignalServiceBaseUrl.ToString(),
+            lastRun = expiryState.GetSnapshot(),
+        },
+        paperWorkflow = new
+        {
+            enabled = workflowOptions.Enabled,
+            persistenceProvider = configuration["PaperWorkflowPersistence:Provider"]
+                ?? "InMemory",
+            maximumAttempts = workflowOptions.MaximumAttempts,
+            retryDelaySeconds = workflowOptions.RetryDelaySeconds,
+            recoveryIntervalSeconds = workflowOptions.RecoveryIntervalSeconds,
+            recoveryBatchSize = workflowOptions.RecoveryBatchSize,
+            authority = "ORCHESTRATION_ONLY",
+            thesisAuthority = false,
+            riskAuthority = false,
+            tradePlanAuthority = false,
+            executionAuthority = false,
+            brokerAuthority = false,
+            liveExecutionAuthority = false,
         },
         healthAggregationEnabled = true,
     }));

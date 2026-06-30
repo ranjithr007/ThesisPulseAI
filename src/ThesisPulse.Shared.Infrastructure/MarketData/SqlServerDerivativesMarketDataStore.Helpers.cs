@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
+using ThesisPulse.Shared.Contracts.MarketData.V1;
 
 namespace ThesisPulse.Shared.Infrastructure.MarketData;
 
@@ -243,6 +244,20 @@ public sealed partial class SqlServerDerivativesMarketDataStore
 
     private static string? SerializeMetadata(IReadOnlyDictionary<string, string>? metadata) =>
         metadata is null ? null : JsonSerializer.Serialize(metadata, JsonOptions);
+
+    private static IReadOnlyCollection<string> ParseWarnings(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return Array.Empty<string>();
+        }
+
+        return JsonSerializer.Deserialize<string[]>(json, JsonOptions)
+            ?? Array.Empty<string>();
+    }
+
+    private static string SerializeWarnings(IReadOnlyCollection<string> warnings) =>
+        JsonSerializer.Serialize(warnings, JsonOptions);
 
     private static string HashPayload(string payload) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload)));

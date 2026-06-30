@@ -6,6 +6,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from app.contracts.v1.directional import DirectionalEngineOutputV1
 from app.contracts.v1.market_data import (
     FeatureProcessingResultV1,
     FeatureSnapshotV1,
@@ -19,10 +20,15 @@ from app.contracts.v1.signals import (
     SignalGeneratedV1,
 )
 from app.core.settings import load_settings
+from app.directional.service import DirectionalIntelligenceService
 from app.features.service import FeatureFactoryService
 
 settings = load_settings()
-feature_factory = FeatureFactoryService(settings)
+directional_intelligence = DirectionalIntelligenceService(settings)
+feature_factory = FeatureFactoryService(
+    settings,
+    directional_service=directional_intelligence,
+)
 started_at_utc = datetime.now(UTC)
 
 app = FastAPI(
@@ -54,12 +60,14 @@ async def readiness() -> JSONResponse:
     if feature_factory.enabled:
         try:
             feature_factory.get_status()
+            if directional_intelligence.enabled:
+                directional_intelligence.get_status()
         except Exception as exception:
             return JSONResponse(
                 status_code=503,
                 content={
                     "status": "Unhealthy",
-                    "dependency": "FeatureFactoryStore",
+                    "dependency": "IntelligenceStore",
                     "detail": str(exception)[:500],
                 },
             )
@@ -86,6 +94,8 @@ async def service_info() -> dict[str, str | bool]:
         "featureFactoryEnabled": settings.feature_factory_enabled,
         "featureFactoryProvider": settings.feature_factory_provider,
         "featureSetVersion": settings.feature_set_version,
+        "directionalEngineEnabled": settings.directional_engine_enabled,
+        "directionalPolicyVersion": settings.directional_policy_version,
         "startedAtUtc": started_at_utc.isoformat(),
         "currentTimeUtc": datetime.now(UTC).isoformat(),
     }
@@ -102,7 +112,16 @@ async def list_engines() -> dict[str, list[object]]:
                 "featureSetVersion": settings.feature_set_version,
                 "canCreateSignals": False,
                 "canExecuteOrders": False,
-            }
+            },
+            {
+                "engineCode": settings.directional_engine_code,
+                "engineRole": "DIRECTIONAL_VOTER",
+                "enabled": settings.directional_engine_enabled,
+                "engineVersion": settings.directional_engine_version,
+                "policyVersion": settings.directional_policy_version,
+                "canCreateSignals": False,
+                "canExecuteOrders": False,
+            },
         ]
     }
 
@@ -153,12 +172,44 @@ def latest_feature_snapshot(
     instrument_key: str,
     timeframe: str = "5m",
 ) -> FeatureSnapshotV1:
-    if timeframe not in {"1m", "5m", "15m", "1h", "1d"}:
-        raise HTTPException(status_code=422, detail="Unsupported timeframe")
+    _validate_timeframe(timeframe)
     snapshot = feature_factory.get_latest(instrument_key, timeframe)
     if snapshot is None:
         raise HTTPException(status_code=404, detail="Feature snapshot was not found")
     return snapshot
+
+
+@app.get("/api/v1/intelligence/directional/status", tags=["directional-intelligence"])
+def directional_status() -> dict[str, object]:
+    status = directional_intelligence.get_status()
+    return {
+        "enabled": directional_intelligence.enabled,
+        "provider": status.provider,
+        "engineCode": settings.directional_engine_code,
+        "engineVersion": settings.directional_engine_version,
+        "policyVersion": settings.directional_policy_version,
+        "outputCount": status.output_count,
+        "latestProcessedAtUtc": status.latest_processed_at_utc,
+        "latestError": status.latest_error,
+        "canCreateSignals": False,
+        "canExecuteOrders": False,
+    }
+
+
+@app.get(
+    "/api/v1/intelligence/directional/latest/{instrument_key:path}",
+    response_model=DirectionalEngineOutputV1,
+    tags=["directional-intelligence"],
+)
+def latest_directional_output(
+    instrument_key: str,
+    timeframe: str = "5m",
+) -> DirectionalEngineOutputV1:
+    _validate_timeframe(timeframe)
+    output = directional_intelligence.get_latest(instrument_key, timeframe)
+    if output is None:
+        raise HTTPException(status_code=404, detail="Directional output was not found")
+    return output
 
 
 @app.post(
@@ -229,6 +280,11 @@ async def create_mock_signal(
         ),
         payload=signal,
     )
+
+
+def _validate_timeframe(timeframe: str) -> None:
+    if timeframe not in {"1m", "5m", "15m", "1h", "1d"}:
+        raise HTTPException(status_code=422, detail="Unsupported timeframe")
 
 
 def _authorize_feature_factory(supplied_key: str | None) -> None:

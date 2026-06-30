@@ -1,0 +1,1 @@
+"""Deterministic directional intelligence engine."""

@@ -45,6 +45,7 @@ class FeatureStoreStatus:
 class FeatureStoreProcessOutcome:
     outcome: str
     snapshot: FeatureSnapshotV1 | None
+    source_engine_output_id: int | None = None
     reason: str | None = None
 
 

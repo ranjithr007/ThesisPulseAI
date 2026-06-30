@@ -5,9 +5,9 @@ from dataclasses import dataclass
 @dataclass(frozen=True, slots=True)
 class Settings:
     service_name: str = "ThesisPulse.AI"
-    service_version: str = "0.2.0"
+    service_version: str = "0.3.0"
     contract_version: str = "v1"
-    configuration_version: str = "feature-factory-v1.0.0"
+    configuration_version: str = "directional-intelligence-v1.0.0"
     environment: str = "PAPER"
     live_execution_enabled: bool = False
     feature_factory_enabled: bool = False
@@ -21,6 +21,11 @@ class Settings:
     feature_factory_engine_code: str = "THESIS_PULSE_FEATURE_FACTORY"
     feature_factory_actor: str = "ThesisPulse.AI.FeatureFactory"
     feature_factory_broker_code: str = "UPSTOX"
+    directional_engine_enabled: bool = False
+    directional_engine_code: str = "THESIS_PULSE_TECHNICAL_DIRECTION"
+    directional_engine_version: str = "1.0.0"
+    directional_policy_version: str = "technical-direction-v1.0.0"
+    directional_engine_actor: str = "ThesisPulse.AI.Directional"
     sql_command_timeout_seconds: int = 30
 
 
@@ -36,7 +41,11 @@ def load_settings() -> Settings:
             "ThesisPulse AI must run in PAPER mode with live execution disabled"
         )
 
-    enabled = _read_bool("THESISPULSE_FEATURE_FACTORY_ENABLED", False)
+    feature_enabled = _read_bool("THESISPULSE_FEATURE_FACTORY_ENABLED", False)
+    directional_enabled = _read_bool(
+        "THESISPULSE_DIRECTIONAL_ENGINE_ENABLED",
+        False,
+    )
     internal_key = _optional("THESISPULSE_FEATURE_FACTORY_INTERNAL_API_KEY")
     provider = os.getenv(
         "THESISPULSE_FEATURE_FACTORY_PROVIDER",
@@ -66,23 +75,27 @@ def load_settings() -> Settings:
         raise RuntimeError(
             "THESISPULSE_FEATURE_FACTORY_PROVIDER must be InMemory or SqlServer"
         )
-    if enabled and not internal_key:
+    if feature_enabled and not internal_key:
         raise RuntimeError(
             "Feature Factory requires THESISPULSE_FEATURE_FACTORY_INTERNAL_API_KEY"
         )
+    if directional_enabled and not feature_enabled:
+        raise RuntimeError(
+            "Directional intelligence requires the Feature Factory to be enabled"
+        )
     if provider.casefold() == "sqlserver" and not connection_string:
         raise RuntimeError(
-            "SqlServer Feature Factory requires THESISPULSE_OPERATIONAL_DATABASE"
+            "SqlServer intelligence requires THESISPULSE_OPERATIONAL_DATABASE"
         )
 
     return Settings(
         configuration_version=os.getenv(
             "THESISPULSE_CONFIGURATION_VERSION",
-            "feature-factory-v1.0.0",
+            "directional-intelligence-v1.0.0",
         ),
         environment=environment,
         live_execution_enabled=False,
-        feature_factory_enabled=enabled,
+        feature_factory_enabled=feature_enabled,
         feature_factory_internal_api_key=internal_key,
         feature_factory_provider=(
             "SqlServer" if provider.casefold() == "sqlserver" else "InMemory"
@@ -109,6 +122,23 @@ def load_settings() -> Settings:
         feature_factory_broker_code=os.getenv(
             "THESISPULSE_FEATURE_FACTORY_BROKER_CODE",
             "UPSTOX",
+        ),
+        directional_engine_enabled=directional_enabled,
+        directional_engine_code=os.getenv(
+            "THESISPULSE_DIRECTIONAL_ENGINE_CODE",
+            "THESIS_PULSE_TECHNICAL_DIRECTION",
+        ),
+        directional_engine_version=os.getenv(
+            "THESISPULSE_DIRECTIONAL_ENGINE_VERSION",
+            "1.0.0",
+        ),
+        directional_policy_version=os.getenv(
+            "THESISPULSE_DIRECTIONAL_POLICY_VERSION",
+            "technical-direction-v1.0.0",
+        ),
+        directional_engine_actor=os.getenv(
+            "THESISPULSE_DIRECTIONAL_ENGINE_ACTOR",
+            "ThesisPulse.AI.Directional",
         ),
         sql_command_timeout_seconds=command_timeout,
     )

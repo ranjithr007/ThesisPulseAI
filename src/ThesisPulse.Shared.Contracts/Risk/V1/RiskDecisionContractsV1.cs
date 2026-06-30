@@ -67,6 +67,8 @@ public sealed record RiskDecisionV1(
     Guid SignalUid,
     Guid ThesisUid,
     string InstrumentKey,
+    string Environment,
+    EvidenceDirectionV1 Direction,
     string Decision,
     IReadOnlyCollection<string> Reasons,
     IReadOnlyCollection<RiskCheckV1> Checks,

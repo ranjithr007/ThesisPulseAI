@@ -1,4 +1,5 @@
 using ThesisPulse.Shared.Contracts.Risk.V1;
+using ThesisPulse.Shared.Contracts.TradePlans.V1;
 using ThesisPulse.Shared.Observability.Hosting;
 using ThesisPulse.Risk.Service;
 
@@ -7,22 +8,25 @@ builder.Configuration["Platform:ConfigurationVersion"] ??= "platform-foundation-
 builder.Services.AddThesisPulsePlatformFoundation();
 builder.Services.Configure<DeterministicRiskOptions>(
     builder.Configuration.GetSection(DeterministicRiskOptions.SectionName));
+builder.Services.Configure<DeterministicTradePlanOptions>(
+    builder.Configuration.GetSection(DeterministicTradePlanOptions.SectionName));
 builder.Services.AddSingleton<IRiskDecisionEngine, DeterministicRiskDecisionEngine>();
+builder.Services.AddSingleton<ITradePlanBuilder, DeterministicTradePlanBuilder>();
 
 var app = builder.Build();
 app.UseThesisPulsePlatformFoundation();
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Risk.Service");
 app.MapGet("/api/v1/status", () => Results.Ok(new
 {
-    mode = "DETERMINISTIC_RISK",
+    mode = "DETERMINISTIC_RISK_AND_TRADE_PLAN",
     environment = "PAPER",
     failClosed = true,
-    defaultDecision = RiskDecisionContractV1.Rejected,
-    approvalEnabled = true,
-    authority = "RISK_DECISION_ONLY",
-    tradePlanAuthority = false,
-    positionSizingAuthority = false,
+    defaultRiskDecision = RiskDecisionContractV1.Rejected,
+    riskDecisionAuthority = true,
+    tradePlanAuthority = true,
+    positionSizingAuthority = true,
     executionAuthority = false,
+    brokerSubmissionAuthority = false,
 }));
 app.MapPost("/api/v1/risk/evaluate", (RiskDecisionRequestV1 request, IRiskDecisionEngine engine) =>
 {
@@ -30,6 +34,13 @@ app.MapPost("/api/v1/risk/evaluate", (RiskDecisionRequestV1 request, IRiskDecisi
     return decision.Decision == RiskDecisionContractV1.Approved
         ? Results.Ok(decision)
         : Results.UnprocessableEntity(decision);
+});
+app.MapPost("/api/v1/trade-plans/build", (TradePlanBuildRequestV1 request, ITradePlanBuilder planBuilder) =>
+{
+    var result = planBuilder.Build(request);
+    return result.Status == TradePlanContractV1.Ready
+        ? Results.Ok(result)
+        : Results.UnprocessableEntity(result);
 });
 app.Run();
 

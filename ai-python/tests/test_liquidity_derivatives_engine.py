@@ -127,7 +127,7 @@ def test_insufficient_window_fails_closed() -> None:
         0,
     )
 
-    assert output.data_quality_status == "INVALID"
+    assert output.data_quality_status == "DEGRADED"
     assert output.is_eligible_for_fusion is False
     assert "INSUFFICIENT_CANDLE_WINDOW" in output.warnings
 

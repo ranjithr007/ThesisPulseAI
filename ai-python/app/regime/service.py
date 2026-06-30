@@ -5,7 +5,7 @@ from app.core.settings import Settings
 from app.features.models import StoredFeatureSnapshot
 from app.regime.calculator import DeterministicMarketRegimeCalculator
 from app.regime.definitions import MarketRegimeOptions
-from app.regime.models import RegimeStoreStatus
+from app.regime.models import RegimeStoreStatus, StoredRegimeOutput
 from app.regime.sql_store import SqlServerMarketRegimeStore
 from app.regime.store import InMemoryMarketRegimeStore, MarketRegimeStore
 
@@ -70,8 +70,15 @@ class MarketRegimeService:
         instrument_key: str,
         timeframe: str,
     ) -> MarketRegimeOutputV1 | None:
-        stored = self._store.get_latest(instrument_key, timeframe)
+        stored = self.get_latest_stored(instrument_key, timeframe)
         return None if stored is None else stored.output
+
+    def get_latest_stored(
+        self,
+        instrument_key: str,
+        timeframe: str,
+    ) -> StoredRegimeOutput | None:
+        return self._store.get_latest(instrument_key, timeframe)
 
     def get_status(self) -> RegimeStoreStatus:
         return self._store.get_status()

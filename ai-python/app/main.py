@@ -6,6 +6,8 @@ from uuid import uuid4
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from app.confirmation.service import MultiTimeframeConfirmationService
+from app.contracts.v1.confirmation import MultiTimeframeConfirmationOutputV1
 from app.contracts.v1.directional import DirectionalEngineOutputV1
 from app.contracts.v1.market_data import (
     FeatureProcessingResultV1,
@@ -28,10 +30,16 @@ from app.regime.service import MarketRegimeService
 settings = load_settings()
 directional_intelligence = DirectionalIntelligenceService(settings)
 market_regime = MarketRegimeService(settings)
+multi_timeframe_confirmation = MultiTimeframeConfirmationService(
+    settings,
+    directional_intelligence,
+    market_regime,
+)
 feature_factory = FeatureFactoryService(
     settings,
     directional_service=directional_intelligence,
     regime_service=market_regime,
+    confirmation_service=multi_timeframe_confirmation,
 )
 started_at_utc = datetime.now(UTC)
 
@@ -68,6 +76,8 @@ async def readiness() -> JSONResponse:
                 directional_intelligence.get_status()
             if market_regime.enabled:
                 market_regime.get_status()
+            if multi_timeframe_confirmation.enabled:
+                multi_timeframe_confirmation.get_status()
         except Exception as exception:
             return JSONResponse(
                 status_code=503,
@@ -104,6 +114,8 @@ async def service_info() -> dict[str, str | bool]:
         "directionalPolicyVersion": settings.directional_policy_version,
         "regimeEngineEnabled": settings.regime_engine_enabled,
         "regimePolicyVersion": settings.regime_policy_version,
+        "confirmationEngineEnabled": settings.confirmation_engine_enabled,
+        "confirmationPolicyVersion": settings.confirmation_policy_version,
         "startedAtUtc": started_at_utc.isoformat(),
         "currentTimeUtc": datetime.now(UTC).isoformat(),
     }
@@ -136,6 +148,15 @@ async def list_engines() -> dict[str, list[object]]:
                 "enabled": settings.directional_engine_enabled,
                 "engineVersion": settings.directional_engine_version,
                 "policyVersion": settings.directional_policy_version,
+                "canCreateSignals": False,
+                "canExecuteOrders": False,
+            },
+            {
+                "engineCode": settings.confirmation_engine_code,
+                "engineRole": "META_CONTROLLER",
+                "enabled": settings.confirmation_engine_enabled,
+                "engineVersion": settings.confirmation_engine_version,
+                "policyVersion": settings.confirmation_policy_version,
                 "canCreateSignals": False,
                 "canExecuteOrders": False,
             },
@@ -262,6 +283,40 @@ def latest_directional_output(
     output = directional_intelligence.get_latest(instrument_key, timeframe)
     if output is None:
         raise HTTPException(status_code=404, detail="Directional output was not found")
+    return output
+
+
+@app.get(
+    "/api/v1/intelligence/confirmation/status",
+    tags=["multi-timeframe-confirmation"],
+)
+def confirmation_status() -> dict[str, object]:
+    status = multi_timeframe_confirmation.get_status()
+    return {
+        "enabled": multi_timeframe_confirmation.enabled,
+        "provider": status.provider,
+        "engineCode": settings.confirmation_engine_code,
+        "engineVersion": settings.confirmation_engine_version,
+        "policyVersion": settings.confirmation_policy_version,
+        "outputCount": status.output_count,
+        "latestProcessedAtUtc": status.latest_processed_at_utc,
+        "latestError": status.latest_error,
+        "canCreateSignals": False,
+        "canExecuteOrders": False,
+    }
+
+
+@app.get(
+    "/api/v1/intelligence/confirmation/latest/{instrument_key:path}",
+    response_model=MultiTimeframeConfirmationOutputV1,
+    tags=["multi-timeframe-confirmation"],
+)
+def latest_confirmation_output(
+    instrument_key: str,
+) -> MultiTimeframeConfirmationOutputV1:
+    output = multi_timeframe_confirmation.get_latest(instrument_key)
+    if output is None:
+        raise HTTPException(status_code=404, detail="Confirmation output was not found")
     return output
 
 

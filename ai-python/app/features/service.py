@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from app.confirmation.service import MultiTimeframeConfirmationService
 from app.contracts.v1.market_data import (
     FeatureProcessingResultV1,
     FeatureSnapshotV1,
@@ -22,6 +23,7 @@ class FeatureFactoryService:
         store: FeatureFactoryStore | None = None,
         directional_service: DirectionalIntelligenceService | None = None,
         regime_service: MarketRegimeService | None = None,
+        confirmation_service: MultiTimeframeConfirmationService | None = None,
     ) -> None:
         self._settings = settings
         options = FeatureFactoryOptions(
@@ -34,6 +36,11 @@ class FeatureFactoryService:
         self._store = store or _create_store(settings)
         self._directional = directional_service or DirectionalIntelligenceService(settings)
         self._regime = regime_service or MarketRegimeService(settings)
+        self._confirmation = confirmation_service or MultiTimeframeConfirmationService(
+            settings,
+            self._directional,
+            self._regime,
+        )
 
     @property
     def enabled(self) -> bool:
@@ -51,6 +58,10 @@ class FeatureFactoryService:
     def regime(self) -> MarketRegimeService:
         return self._regime
 
+    @property
+    def confirmation(self) -> MultiTimeframeConfirmationService:
+        return self._confirmation
+
     def process_candle(
         self,
         delivery: MarketCandleDeliveryV1,
@@ -65,9 +76,14 @@ class FeatureFactoryService:
         )
         regime = None
         directional = None
+        confirmation = None
         if stored is not None:
             regime = self._regime.process_feature(stored, processed_at)
             directional = self._directional.process_feature(stored, processed_at)
+            confirmation = self._confirmation.process_instrument(
+                delivery.envelope.payload.instrument_key,
+                processed_at,
+            )
         return FeatureProcessingResultV1(
             outcome=outcome.outcome,
             stream_position=delivery.stream_position,
@@ -75,6 +91,7 @@ class FeatureFactoryService:
             snapshot=outcome.snapshot,
             regime=regime,
             directional=directional,
+            confirmation=confirmation,
             reason=outcome.reason,
         )
 

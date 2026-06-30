@@ -61,6 +61,12 @@
       "path": "database/seeds/intelligence/S0010__seed_market_regime_engine.sql",
       "scope": "paper_intelligence",
       "activation": "context_provider_only"
+    },
+    {
+      "sequence": 11,
+      "path": "database/seeds/intelligence/S0011__seed_multi_timeframe_confirmation_engine.sql",
+      "scope": "paper_intelligence",
+      "activation": "meta_controller_only"
     }
   ],
   "excluded": [

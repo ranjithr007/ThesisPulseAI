@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
+from app.contracts.v1.confirmation import ConfirmationProcessingResultV1
 from app.contracts.v1.directional import DirectionalProcessingResultV1
 from app.contracts.v1.regime import RegimeProcessingResultV1
 
@@ -121,4 +122,5 @@ class FeatureProcessingResultV1(ContractModel):
     snapshot: FeatureSnapshotV1 | None = None
     regime: RegimeProcessingResultV1 | None = None
     directional: DirectionalProcessingResultV1 | None = None
+    confirmation: ConfirmationProcessingResultV1 | None = None
     reason: str | None = None

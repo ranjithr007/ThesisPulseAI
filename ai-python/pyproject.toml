@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "thesispulse-ai"
-version = "0.4.0"
+version = "0.5.0"
 description = "ThesisPulse AI intelligence and analytics platform"
 requires-python = ">=3.11,<3.15"
 dependencies = [
@@ -16,7 +16,7 @@ dependencies = [
 dev = [
   "pytest>=8,<10",
   "httpx>=0.28,<1",
-  "ruff>=0.11,<1",
+  "ruff==0.15.20",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -27,8 +27,12 @@ pythonpath = ["."]
 testpaths = ["tests"]
 
 [tool.ruff]
+required-version = "==0.15.20"
 target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]

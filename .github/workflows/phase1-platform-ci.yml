@@ -3,6 +3,7 @@ name: Phase 1 Platform CI
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches:
       - main
@@ -92,8 +93,13 @@ jobs:
         shell: bash
         run: |
           set +e
-          ruff check app tests > python-lint.log 2>&1
+          ruff --version > python-lint.log 2>&1
+          ruff check app tests >> python-lint.log 2>&1
           status=$?
+          if [ "$status" -ne 0 ]; then
+            printf '\nExpected Ruff rewrite:\n' >> python-lint.log
+            ruff check app tests --diff >> python-lint.log 2>&1
+          fi
           echo "$status" > python-lint.status
           cat python-lint.log
           exit 0

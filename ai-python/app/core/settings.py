@@ -5,9 +5,9 @@ from dataclasses import dataclass
 @dataclass(frozen=True, slots=True)
 class Settings:
     service_name: str = "ThesisPulse.AI"
-    service_version: str = "0.4.0"
+    service_version: str = "0.5.0"
     contract_version: str = "v1"
-    configuration_version: str = "market-regime-v1.0.0"
+    configuration_version: str = "multi-timeframe-confirmation-v1.0.0"
     environment: str = "PAPER"
     live_execution_enabled: bool = False
     feature_factory_enabled: bool = False
@@ -31,6 +31,11 @@ class Settings:
     regime_engine_version: str = "1.0.0"
     regime_policy_version: str = "market-regime-v1.0.0"
     regime_engine_actor: str = "ThesisPulse.AI.Regime"
+    confirmation_engine_enabled: bool = False
+    confirmation_engine_code: str = "THESIS_PULSE_MULTI_TIMEFRAME_CONFIRMATION"
+    confirmation_engine_version: str = "1.0.0"
+    confirmation_policy_version: str = "multi-timeframe-confirmation-v1.0.0"
+    confirmation_engine_actor: str = "ThesisPulse.AI.Confirmation"
     sql_command_timeout_seconds: int = 30
 
 
@@ -52,6 +57,10 @@ def load_settings() -> Settings:
         False,
     )
     regime_enabled = _read_bool("THESISPULSE_REGIME_ENGINE_ENABLED", False)
+    confirmation_enabled = _read_bool(
+        "THESISPULSE_CONFIRMATION_ENGINE_ENABLED",
+        False,
+    )
     internal_key = _optional("THESISPULSE_FEATURE_FACTORY_INTERNAL_API_KEY")
     provider = os.getenv(
         "THESISPULSE_FEATURE_FACTORY_PROVIDER",
@@ -93,15 +102,24 @@ def load_settings() -> Settings:
         raise RuntimeError(
             "Market Regime Engine requires the Feature Factory to be enabled"
         )
+    if confirmation_enabled and not directional_enabled:
+        raise RuntimeError(
+            "Multi-timeframe confirmation requires directional intelligence"
+        )
+    if confirmation_enabled and not regime_enabled:
+        raise RuntimeError(
+            "Multi-timeframe confirmation requires the Market Regime Engine"
+        )
     if provider.casefold() == "sqlserver" and not connection_string:
         raise RuntimeError(
             "SqlServer intelligence requires THESISPULSE_OPERATIONAL_DATABASE"
         )
 
     return Settings(
+        service_version=os.getenv("THESISPULSE_SERVICE_VERSION", "0.5.0"),
         configuration_version=os.getenv(
             "THESISPULSE_CONFIGURATION_VERSION",
-            "market-regime-v1.0.0",
+            "multi-timeframe-confirmation-v1.0.0",
         ),
         environment=environment,
         live_execution_enabled=False,
@@ -115,10 +133,7 @@ def load_settings() -> Settings:
             "THESISPULSE_FEATURE_SET_VERSION",
             "feature-set-v1.0.0",
         ),
-        feature_version=os.getenv(
-            "THESISPULSE_FEATURE_VERSION",
-            "1.0.0",
-        ),
+        feature_version=os.getenv("THESISPULSE_FEATURE_VERSION", "1.0.0"),
         feature_required_input_count=required_input_count,
         feature_maximum_input_count=maximum_input_count,
         feature_factory_engine_code=os.getenv(
@@ -166,6 +181,23 @@ def load_settings() -> Settings:
         regime_engine_actor=os.getenv(
             "THESISPULSE_REGIME_ENGINE_ACTOR",
             "ThesisPulse.AI.Regime",
+        ),
+        confirmation_engine_enabled=confirmation_enabled,
+        confirmation_engine_code=os.getenv(
+            "THESISPULSE_CONFIRMATION_ENGINE_CODE",
+            "THESIS_PULSE_MULTI_TIMEFRAME_CONFIRMATION",
+        ),
+        confirmation_engine_version=os.getenv(
+            "THESISPULSE_CONFIRMATION_ENGINE_VERSION",
+            "1.0.0",
+        ),
+        confirmation_policy_version=os.getenv(
+            "THESISPULSE_CONFIRMATION_POLICY_VERSION",
+            "multi-timeframe-confirmation-v1.0.0",
+        ),
+        confirmation_engine_actor=os.getenv(
+            "THESISPULSE_CONFIRMATION_ENGINE_ACTOR",
+            "ThesisPulse.AI.Confirmation",
         ),
         sql_command_timeout_seconds=command_timeout,
     )

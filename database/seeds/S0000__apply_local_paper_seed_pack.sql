@@ -30,6 +30,8 @@ GO
 GO
 :r $(SeedRoot)/intelligence/S0010__seed_market_regime_engine.sql
 GO
+:r $(SeedRoot)/intelligence/S0011__seed_multi_timeframe_confirmation_engine.sql
+GO
 :r $(VerificationRoot)/S0001__verify_reference_seeds.sql
 GO
 :r $(VerificationRoot)/S0002__verify_signal_engine_seed.sql
@@ -41,4 +43,6 @@ GO
 :r $(VerificationRoot)/S0005__verify_technical_directional_engine_seed.sql
 GO
 :r $(VerificationRoot)/S0006__verify_market_regime_engine_seed.sql
+GO
+:r $(VerificationRoot)/S0007__verify_multi_timeframe_confirmation_engine_seed.sql
 GO

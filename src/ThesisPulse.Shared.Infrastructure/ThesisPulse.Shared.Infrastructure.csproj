@@ -9,6 +9,6 @@
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\ThesisPulse.Shared.Contracts\ThesisPulse.Shared.Contracts.csproj" />
+    <Compile Remove="Portfolio\SqlServerPortfolioLedgerStore.cs" />
   </ItemGroup>
 </Project>

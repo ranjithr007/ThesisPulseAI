@@ -119,15 +119,6 @@ public sealed partial class SqlServerMarketDataStore
                 assessment,
                 correlationId,
                 cancellationToken);
-            await EnqueuePublicationAsync(
-                connection,
-                transaction,
-                _publicationFactory.CreateCandle(
-                    candle,
-                    assessment,
-                    revision,
-                    correlationId),
-                cancellationToken);
         }
     }
 

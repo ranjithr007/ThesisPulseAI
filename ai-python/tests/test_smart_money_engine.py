@@ -112,11 +112,11 @@ def test_wick_only_violation_is_liquidity_sweep_not_bos() -> None:
 
 def test_insufficient_window_fails_closed() -> None:
     calculator = _calculator()
-    values = BULLISH_BOS[:5]
+    values = BULLISH_BOS[:4]
     window = _window(values)
 
     output = calculator.calculate(
-        _delivery(values, 4),
+        _delivery(values, 3),
         window,
         window[-1].close_at_utc,
         0,

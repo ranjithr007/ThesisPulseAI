@@ -7,6 +7,7 @@ ONE = Decimal("1")
 QUANTUM = Decimal("0.000000000001")
 
 FEATURE_NAMES = (
+    "close_price",
     "close_return_1",
     "close_return_3",
     "sma_5",

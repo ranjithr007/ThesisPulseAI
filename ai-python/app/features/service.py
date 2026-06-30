@@ -30,9 +30,7 @@ class FeatureFactoryService:
         )
         self._calculator = DeterministicFeatureCalculator(options)
         self._store = store or _create_store(settings)
-        self._directional = directional_service or DirectionalIntelligenceService(
-            settings
-        )
+        self._directional = directional_service or DirectionalIntelligenceService(settings)
 
     @property
     def enabled(self) -> bool:
@@ -52,17 +50,15 @@ class FeatureFactoryService:
         processed_at_utc: datetime | None = None,
     ) -> FeatureProcessingResultV1:
         processed_at = processed_at_utc or datetime.now(UTC)
-        outcome = self._store.process(
+        outcome = self._store.process(delivery, self._calculator, processed_at)
+        stored = self._resolve_stored_snapshot(
             delivery,
-            self._calculator,
-            processed_at,
+            outcome.snapshot,
+            outcome.outcome,
         )
-        stored = self._resolve_stored_snapshot(delivery, outcome.snapshot)
-        directional = (
-            None
-            if stored is None
-            else self._directional.process_feature(stored, processed_at)
-        )
+        directional = None
+        if stored is not None:
+            directional = self._directional.process_feature(stored, processed_at)
         return FeatureProcessingResultV1(
             outcome=outcome.outcome,
             stream_position=delivery.stream_position,
@@ -87,13 +83,18 @@ class FeatureFactoryService:
         self,
         delivery: MarketCandleDeliveryV1,
         snapshot: FeatureSnapshotV1 | None,
+        outcome: str,
     ) -> StoredFeatureSnapshot | None:
-        if snapshot is None:
-            return None
         latest = self._store.get_latest(
             delivery.envelope.payload.instrument_key,
             delivery.envelope.payload.timeframe,
         )
+        if snapshot is None:
+            if outcome != "DUPLICATE" or latest is None:
+                return None
+            if latest.snapshot.message_uid != delivery.envelope.metadata.message_id:
+                return None
+            return latest
         if latest is None or latest.snapshot.snapshot_uid != snapshot.snapshot_uid:
             return StoredFeatureSnapshot(
                 engine_output_id=None,

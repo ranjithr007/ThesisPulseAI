@@ -6,6 +6,7 @@ from uuid import NAMESPACE_URL, uuid5
 from app.contracts.v1.confirmation import MultiTimeframeConfirmationOutputV1
 from app.contracts.v1.directional import DirectionalEngineOutputV1
 from app.contracts.v1.market_data import FeatureSnapshotV1, MarketCandleDeliveryV1
+from app.contracts.v1.order_flow import OrderFlowEngineOutputV1
 from app.contracts.v1.regime import MarketRegimeOutputV1
 from app.contracts.v1.workflow import (
     FusionDirectionalEvidenceV1,
@@ -71,6 +72,7 @@ class FusionReadyEvidenceCalculator:
         directional_by_timeframe: dict[str, DirectionalEngineOutputV1],
         regime_by_timeframe: dict[str, MarketRegimeOutputV1],
         generated_at_utc: datetime,
+        order_flow: OrderFlowEngineOutputV1 | None = None,
     ) -> FusionReadyEvidenceV1:
         payload = delivery.envelope.payload
         if payload.timeframe != "5m":
@@ -136,6 +138,23 @@ class FusionReadyEvidenceCalculator:
                 )
             )
 
+        if order_flow is not None:
+            _validate_order_flow(order_flow, payload.instrument_key, payload.close_at_utc)
+            if order_flow.is_eligible_for_fusion:
+                directional_evidence.append(
+                    FusionDirectionalEvidenceV1(
+                        output_uid=order_flow.output_uid,
+                        engine_code="ORDER_FLOW",
+                        engine_version=order_flow.engine_version,
+                        timeframe=order_flow.timeframe,
+                        direction=order_flow.direction,
+                        score=_percent(abs(order_flow.score)),
+                        confidence=_percent(order_flow.confidence),
+                        observed_at_utc=order_flow.as_of_utc,
+                        reasons=[item.message for item in order_flow.evidence],
+                    )
+                )
+
         primary_regime = regime_by_timeframe.get("5m")
         if primary_regime is None:
             raise ValueError("Primary 5m regime output is missing")
@@ -169,6 +188,7 @@ class FusionReadyEvidenceCalculator:
                     "fusion-ready-evidence-v1",
                     str(delivery.envelope.metadata.message_id),
                     str(confirmation.output_uid),
+                    str(order_flow.output_uid) if order_flow is not None else "NO_ORDER_FLOW",
                     self._options.weight_configuration_version,
                     self._options.proposal_policy_version,
                 ]
@@ -188,6 +208,7 @@ class FusionReadyEvidenceCalculator:
                     for output in regime_by_timeframe.values()
                     for warning in output.warnings
                 ]
+                + ([] if order_flow is None else order_flow.warnings)
             )
         )
         return FusionReadyEvidenceV1(
@@ -248,6 +269,21 @@ class FusionReadyEvidenceCalculator:
             maximum_slippage_fraction=self._options.maximum_slippage_fraction,
             proposal_policy_version=self._options.proposal_policy_version,
         )
+
+
+def _validate_order_flow(
+    output: OrderFlowEngineOutputV1,
+    instrument_key: str,
+    as_of_utc: datetime,
+) -> None:
+    if output.instrument_key != instrument_key:
+        raise ValueError("Order Flow instrument lineage mismatch")
+    if output.timeframe != "5m":
+        raise ValueError("Order Flow timeframe must be 5m")
+    if output.as_of_utc != as_of_utc:
+        raise ValueError("Order Flow cutoff must match the source candle")
+    if output.is_stale or output.data_quality_status == "INVALID":
+        raise ValueError("Order Flow output is not usable")
 
 
 def _directional_votes(

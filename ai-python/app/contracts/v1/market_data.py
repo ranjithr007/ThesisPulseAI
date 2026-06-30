@@ -8,6 +8,10 @@ from pydantic.alias_generators import to_camel
 
 from app.contracts.v1.confirmation import ConfirmationProcessingResultV1
 from app.contracts.v1.directional import DirectionalProcessingResultV1
+from app.contracts.v1.order_flow import (
+    OrderFlowProcessingResultV1,
+    OrderFlowQuoteProcessingResultV1,
+)
 from app.contracts.v1.regime import RegimeProcessingResultV1
 from app.contracts.v1.workflow import FusionReadyEvidenceV1
 
@@ -23,7 +27,10 @@ class ContractModel(BaseModel):
 
 class MarketDataMessageMetadataV1(ContractModel):
     message_id: UUID
-    event_type: Literal["market.candle.published.v1"]
+    event_type: Literal[
+        "market.candle.published.v1",
+        "market.quote.published.v1",
+    ]
     contract_version: Literal["1.0"]
     occurred_at_utc: datetime
     correlation_id: str = Field(min_length=1, max_length=128)
@@ -32,6 +39,42 @@ class MarketDataMessageMetadataV1(ContractModel):
     producer_version: str = Field(min_length=1, max_length=50)
     environment: Literal["PAPER"]
     configuration_version: str = Field(min_length=1, max_length=100)
+
+
+class MarketQuotePublishedV1(ContractModel):
+    provider_code: str = Field(min_length=1, max_length=50)
+    instrument_key: str = Field(min_length=1, max_length=200)
+    event_at_utc: datetime
+    received_at_utc: datetime
+    last_traded_price: Decimal | None = Field(default=None, gt=0)
+    last_traded_quantity: Decimal | None = Field(default=None, ge=0)
+    previous_close_price: Decimal | None = Field(default=None, gt=0)
+    open_interest: Decimal | None = Field(default=None, ge=0)
+    total_buy_quantity: Decimal | None = Field(default=None, ge=0)
+    total_sell_quantity: Decimal | None = Field(default=None, ge=0)
+    quality_status: str = Field(min_length=1, max_length=30)
+    is_usable_for_new_exposure: bool
+    source_version: str = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_quote(self) -> "MarketQuotePublishedV1":
+        if self.received_at_utc < self.event_at_utc:
+            raise ValueError("receivedAtUtc cannot precede eventAtUtc")
+        if self.total_buy_quantity is None and self.total_sell_quantity is not None:
+            raise ValueError("totalBuyQuantity is required when totalSellQuantity exists")
+        if self.total_sell_quantity is None and self.total_buy_quantity is not None:
+            raise ValueError("totalSellQuantity is required when totalBuyQuantity exists")
+        return self
+
+
+class MarketQuoteEnvelopeV1(ContractModel):
+    metadata: MarketDataMessageMetadataV1
+    payload: MarketQuotePublishedV1
+
+
+class MarketQuoteDeliveryV1(ContractModel):
+    stream_position: int = Field(ge=1)
+    envelope: MarketQuoteEnvelopeV1
 
 
 class MarketCandlePublishedV1(ContractModel):
@@ -123,6 +166,13 @@ class FeatureProcessingResultV1(ContractModel):
     snapshot: FeatureSnapshotV1 | None = None
     regime: RegimeProcessingResultV1 | None = None
     directional: DirectionalProcessingResultV1 | None = None
+    order_flow: OrderFlowProcessingResultV1 | None = None
     confirmation: ConfirmationProcessingResultV1 | None = None
     workflow_evidence: FusionReadyEvidenceV1 | None = None
     reason: str | None = None
+
+
+class QuoteProcessingResponseV1(ContractModel):
+    stream_position: int
+    message_uid: UUID
+    order_flow: OrderFlowQuoteProcessingResultV1

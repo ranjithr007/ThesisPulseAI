@@ -71,10 +71,12 @@ public static class MarketDataEndpointExtensions
         });
 
         endpoints.MapGet("/api/v1/market-data/consumer/status", async (
+            IConfiguration configuration,
             MarketDataConsumerBuffer buffer,
             IMarketDataConsumerCheckpointStore checkpoints,
             CancellationToken cancellationToken) => Results.Ok(new
         {
+            enabled = configuration.GetValue("MarketDataConsumer:Enabled", false),
             consumerName = ConsumerName,
             quoteCount = buffer.QuoteCount,
             candleCount = buffer.CandleCount,
@@ -103,6 +105,11 @@ public static class MarketDataEndpointExtensions
 
     private static bool Authorized(HttpRequest request, IConfiguration configuration)
     {
+        if (!configuration.GetValue("MarketDataConsumer:Enabled", false))
+        {
+            return false;
+        }
+
         var expected = configuration["MarketDataConsumer:InternalApiKey"];
         if (string.IsNullOrWhiteSpace(expected) ||
             !request.Headers.TryGetValue("X-ThesisPulse-Internal-Key", out var supplied))

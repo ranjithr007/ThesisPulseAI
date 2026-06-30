@@ -51,7 +51,7 @@ public sealed record MarketCandlePublishedV1(
 
 public sealed record MarketDataDeliveryV1<TPayload>(
     long StreamPosition,
-    Messaging.V1.EventEnvelope<TPayload> Envelope)
+    ThesisPulse.Shared.Contracts.Messaging.V1.EventEnvelope<TPayload> Envelope)
     where TPayload : class;
 
 public sealed record MarketDataReplayPageV1(

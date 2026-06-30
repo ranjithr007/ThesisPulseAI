@@ -26,6 +26,8 @@ GO
 GO
 :r $(SeedRoot)/intelligence/S0008__seed_feature_factory_engine.sql
 GO
+:r $(SeedRoot)/intelligence/S0009__seed_technical_directional_engine.sql
+GO
 :r $(VerificationRoot)/S0001__verify_reference_seeds.sql
 GO
 :r $(VerificationRoot)/S0002__verify_signal_engine_seed.sql
@@ -33,4 +35,6 @@ GO
 :r $(VerificationRoot)/S0003__verify_upstox_market_data_sources.sql
 GO
 :r $(VerificationRoot)/S0004__verify_feature_factory_seed.sql
+GO
+:r $(VerificationRoot)/S0005__verify_technical_directional_engine_seed.sql
 GO

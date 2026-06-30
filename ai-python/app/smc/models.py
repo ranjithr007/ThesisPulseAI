@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
-from uuid import UUID
 
 from app.contracts.v1.market_data import MarketCandleDeliveryV1
 from app.contracts.v1.smc import SmartMoneyConceptsOutputV1
@@ -42,7 +41,11 @@ class SmcStore(Protocol):
     ) -> SmcStoreOutcome:
         ...
 
-    def get_latest(self, instrument_key: str, timeframe: str) -> StoredSmcOutput | None:
+    def get_latest(
+        self,
+        instrument_key: str,
+        timeframe: str,
+    ) -> StoredSmcOutput | None:
         ...
 
     def get_status(self) -> SmcStoreStatus:
@@ -50,4 +53,6 @@ class SmcStore(Protocol):
 
 
 def candle_identity(candles: list[CandleInput]) -> tuple[int, ...]:
-    return tuple(item.candle_id for item in candles if item.candle_id is not None)
+    return tuple(
+        item.candle_id for item in candles if item.candle_id is not None
+    )

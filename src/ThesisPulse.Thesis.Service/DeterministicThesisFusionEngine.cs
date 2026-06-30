@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using ThesisPulse.Shared.Contracts.Common.V1;
 using ThesisPulse.Shared.Contracts.Thesis.V1;
 
 namespace ThesisPulse.Thesis.Service;
@@ -33,10 +34,10 @@ public sealed class DeterministicThesisFusionEngine(IOptions<DeterministicFusion
                 failures.Add("CONFIDENCE_BELOW_THRESHOLD");
         }
 
-        var thesisUid = Guid.NewGuid();
+        var thesisUid = DeterministicGuidV1.Create(request.RequestUid, "thesis.v1");
         var candidate = failures.Count == 0
             ? new CanonicalCandidateSignalV1(
-                Guid.NewGuid(), ThesisFusionContractV1.CandidateStatus, request.InstrumentKey, direction,
+                DeterministicGuidV1.Create(request.RequestUid, "candidate-signal.v1"), ThesisFusionContractV1.CandidateStatus, request.InstrumentKey, direction,
                 request.PrimaryTimeframe, winningScore, confidence, now,
                 request.WeightConfigurationVersion, thesisUid)
             : null;

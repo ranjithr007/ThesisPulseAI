@@ -61,6 +61,8 @@ jobs:
         run: dotnet run --project tests/execution/dotnet/ThesisPulse.Execution.Tests.csproj --configuration Release
       - name: Deterministic portfolio ledger tests
         run: dotnet run --project tests/portfolio/dotnet/ThesisPulse.Portfolio.Tests.csproj --configuration Release
+      - name: PAPER workflow orchestration tests
+        run: dotnet run --project tests/paper-workflow/dotnet/ThesisPulse.PaperWorkflow.Tests.csproj --configuration Release
       - name: Market Data recovery tests with diagnostics
         shell: bash
         run: |

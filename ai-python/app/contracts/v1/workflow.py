@@ -18,7 +18,12 @@ class WorkflowContractModel(BaseModel):
 
 class FusionDirectionalEvidenceV1(WorkflowContractModel):
     output_uid: UUID
-    engine_code: Literal["TREND", "MOMENTUM"]
+    engine_code: Literal[
+        "TREND",
+        "MOMENTUM",
+        "ORDER_FLOW",
+        "SMART_MONEY_CONCEPTS",
+    ]
     engine_version: str = Field(min_length=1, max_length=50)
     timeframe: Literal["1m", "5m", "15m", "1h", "1d"]
     direction: Literal["LONG", "NEUTRAL", "SHORT"]

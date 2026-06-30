@@ -52,3 +52,5 @@
 /src/ThesisPulse.Signal.Service/bin/Debug/net8.0
 /src/ThesisPulse.Thesis.Service/bin/Debug/net8.0
 /src/ThesisPulse.Trading.Api/bin/Debug/net8.0
+/frontend-react/node_modules/.bin
+/frontend-react/node_modules

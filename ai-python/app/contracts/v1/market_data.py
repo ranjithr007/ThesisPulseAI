@@ -13,6 +13,7 @@ from app.contracts.v1.order_flow import (
     OrderFlowQuoteProcessingResultV1,
 )
 from app.contracts.v1.regime import RegimeProcessingResultV1
+from app.contracts.v1.smc import SmcProcessingResultV1
 from app.contracts.v1.workflow import FusionReadyEvidenceV1
 
 
@@ -167,6 +168,7 @@ class FeatureProcessingResultV1(ContractModel):
     regime: RegimeProcessingResultV1 | None = None
     directional: DirectionalProcessingResultV1 | None = None
     order_flow: OrderFlowProcessingResultV1 | None = None
+    smc: SmcProcessingResultV1 | None = None
     confirmation: ConfirmationProcessingResultV1 | None = None
     workflow_evidence: FusionReadyEvidenceV1 | None = None
     reason: str | None = None

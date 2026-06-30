@@ -53,6 +53,8 @@ jobs:
         run: dotnet run --project tests/database/dotnet/ThesisPulse.DatabaseMigrator.Tests.csproj --configuration Release --no-build
       - name: Market Data foundation tests
         run: dotnet run --project tests/marketdata/dotnet/ThesisPulse.MarketData.Tests.csproj --configuration Release
+      - name: Deterministic risk decision tests
+        run: dotnet run --project tests/risk/dotnet/ThesisPulse.Risk.Tests.csproj --configuration Release
       - name: Market Data recovery tests with diagnostics
         shell: bash
         run: |

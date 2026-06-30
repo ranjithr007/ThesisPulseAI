@@ -71,20 +71,23 @@ class MultiTimeframeConfirmationService:
                 instrument_key=instrument_key,
                 reason="Primary 5m directional and regime outputs are required",
             )
+        if primary_directional.output.as_of_utc != primary_regime.output.as_of_utc:
+            return ConfirmationProcessingResultV1(
+                outcome="IGNORED_INCOMPLETE",
+                instrument_key=instrument_key,
+                reason="Primary 5m directional and regime timestamps do not match",
+            )
 
-        primary_as_of = min(
-            primary_directional.output.as_of_utc,
-            primary_regime.output.as_of_utc,
-        )
+        primary_as_of = primary_directional.output.as_of_utc
         pairs: list[TimeframeIntelligencePair] = []
         for timeframe in TIMEFRAME_WEIGHTS:
             directional = self._directional.get_latest_stored(instrument_key, timeframe)
             regime = self._regime.get_latest_stored(instrument_key, timeframe)
             if directional is None or regime is None:
                 continue
-            if directional.output.as_of_utc > primary_as_of:
+            if directional.output.as_of_utc != regime.output.as_of_utc:
                 continue
-            if regime.output.as_of_utc > primary_as_of:
+            if directional.output.as_of_utc > primary_as_of:
                 continue
             pairs.append(
                 TimeframeIntelligencePair(

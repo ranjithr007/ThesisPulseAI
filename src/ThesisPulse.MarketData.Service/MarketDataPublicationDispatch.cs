@@ -17,6 +17,7 @@ public sealed record MarketDataDispatchOptions
     public Uri? SignalServiceBaseUrl { get; init; }
     public Uri? TradingApiBaseUrl { get; init; }
     public bool AiFeatureFactoryEnabled { get; init; }
+    public bool AiOrderFlowEnabled { get; init; }
     public Uri? AiServiceBaseUrl { get; init; }
     public bool AutomaticPaperWorkflowEnabled { get; init; }
     public Uri? OperationsServiceBaseUrl { get; init; }
@@ -33,7 +34,8 @@ public sealed record MarketDataDispatchOptions
         if (string.IsNullOrWhiteSpace(InternalApiKey) ||
             SignalServiceBaseUrl is null ||
             TradingApiBaseUrl is null ||
-            (AiFeatureFactoryEnabled && AiServiceBaseUrl is null) ||
+            ((AiFeatureFactoryEnabled || AiOrderFlowEnabled) &&
+                AiServiceBaseUrl is null) ||
             (AutomaticPaperWorkflowEnabled &&
                 (!AiFeatureFactoryEnabled || OperationsServiceBaseUrl is null)) ||
             BatchSize is < 1 or > 1000 ||
@@ -184,6 +186,12 @@ public sealed class MarketDataFanoutClient(
         OutboxMessage message,
         CancellationToken cancellationToken)
     {
+        var isQuote = message.Metadata.EventType.Equals(
+            MarketDataPublicationContractV1.QuoteEventType,
+            StringComparison.OrdinalIgnoreCase);
+        var isCandle = message.Metadata.EventType.Equals(
+            MarketDataPublicationContractV1.CandleEventType,
+            StringComparison.OrdinalIgnoreCase);
         var path = message.Metadata.EventType switch
         {
             MarketDataPublicationContractV1.QuoteEventType =>
@@ -210,10 +218,18 @@ public sealed class MarketDataFanoutClient(
             delivery,
             cancellationToken);
 
-        if (!options.AiFeatureFactoryEnabled ||
-            !message.Metadata.EventType.Equals(
-                MarketDataPublicationContractV1.CandleEventType,
-                StringComparison.OrdinalIgnoreCase))
+        if (isQuote && options.AiOrderFlowEnabled)
+        {
+            await SendToAsync(
+                "AiOrderFlowMarketData",
+                options.AiServiceBaseUrl!,
+                "/internal/v1/market-data/quotes",
+                message.Metadata.CorrelationId,
+                delivery,
+                cancellationToken);
+        }
+
+        if (!isCandle || !options.AiFeatureFactoryEnabled)
         {
             return;
         }

@@ -12,6 +12,7 @@ from app.contracts.v1.market_data import (
     FeatureSnapshotV1,
     MarketCandleDeliveryV1,
 )
+from app.contracts.v1.regime import MarketRegimeOutputV1
 from app.contracts.v1.signals import (
     MessageMetadataV1,
     MockSignalRequest,
@@ -22,12 +23,15 @@ from app.contracts.v1.signals import (
 from app.core.settings import load_settings
 from app.directional.service import DirectionalIntelligenceService
 from app.features.service import FeatureFactoryService
+from app.regime.service import MarketRegimeService
 
 settings = load_settings()
 directional_intelligence = DirectionalIntelligenceService(settings)
+market_regime = MarketRegimeService(settings)
 feature_factory = FeatureFactoryService(
     settings,
     directional_service=directional_intelligence,
+    regime_service=market_regime,
 )
 started_at_utc = datetime.now(UTC)
 
@@ -62,6 +66,8 @@ async def readiness() -> JSONResponse:
             feature_factory.get_status()
             if directional_intelligence.enabled:
                 directional_intelligence.get_status()
+            if market_regime.enabled:
+                market_regime.get_status()
         except Exception as exception:
             return JSONResponse(
                 status_code=503,
@@ -96,6 +102,8 @@ async def service_info() -> dict[str, str | bool]:
         "featureSetVersion": settings.feature_set_version,
         "directionalEngineEnabled": settings.directional_engine_enabled,
         "directionalPolicyVersion": settings.directional_policy_version,
+        "regimeEngineEnabled": settings.regime_engine_enabled,
+        "regimePolicyVersion": settings.regime_policy_version,
         "startedAtUtc": started_at_utc.isoformat(),
         "currentTimeUtc": datetime.now(UTC).isoformat(),
     }
@@ -110,6 +118,15 @@ async def list_engines() -> dict[str, list[object]]:
                 "engineRole": "CONTEXT_PROVIDER",
                 "enabled": settings.feature_factory_enabled,
                 "featureSetVersion": settings.feature_set_version,
+                "canCreateSignals": False,
+                "canExecuteOrders": False,
+            },
+            {
+                "engineCode": settings.regime_engine_code,
+                "engineRole": "CONTEXT_PROVIDER",
+                "enabled": settings.regime_engine_enabled,
+                "engineVersion": settings.regime_engine_version,
+                "policyVersion": settings.regime_policy_version,
                 "canCreateSignals": False,
                 "canExecuteOrders": False,
             },
@@ -179,7 +196,43 @@ def latest_feature_snapshot(
     return snapshot
 
 
-@app.get("/api/v1/intelligence/directional/status", tags=["directional-intelligence"])
+@app.get("/api/v1/intelligence/regime/status", tags=["market-regime"])
+def market_regime_status() -> dict[str, object]:
+    status = market_regime.get_status()
+    return {
+        "enabled": market_regime.enabled,
+        "provider": status.provider,
+        "engineCode": settings.regime_engine_code,
+        "engineVersion": settings.regime_engine_version,
+        "policyVersion": settings.regime_policy_version,
+        "outputCount": status.output_count,
+        "latestProcessedAtUtc": status.latest_processed_at_utc,
+        "latestError": status.latest_error,
+        "canCreateSignals": False,
+        "canExecuteOrders": False,
+    }
+
+
+@app.get(
+    "/api/v1/intelligence/regime/latest/{instrument_key:path}",
+    response_model=MarketRegimeOutputV1,
+    tags=["market-regime"],
+)
+def latest_market_regime(
+    instrument_key: str,
+    timeframe: str = "5m",
+) -> MarketRegimeOutputV1:
+    _validate_timeframe(timeframe)
+    output = market_regime.get_latest(instrument_key, timeframe)
+    if output is None:
+        raise HTTPException(status_code=404, detail="Market regime output was not found")
+    return output
+
+
+@app.get(
+    "/api/v1/intelligence/directional/status",
+    tags=["directional-intelligence"],
+)
 def directional_status() -> dict[str, object]:
     status = directional_intelligence.get_status()
     return {

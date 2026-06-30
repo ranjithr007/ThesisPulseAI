@@ -4,33 +4,31 @@ from app.contracts.v1.market_data import MarketCandleDeliveryV1
 from app.contracts.v1.smc import SmcProcessingResultV1, SmartMoneyConceptsOutputV1
 from app.core.settings import Settings
 from app.smc.calculator import DeterministicSmcCalculator
-from app.smc.definitions import SmcOptions
 from app.smc.models import SmcStore, SmcStoreStatus
+from app.smc.runtime import load_smc_options, smc_enabled
 from app.smc.store import InMemorySmcStore
 
 
 class SmartMoneyConceptsService:
-    def __init__(self, settings: Settings, store: SmcStore | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        store: SmcStore | None = None,
+        *,
+        enabled: bool | None = None,
+    ) -> None:
         self._settings = settings
-        self._calculator = DeterministicSmcCalculator(
-            SmcOptions(
-                engine_code=settings.smc_engine_code,
-                engine_version=settings.smc_engine_version,
-                policy_version=settings.smc_policy_version,
-                required_input_count=settings.smc_required_input_count,
-                maximum_input_count=settings.smc_maximum_input_count,
-                swing_left_bars=settings.smc_swing_left_bars,
-                swing_right_bars=settings.smc_swing_right_bars,
-                minimum_break_fraction=settings.smc_minimum_break_fraction,
-                directional_threshold=settings.smc_directional_threshold,
-                fusion_confidence_threshold=settings.smc_fusion_confidence_threshold,
-            )
-        )
+        self._enabled = smc_enabled() if enabled is None else enabled
+        self._calculator = DeterministicSmcCalculator(load_smc_options())
         self._store = store or InMemorySmcStore()
 
     @property
     def enabled(self) -> bool:
-        return self._settings.smc_engine_enabled
+        return self._enabled
+
+    @property
+    def options(self):
+        return self._calculator.options
 
     def process_candle(
         self,

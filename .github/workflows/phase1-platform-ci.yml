@@ -63,6 +63,8 @@ jobs:
         run: dotnet run --project tests/portfolio/dotnet/ThesisPulse.Portfolio.Tests.csproj --configuration Release
       - name: PAPER workflow orchestration tests
         run: dotnet run --project tests/paper-workflow/dotnet/ThesisPulse.PaperWorkflow.Tests.csproj --configuration Release
+      - name: Automatic intelligence intake tests
+        run: dotnet run --project tests/automatic-intake/dotnet/ThesisPulse.AutomaticIntake.Tests.csproj --configuration Release
       - name: Market Data recovery tests with diagnostics
         shell: bash
         run: |

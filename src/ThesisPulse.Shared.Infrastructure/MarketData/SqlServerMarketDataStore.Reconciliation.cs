@@ -94,6 +94,7 @@ public sealed partial class SqlServerMarketDataStore
                     cancellationToken);
             }
 
+            var revision = current?.Revision + 1 ?? 0;
             var candleId = await InsertRevisionAsync(
                 connection,
                 transaction,
@@ -103,7 +104,7 @@ public sealed partial class SqlServerMarketDataStore
                 sessionId.Value,
                 candle,
                 assessment,
-                current?.Revision + 1 ?? 0,
+                revision,
                 current?.CandleId,
                 cancellationToken);
             await InsertQualityAssessmentAsync(

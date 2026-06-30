@@ -143,6 +143,14 @@ public sealed partial class SqlServerMarketDataStore
                         update,
                         correlationId,
                         cancellationToken);
+                    await EnqueuePublicationAsync(
+                        connection,
+                        transaction,
+                        _publicationFactory.CreateQuote(
+                            update,
+                            assessment,
+                            correlationId),
+                        cancellationToken);
 
                     accepted++;
                 }

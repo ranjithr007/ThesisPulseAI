@@ -16,4 +16,5 @@ public sealed record OutboxMessage(
     OutboxMessageStatus Status,
     int AttemptCount,
     DateTimeOffset? PublishedAtUtc,
-    string? LastError);
+    string? LastError,
+    long StreamPosition = 0);

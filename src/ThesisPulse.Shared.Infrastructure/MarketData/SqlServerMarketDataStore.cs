@@ -11,13 +11,16 @@ public sealed partial class SqlServerMarketDataStore : IMarketDataStore
 
     public SqlServerMarketDataStore(
         SqlServerMarketDataOptions options,
-        IMarketDataFreshnessEvaluator freshnessEvaluator)
+        IMarketDataFreshnessEvaluator freshnessEvaluator,
+        MarketDataPublicationFactory publicationFactory)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(freshnessEvaluator);
+        ArgumentNullException.ThrowIfNull(publicationFactory);
         options.Validate();
         _options = options;
         _freshnessEvaluator = freshnessEvaluator;
+        _publicationFactory = publicationFactory;
     }
 
     public async Task<IReadOnlyCollection<StoredCandleV1>> GetLatestCandlesAsync(

@@ -41,17 +41,32 @@ class DirectionalIntelligenceService:
         source: StoredFeatureSnapshot,
         processed_at_utc: datetime | None = None,
     ) -> DirectionalProcessingResultV1:
+        snapshot = source.snapshot
         if not self.enabled:
-            return DirectionalProcessingResultV1(
-                outcome="IGNORED_INELIGIBLE",
-                source_feature_snapshot_uid=source.snapshot.snapshot_uid,
-                reason="Directional intelligence engine is disabled",
+            return self._ignored(source, "Directional intelligence engine is disabled")
+        if (
+            not snapshot.is_eligible_for_engines
+            or snapshot.data_quality_status != "VALID"
+            or snapshot.is_stale
+        ):
+            return self._ignored(
+                source,
+                "Feature snapshot is not valid, fresh, and eligible",
             )
+
         processed_at = processed_at_utc or datetime.now(UTC)
-        outcome = self._store.process(source, self._calculator, processed_at)
+        try:
+            outcome = self._store.process(source, self._calculator, processed_at)
+        except ValueError as exception:
+            return self._ignored(source, str(exception))
+        except RuntimeError as exception:
+            if str(exception) == "Feature output is no longer current":
+                return self._ignored(source, str(exception))
+            raise
+
         return DirectionalProcessingResultV1(
             outcome=outcome.outcome,
-            source_feature_snapshot_uid=source.snapshot.snapshot_uid,
+            source_feature_snapshot_uid=snapshot.snapshot_uid,
             output=outcome.output,
             reason=outcome.reason,
         )
@@ -66,6 +81,17 @@ class DirectionalIntelligenceService:
 
     def get_status(self) -> DirectionalStoreStatus:
         return self._store.get_status()
+
+    @staticmethod
+    def _ignored(
+        source: StoredFeatureSnapshot,
+        reason: str,
+    ) -> DirectionalProcessingResultV1:
+        return DirectionalProcessingResultV1(
+            outcome="IGNORED_INELIGIBLE",
+            source_feature_snapshot_uid=source.snapshot.snapshot_uid,
+            reason=reason,
+        )
 
 
 def _create_store(settings: Settings) -> DirectionalIntelligenceStore:

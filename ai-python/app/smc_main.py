@@ -6,7 +6,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.contracts.v1.market_data import MarketCandleDeliveryV1
-from app.contracts.v1.smc import SmcProcessingResultV1, SmartMoneyConceptsOutputV1
+from app.contracts.v1.smc import SmartMoneyConceptsOutputV1, SmcProcessingResultV1
 from app.core.settings import load_settings
 from app.smc.service import SmartMoneyConceptsService
 
@@ -131,5 +131,9 @@ def latest_output(
 
 def _authorize(supplied_key: str | None) -> None:
     expected = settings.feature_factory_internal_api_key
-    if not supplied_key or not expected or not hmac.compare_digest(supplied_key, expected):
+    if (
+        not supplied_key
+        or not expected
+        or not hmac.compare_digest(supplied_key, expected)
+    ):
         raise HTTPException(status_code=401, detail="Unauthorized")

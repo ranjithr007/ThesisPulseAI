@@ -25,16 +25,19 @@ from app.contracts.v1.signals import (
     SignalEvidenceV1,
     SignalGeneratedV1,
 )
+from app.contracts.v1.smart_money import SmartMoneyConceptsOutputV1
 from app.core.settings import load_settings
 from app.directional.service import DirectionalIntelligenceService
 from app.features.service import FeatureFactoryService
 from app.order_flow.service import OrderFlowService
 from app.regime.service import MarketRegimeService
+from app.smart_money.service import SmartMoneyConceptsService
 
 settings = load_settings()
 directional_intelligence = DirectionalIntelligenceService(settings)
 market_regime = MarketRegimeService(settings)
 order_flow = OrderFlowService(settings)
+smart_money = SmartMoneyConceptsService(settings)
 multi_timeframe_confirmation = MultiTimeframeConfirmationService(
     settings,
     directional_intelligence,
@@ -46,6 +49,7 @@ feature_factory = FeatureFactoryService(
     regime_service=market_regime,
     confirmation_service=multi_timeframe_confirmation,
     order_flow_service=order_flow,
+    smart_money_service=smart_money,
 )
 started_at_utc = datetime.now(UTC)
 
@@ -84,6 +88,8 @@ async def readiness() -> JSONResponse:
                 market_regime.get_status()
             if order_flow.enabled:
                 order_flow.get_status()
+            if smart_money.enabled:
+                smart_money.get_status()
             if multi_timeframe_confirmation.enabled:
                 multi_timeframe_confirmation.get_status()
         except Exception as exception:
@@ -124,6 +130,8 @@ async def service_info() -> dict[str, str | bool]:
         "regimePolicyVersion": settings.regime_policy_version,
         "orderFlowEngineEnabled": settings.order_flow_engine_enabled,
         "orderFlowPolicyVersion": settings.order_flow_policy_version,
+        "smartMoneyEngineEnabled": smart_money.enabled,
+        "smartMoneyPolicyVersion": smart_money.policy_version,
         "confirmationEngineEnabled": settings.confirmation_engine_enabled,
         "confirmationPolicyVersion": settings.confirmation_policy_version,
         "startedAtUtc": started_at_utc.isoformat(),
@@ -168,6 +176,16 @@ async def list_engines() -> dict[str, list[object]]:
                 "engineVersion": settings.order_flow_engine_version,
                 "policyVersion": settings.order_flow_policy_version,
                 "methodology": "PROXY_TICK_RULE_AND_BOOK_TOTALS",
+                "canCreateSignals": False,
+                "canExecuteOrders": False,
+            },
+            {
+                "engineCode": smart_money.engine_code,
+                "engineRole": "DIRECTIONAL_VOTER",
+                "enabled": smart_money.enabled,
+                "engineVersion": smart_money.engine_version,
+                "policyVersion": smart_money.policy_version,
+                "methodology": "CONFIRMED_PIVOT_STRUCTURE_HEURISTIC",
                 "canCreateSignals": False,
                 "canExecuteOrders": False,
             },
@@ -360,6 +378,47 @@ def latest_order_flow_output(
     output = order_flow.get_latest(instrument_key, timeframe)
     if output is None:
         raise HTTPException(status_code=404, detail="Order Flow output was not found")
+    return output
+
+
+@app.get("/api/v1/intelligence/smart-money/status", tags=["smart-money"])
+def smart_money_status() -> dict[str, object]:
+    status = smart_money.get_status()
+    return {
+        "enabled": smart_money.enabled,
+        "provider": status.provider,
+        "engineCode": smart_money.engine_code,
+        "engineVersion": smart_money.engine_version,
+        "policyVersion": smart_money.policy_version,
+        "methodology": "CONFIRMED_PIVOT_STRUCTURE_HEURISTIC",
+        "requiredInputCount": smart_money.required_input_count,
+        "maximumInputCount": smart_money.maximum_input_count,
+        "candleCount": status.candle_count,
+        "outputCount": status.output_count,
+        "latestProcessedAtUtc": status.latest_processed_at_utc,
+        "latestError": status.latest_error,
+        "canCreateSignals": False,
+        "canExecuteOrders": False,
+    }
+
+
+@app.get(
+    "/api/v1/intelligence/smart-money/latest/{instrument_key:path}",
+    response_model=SmartMoneyConceptsOutputV1,
+    tags=["smart-money"],
+)
+def latest_smart_money_output(
+    instrument_key: str,
+    timeframe: str = "5m",
+) -> SmartMoneyConceptsOutputV1:
+    if timeframe != "5m":
+        raise HTTPException(
+            status_code=422,
+            detail="Smart Money Concepts V1 supports only 5m",
+        )
+    output = smart_money.get_latest(instrument_key, timeframe)
+    if output is None:
+        raise HTTPException(status_code=404, detail="Smart Money output was not found")
     return output
 
 

@@ -89,6 +89,8 @@ class MultiTimeframeConfirmationService:
                 continue
             if directional.output.as_of_utc > primary_as_of:
                 continue
+            if not _is_eligible_pair(directional.output, regime.output):
+                continue
             pairs.append(
                 TimeframeIntelligencePair(
                     timeframe=timeframe,
@@ -147,6 +149,17 @@ class MultiTimeframeConfirmationService:
 
     def get_status(self) -> ConfirmationStoreStatus:
         return self._store.get_status()
+
+
+def _is_eligible_pair(directional, regime) -> bool:
+    return (
+        not directional.is_stale
+        and not regime.is_stale
+        and directional.data_quality_status == "VALID"
+        and regime.data_quality_status == "VALID"
+        and directional.is_eligible_for_fusion
+        and regime.is_eligible_for_fusion
+    )
 
 
 def _create_store(settings: Settings) -> MultiTimeframeConfirmationStore:

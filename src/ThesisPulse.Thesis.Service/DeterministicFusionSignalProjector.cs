@@ -11,7 +11,6 @@ public sealed record FusionSignalProjectorOptions
     public const string SectionName = "FusionSignalProjection";
 
     public string Producer { get; init; } = "ThesisPulse.Thesis.Service";
-    public string ProducerVersion { get; init; } = "1.0.0";
     public string StrategyCode { get; init; } = "THESIS_FUSION";
     public string Environment { get; init; } = "PAPER";
 }
@@ -89,7 +88,7 @@ public sealed class DeterministicFusionSignalProjector(
             thesis.CorrelationId,
             fusion.EvidenceUid.ToString("D"),
             options.Producer,
-            options.ProducerVersion,
+            thesis.EngineVersion,
             options.Environment,
             thesis.WeightConfigurationVersion);
         var lineage = new FusionSignalLineageV1(
@@ -110,7 +109,7 @@ public sealed class DeterministicFusionSignalProjector(
             Array.Empty<string>());
     }
 
-    private static List<string> Validate(FusionSignalProjectionRequestV1 request)
+    private List<string> Validate(FusionSignalProjectionRequestV1 request)
     {
         var failures = new List<string>();
         var thesis = request.Thesis;
@@ -151,10 +150,11 @@ public sealed class DeterministicFusionSignalProjector(
             failures.Add("FUSION_LINEAGE_REQUIRED");
         if (!Guid.TryParse(thesis.CorrelationId, out _))
             failures.Add("CORRELATION_ID_INVALID");
-        if (thesis.GeneratedAtUtc < fusion.AsOfUtc || thesis.GeneratedAtUtc > fusion.GeneratedAtUtc)
+        if (thesis.GeneratedAtUtc < fusion.AsOfUtc)
             failures.Add("FUSION_TIME_LINEAGE_INVALID");
         if (request.EntryOpensAtUtc < thesis.GeneratedAtUtc ||
             request.EntryClosesAtUtc <= request.EntryOpensAtUtc ||
+            request.ValidUntilUtc <= thesis.GeneratedAtUtc ||
             request.ValidUntilUtc < request.EntryClosesAtUtc)
             failures.Add("SIGNAL_VALIDITY_WINDOW_INVALID");
         if (request.ExpectedHoldingPeriodMinutes < 1)
@@ -162,7 +162,6 @@ public sealed class DeterministicFusionSignalProjector(
         if (!string.Equals(options.Environment, "PAPER", StringComparison.Ordinal))
             failures.Add("PROJECTION_ENVIRONMENT_MUST_BE_PAPER");
         if (string.IsNullOrWhiteSpace(options.Producer) ||
-            string.IsNullOrWhiteSpace(options.ProducerVersion) ||
             string.IsNullOrWhiteSpace(options.StrategyCode))
             failures.Add("PROJECTION_CONFIGURATION_INVALID");
 
@@ -180,7 +179,9 @@ public sealed class DeterministicFusionSignalProjector(
 
     private static string EvidenceMessage(ThesisEvidenceV1 item)
     {
-        var reasons = item.Reasons.Count == 0 ? "No component reason supplied." : string.Join("; ", item.Reasons);
+        var reasons = item.Reasons.Count == 0
+            ? "No component reason supplied."
+            : string.Join("; ", item.Reasons);
         return $"{item.Source} {item.Timeframe}: {reasons}";
     }
 

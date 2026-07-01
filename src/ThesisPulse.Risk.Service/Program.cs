@@ -25,6 +25,14 @@ if (workerOptions.Enabled && !persistenceOptions.UseSqlServer)
     throw new InvalidOperationException("Signal Risk worker requires SQL_SERVER persistence mode.");
 builder.Services.AddSingleton(workerOptions);
 
+var canonicalIntakeOptions = builder.Configuration
+    .GetSection(CanonicalSignalRiskIntakeOptions.SectionName)
+    .Get<CanonicalSignalRiskIntakeOptions>() ?? new CanonicalSignalRiskIntakeOptions();
+canonicalIntakeOptions.Validate();
+if (canonicalIntakeOptions.Enabled && (!persistenceOptions.UseSqlServer || !workerOptions.Enabled))
+    throw new InvalidOperationException("Canonical Signal Risk intake requires SQL_SERVER persistence and the Signal Risk worker.");
+builder.Services.AddSingleton(canonicalIntakeOptions);
+
 builder.Services.AddSingleton<IRiskDecisionEngine, DeterministicRiskDecisionEngine>();
 builder.Services.AddSingleton<ISignalRiskProjector, DeterministicSignalRiskProjector>();
 builder.Services.AddSingleton<SignalRiskWorkerState>();
@@ -34,6 +42,7 @@ if (persistenceOptions.UseSqlServer)
     builder.Services.AddSingleton<ISignalRiskWorkQueue, SqlServerSignalRiskWorkQueue>();
     builder.Services.AddSingleton<ISignalRiskOperationalStatusStore, SqlServerSignalRiskOperationalStatusStore>();
     builder.Services.AddSingleton<ISignalRiskMetricsStore, SqlServerSignalRiskMetricsStore>();
+    builder.Services.AddSingleton<ICanonicalSignalRiskCandidateStore, SqlServerCanonicalSignalRiskCandidateStore>();
 }
 else
 {
@@ -43,6 +52,12 @@ else
 builder.Services.AddSingleton<SignalRiskCoordinator>();
 if (workerOptions.Enabled)
     builder.Services.AddHostedService<SignalRiskWorker>();
+if (canonicalIntakeOptions.Enabled)
+{
+    builder.Services.AddHttpClient<ICanonicalSignalRiskContextProvider, HttpCanonicalSignalRiskContextProvider>(client =>
+        client.BaseAddress = new Uri(canonicalIntakeOptions.PortfolioServiceBaseUrl));
+    builder.Services.AddHostedService<CanonicalSignalRiskIntakeWorker>();
+}
 builder.Services.AddSingleton<ITradePlanBuilder, DeterministicTradePlanBuilder>();
 
 var app = builder.Build();
@@ -56,6 +71,7 @@ app.MapGet("/api/v1/status", (SignalRiskWorkerState workerState) => Results.Ok(n
     automaticSignalProjection = true,
     automaticRiskPersistence = true,
     automaticRiskWorkerEnabled = workerOptions.Enabled,
+    automaticCanonicalSignalIntakeEnabled = canonicalIntakeOptions.Enabled,
     automaticRiskWorkerPollIntervalSeconds = workerOptions.PollIntervalSeconds,
     automaticRiskWorkerBatchSize = workerOptions.BatchSize,
     automaticRiskWorkerMaximumAttempts = workerOptions.MaximumAttempts,

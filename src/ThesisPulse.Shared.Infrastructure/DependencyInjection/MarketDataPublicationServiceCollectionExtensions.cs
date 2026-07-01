@@ -14,6 +14,9 @@ public static class MarketDataPublicationServiceCollectionExtensions
         var options = new MarketDataPublicationOptions
         {
             Enabled = configuration.GetValue("MarketData:Publication:Enabled", false),
+            OptionChainEnabled = configuration.GetValue(
+                "MarketData:Publication:OptionChainEnabled",
+                false),
             Environment = configuration["Platform:Environment"] ?? "PAPER",
             Producer = serviceName,
             ProducerVersion = configuration["MarketData:Publication:ProducerVersion"]

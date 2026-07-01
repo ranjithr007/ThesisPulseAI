@@ -2,13 +2,9 @@ using ThesisPulse.Shared.Contracts.Risk.V1;
 
 namespace ThesisPulse.Risk.Service;
 
-public sealed record SignalRiskCoordinatorResult(
-    string Outcome,
-    StoredRiskEvaluation Evaluation);
+public sealed record SignalRiskCoordinatorResult(string Outcome, StoredRiskEvaluation Evaluation);
 
-public sealed class SignalRiskCoordinator(
-    IRiskDecisionEngine engine,
-    ISignalRiskEvaluationStore store)
+public sealed class SignalRiskCoordinator(IRiskDecisionEngine engine, ISignalRiskEvaluationStore store)
 {
     private readonly object _sync = new();
 
@@ -45,7 +41,9 @@ public sealed class SignalRiskCoordinator(
                     finalStatus,
                 });
 
-            return new SignalRiskCoordinatorResult("COMPLETED", store.Save(evaluation));
+            return new SignalRiskCoordinatorResult(
+                "COMPLETED",
+                store.Save(command, evaluation));
         }
     }
 }

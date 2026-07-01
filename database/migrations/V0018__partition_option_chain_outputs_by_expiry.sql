@@ -7,7 +7,8 @@ Dependencies:
   V0017__create_option_chain_intelligence_output_tables.sql
 Backward compatibility:
   Existing non-option engine outputs retain their original uniqueness behavior
-  because their computed partition key remains NULL.
+  because their computed partition key remains NULL. Existing index names are
+  preserved so earlier verification scripts remain valid.
 */
 SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;
@@ -59,6 +60,18 @@ BEGIN TRY
     (
         SELECT 1
         FROM sys.indexes
+        WHERE [name] = N'uq_engine_outputs_revision'
+          AND [object_id] = OBJECT_ID(N'[intelligence].[engine_outputs]')
+    )
+    BEGIN
+        DROP INDEX [uq_engine_outputs_revision]
+            ON [intelligence].[engine_outputs];
+    END;
+
+    IF EXISTS
+    (
+        SELECT 1
+        FROM sys.indexes
         WHERE [name] = N'ux_engine_outputs_current'
           AND [object_id] = OBJECT_ID(N'[intelligence].[engine_outputs]')
     )
@@ -67,34 +80,16 @@ BEGIN TRY
             ON [intelligence].[engine_outputs];
     END;
 
-    IF NOT EXISTS
-    (
-        SELECT 1
-        FROM sys.indexes
-        WHERE [name] = N'ux_engine_outputs_revision_partitioned'
-          AND [object_id] = OBJECT_ID(N'[intelligence].[engine_outputs]')
-    )
-    BEGIN
-        CREATE UNIQUE INDEX [ux_engine_outputs_revision_partitioned]
-            ON [intelligence].[engine_outputs]
-            ([engine_id], [instrument_id], [timeframe], [as_of_utc],
-             [output_partition_key], [revision]);
-    END;
+    CREATE UNIQUE INDEX [uq_engine_outputs_revision]
+        ON [intelligence].[engine_outputs]
+        ([engine_id], [instrument_id], [timeframe], [as_of_utc],
+         [output_partition_key], [revision]);
 
-    IF NOT EXISTS
-    (
-        SELECT 1
-        FROM sys.indexes
-        WHERE [name] = N'ux_engine_outputs_current_partitioned'
-          AND [object_id] = OBJECT_ID(N'[intelligence].[engine_outputs]')
-    )
-    BEGIN
-        CREATE UNIQUE INDEX [ux_engine_outputs_current_partitioned]
-            ON [intelligence].[engine_outputs]
-            ([engine_id], [instrument_id], [timeframe], [as_of_utc],
-             [output_partition_key])
-            WHERE [is_current] = 1;
-    END;
+    CREATE UNIQUE INDEX [ux_engine_outputs_current]
+        ON [intelligence].[engine_outputs]
+        ([engine_id], [instrument_id], [timeframe], [as_of_utc],
+         [output_partition_key])
+        WHERE [is_current] = 1;
 
     IF NOT EXISTS
     (

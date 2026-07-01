@@ -30,6 +30,7 @@ class OptionChainIntelligenceService:
         store: OptionChainIntelligenceStore | None = None,
         runtime: OptionChainRuntimeSettings | None = None,
     ) -> None:
+        global _registered_option_chain_service
         self._runtime = runtime or OptionChainRuntimeSettings.load()
         self._calculator = DeterministicOptionChainCalculator(
             OptionChainIntelligenceOptions(
@@ -52,6 +53,7 @@ class OptionChainIntelligenceService:
             )
         )
         self._store = store or _create_store(self._runtime)
+        _registered_option_chain_service = self
 
     @property
     def enabled(self) -> bool:

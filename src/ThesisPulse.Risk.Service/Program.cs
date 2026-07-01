@@ -10,9 +10,19 @@ builder.Services.Configure<DeterministicRiskOptions>(
     builder.Configuration.GetSection(DeterministicRiskOptions.SectionName));
 builder.Services.Configure<DeterministicTradePlanOptions>(
     builder.Configuration.GetSection(DeterministicTradePlanOptions.SectionName));
+
+var persistenceOptions = builder.Configuration
+    .GetSection(SignalRiskPersistenceOptions.SectionName)
+    .Get<SignalRiskPersistenceOptions>() ?? new SignalRiskPersistenceOptions();
+persistenceOptions.Validate();
+builder.Services.AddSingleton(persistenceOptions);
+
 builder.Services.AddSingleton<IRiskDecisionEngine, DeterministicRiskDecisionEngine>();
 builder.Services.AddSingleton<ISignalRiskProjector, DeterministicSignalRiskProjector>();
-builder.Services.AddSingleton<ISignalRiskEvaluationStore, InMemorySignalRiskEvaluationStore>();
+if (persistenceOptions.UseSqlServer)
+    builder.Services.AddSingleton<ISignalRiskEvaluationStore, SqlServerSignalRiskEvaluationStore>();
+else
+    builder.Services.AddSingleton<ISignalRiskEvaluationStore, InMemorySignalRiskEvaluationStore>();
 builder.Services.AddSingleton<SignalRiskCoordinator>();
 builder.Services.AddSingleton<ITradePlanBuilder, DeterministicTradePlanBuilder>();
 
@@ -26,7 +36,7 @@ app.MapGet("/api/v1/status", () => Results.Ok(new
     failClosed = true,
     automaticSignalProjection = true,
     automaticRiskPersistence = true,
-    persistenceMode = "IN_MEMORY_PAPER",
+    persistenceMode = persistenceOptions.UseSqlServer ? "SQL_SERVER" : "IN_MEMORY_PAPER",
     defaultRiskDecision = RiskDecisionContractV1.Rejected,
     riskDecisionAuthority = true,
     riskStatusAuthority = true,

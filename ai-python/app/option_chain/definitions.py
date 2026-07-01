@@ -66,7 +66,10 @@ class OptionChainIntelligenceOptions:
         )
         if any(value <= 0 for value in fractions):
             raise ValueError("configured fractions and thresholds must be positive")
-        if self.pcr_neutral_lower <= 0 or self.pcr_neutral_upper <= self.pcr_neutral_lower:
+        if (
+            self.pcr_neutral_lower <= 0
+            or self.pcr_neutral_upper <= self.pcr_neutral_lower
+        ):
             raise ValueError("PCR neutral band is invalid")
         if self.directional_threshold > 1 or self.fusion_confidence_threshold > 1:
             raise ValueError("direction and confidence thresholds cannot exceed 1")

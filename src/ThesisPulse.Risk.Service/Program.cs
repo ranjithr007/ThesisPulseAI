@@ -27,18 +27,20 @@ builder.Services.AddSingleton(workerOptions);
 
 builder.Services.AddSingleton<IRiskDecisionEngine, DeterministicRiskDecisionEngine>();
 builder.Services.AddSingleton<ISignalRiskProjector, DeterministicSignalRiskProjector>();
+builder.Services.AddSingleton<SignalRiskWorkerState>();
 if (persistenceOptions.UseSqlServer)
 {
     builder.Services.AddSingleton<ISignalRiskEvaluationStore, SqlServerSignalRiskEvaluationStore>();
     builder.Services.AddSingleton<ISignalRiskWorkQueue, SqlServerSignalRiskWorkQueue>();
     builder.Services.AddSingleton<ISignalRiskOperationalStatusStore, SqlServerSignalRiskOperationalStatusStore>();
+    builder.Services.AddSingleton<ISignalRiskMetricsStore, SqlServerSignalRiskMetricsStore>();
 }
 else
 {
     builder.Services.AddSingleton<ISignalRiskEvaluationStore, InMemorySignalRiskEvaluationStore>();
+    builder.Services.AddSingleton<ISignalRiskMetricsStore, InMemorySignalRiskMetricsStore>();
 }
 builder.Services.AddSingleton<SignalRiskCoordinator>();
-builder.Services.AddSingleton<SignalRiskWorkerState>();
 if (workerOptions.Enabled)
     builder.Services.AddHostedService<SignalRiskWorker>();
 builder.Services.AddSingleton<ITradePlanBuilder, DeterministicTradePlanBuilder>();
@@ -67,6 +69,10 @@ app.MapGet("/api/v1/status", (SignalRiskWorkerState workerState) => Results.Ok(n
     executionAuthority = false,
     brokerSubmissionAuthority = false,
 }));
+app.MapGet("/api/v1/risk/operations/metrics", async (
+    ISignalRiskMetricsStore metricsStore,
+    CancellationToken cancellationToken) =>
+    Results.Ok(await metricsStore.ReadAsync(cancellationToken)));
 app.MapPost("/api/v1/risk/signal-intake/project", (
     SignalRiskEvaluationIntakeV1 intake,
     ISignalRiskProjector projector) =>

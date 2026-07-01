@@ -86,7 +86,10 @@ class InMemoryOptionChainIntelligenceStore:
                 if snapshot.revision <= current_snapshot.revision:
                     return OptionChainStoreOutcome(
                         outcome="IGNORED_INELIGIBLE",
-                        reason="A same-cutoff snapshot with an equal or newer revision exists",
+                        reason=(
+                            "A same-cutoff snapshot with an equal or newer "
+                            "revision exists"
+                        ),
                     )
 
             self._snapshots_by_uid[snapshot.snapshot_uid] = snapshot
@@ -95,12 +98,17 @@ class InMemoryOptionChainIntelligenceStore:
             revision = (
                 0 if current_at_cutoff is None else current_at_cutoff.output.revision + 1
             )
+            generated_at = max(
+                processed_at,
+                _as_utc(snapshot.event_at_utc),
+                _as_utc(snapshot.received_at_utc),
+            )
             try:
                 output = calculator.calculate(
                     current=snapshot,
                     previous=prior,
                     term_snapshots=term_snapshots,
-                    generated_at_utc=max(processed_at, _as_utc(snapshot.event_at_utc)),
+                    generated_at_utc=generated_at,
                     revision=revision,
                 )
             except Exception as exception:
@@ -200,6 +208,7 @@ class InMemoryOptionChainIntelligenceStore:
             for snapshot in self._snapshots_by_uid.values()
             if snapshot.underlying_instrument_key
             == current.underlying_instrument_key
+            and snapshot.expiry_date >= current.event_at_utc.date()
             and _as_utc(snapshot.event_at_utc) <= _as_utc(current.event_at_utc)
             and _as_utc(snapshot.received_at_utc) <= _as_utc(current.received_at_utc)
             and is_snapshot_eligible(snapshot)

@@ -35,6 +35,7 @@ builder.Services.AddSingleton(canonicalIntakeOptions);
 
 builder.Services.AddSingleton<IRiskDecisionEngine, DeterministicRiskDecisionEngine>();
 builder.Services.AddSingleton<ISignalRiskProjector, DeterministicSignalRiskProjector>();
+builder.Services.AddSingleton<IAutomaticTradePlanProjector, DeterministicAutomaticTradePlanProjector>();
 builder.Services.AddSingleton<SignalRiskWorkerState>();
 if (persistenceOptions.UseSqlServer)
 {
@@ -70,6 +71,7 @@ app.MapGet("/api/v1/status", (SignalRiskWorkerState workerState) => Results.Ok(n
     failClosed = true,
     automaticSignalProjection = true,
     automaticRiskPersistence = true,
+    automaticTradePlanProjection = true,
     automaticRiskWorkerEnabled = workerOptions.Enabled,
     automaticCanonicalSignalIntakeEnabled = canonicalIntakeOptions.Enabled,
     automaticRiskWorkerPollIntervalSeconds = workerOptions.PollIntervalSeconds,
@@ -128,6 +130,29 @@ app.MapPost("/api/v1/risk/evaluate", (RiskDecisionRequestV1 request, IRiskDecisi
     return decision.Decision == RiskDecisionContractV1.Approved
         ? Results.Ok(decision)
         : Results.UnprocessableEntity(decision);
+});
+app.MapPost("/api/v1/trade-plans/automatic/project", (
+    AutomaticTradePlanIntakeV1 intake,
+    IAutomaticTradePlanProjector projector) =>
+{
+    var projection = projector.Project(intake);
+    return projection.Outcome == AutomaticTradePlanContractV1.Eligible
+        ? Results.Ok(projection)
+        : Results.UnprocessableEntity(projection);
+});
+app.MapPost("/api/v1/trade-plans/automatic/build", (
+    AutomaticTradePlanIntakeV1 intake,
+    IAutomaticTradePlanProjector projector,
+    ITradePlanBuilder planBuilder) =>
+{
+    var projection = projector.Project(intake);
+    if (projection.Command is null)
+        return Results.UnprocessableEntity(projection);
+
+    var result = planBuilder.Build(projection.Command.Request);
+    return result.Status == TradePlanContractV1.Ready
+        ? Results.Ok(result)
+        : Results.UnprocessableEntity(result);
 });
 app.MapPost("/api/v1/trade-plans/build", (TradePlanBuildRequestV1 request, ITradePlanBuilder planBuilder) =>
 {

@@ -1,0 +1,1 @@
+Phase 3.2 checkpoint: deterministic Signal-to-Risk projection contracts, strict eligibility gates, replay-stable request and command identities, and focused regression tests. Persistence and authoritative status transitions remain the next checkpoint.

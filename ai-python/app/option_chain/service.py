@@ -12,7 +12,9 @@ from app.option_chain.models import (
     OptionChainSnapshotObservation,
     OptionContractObservation,
 )
-from app.option_chain.sql_store import SqlServerOptionChainIntelligenceStore
+from app.option_chain.sql_partitioned_store import (
+    PartitionedSqlServerOptionChainIntelligenceStore,
+)
 from app.option_chain.store import (
     InMemoryOptionChainIntelligenceStore,
     OptionChainStoreStatus,
@@ -32,15 +34,11 @@ class OptionChainIntelligenceService:
                 engine_code=self._runtime.engine_code,
                 engine_version=self._runtime.engine_version,
                 policy_version=self._runtime.policy_version,
-                maximum_output_age_seconds=(
-                    self._runtime.maximum_output_age_seconds
-                ),
+                maximum_output_age_seconds=self._runtime.maximum_output_age_seconds,
                 minimum_contract_count=self._runtime.minimum_contract_count,
                 minimum_strike_count=self._runtime.minimum_strike_count,
                 oi_wall_count=self._runtime.oi_wall_count,
-                oi_wall_moneyness_fraction=(
-                    self._runtime.oi_wall_moneyness_fraction
-                ),
+                oi_wall_moneyness_fraction=self._runtime.oi_wall_moneyness_fraction,
                 minimum_premium_change_fraction=(
                     self._runtime.minimum_premium_change_fraction
                 ),
@@ -48,9 +46,7 @@ class OptionChainIntelligenceService:
                     self._runtime.minimum_open_interest_change_fraction
                 ),
                 directional_threshold=self._runtime.directional_threshold,
-                fusion_confidence_threshold=(
-                    self._runtime.fusion_confidence_threshold
-                ),
+                fusion_confidence_threshold=self._runtime.fusion_confidence_threshold,
             )
         )
         self._store = store or _create_store(self._runtime)
@@ -119,11 +115,9 @@ class OptionChainIntelligenceService:
         return self._store.get_status()
 
 
-def _create_store(
-    runtime: OptionChainRuntimeSettings,
-) -> OptionChainIntelligenceStore:
+def _create_store(runtime: OptionChainRuntimeSettings) -> OptionChainIntelligenceStore:
     if runtime.provider == "SqlServer":
-        return SqlServerOptionChainIntelligenceStore(
+        return PartitionedSqlServerOptionChainIntelligenceStore(
             runtime.database_connection_string or "",
             actor=runtime.actor,
             engine_code=runtime.engine_code,

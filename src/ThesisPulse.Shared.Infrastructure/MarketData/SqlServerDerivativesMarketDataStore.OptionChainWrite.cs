@@ -145,6 +145,23 @@ public sealed partial class SqlServerDerivativesMarketDataStore
                     cancellationToken);
             }
 
+            var publicationEntries = accepted
+                .Select(ToPublishedEntry)
+                .ToArray();
+            var publication = _publicationFactory.CreateOptionChain(
+                snapshot,
+                snapshotUid,
+                snapshotStatus,
+                qualityStatus,
+                pointInTimeEligible,
+                publicationEntries);
+            await EnqueueOptionChainPublicationAsync(
+                connection,
+                transaction,
+                publication,
+                $"{underlying.Uid:D}|{snapshot.ExpiryDate:yyyy-MM-dd}",
+                cancellationToken);
+
             await transaction.CommitAsync(cancellationToken);
             var storedEntries = accepted.Select(ToStoredEntry).ToArray();
             var stored = new StoredOptionChainSnapshotV1(
@@ -355,6 +372,26 @@ public sealed partial class SqlServerDerivativesMarketDataStore
         string parameterName,
         decimal? value) =>
         command.Parameters.Add(parameterName, SqlDbType.Decimal).Value = DbValue(value);
+
+    private static MarketOptionChainEntryPublishedV1 ToPublishedEntry(
+        ResolvedOptionEntry resolved)
+    {
+        var entry = resolved.Entry;
+        return new MarketOptionChainEntryPublishedV1(
+            resolved.Contract.Uid,
+            entry.ProviderInstrumentKey,
+            resolved.Contract.ExpiryDate,
+            entry.StrikePrice,
+            entry.OptionType,
+            entry.LastPrice,
+            entry.VolumeQuantity,
+            entry.OpenInterest,
+            entry.ImpliedVolatility,
+            entry.Delta,
+            resolved.Contract.ContractMultiplier,
+            entry.QualityStatus,
+            entry.GreeksSourceVersion);
+    }
 
     private static StoredOptionChainEntryV1 ToStoredEntry(ResolvedOptionEntry resolved)
     {

@@ -10,6 +10,7 @@ namespace ThesisPulse.Shared.Infrastructure.MarketData;
 public sealed record MarketDataPublicationOptions
 {
     public bool Enabled { get; init; }
+    public bool OptionChainEnabled { get; init; }
     public string Environment { get; init; } = "PAPER";
     public string Producer { get; init; } = "ThesisPulse.MarketData.Service";
     public string ProducerVersion { get; init; } = "0.4.0";
@@ -31,7 +32,8 @@ public sealed record MarketDataPublicationOptions
 public sealed class MarketDataPublicationFactory(
     MarketDataPublicationOptions options)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions =
+        new(JsonSerializerDefaults.Web);
 
     public OutboxMessage? CreateQuote(
         CanonicalLiveMarketUpdateV1 update,
@@ -108,6 +110,52 @@ public sealed class MarketDataPublicationFactory(
             candle.CloseAtUtc,
             correlationId,
             candle.SourceEventId);
+    }
+
+    public OutboxMessage? CreateOptionChain(
+        CanonicalOptionChainSnapshotV1 source,
+        Guid snapshotUid,
+        string snapshotStatus,
+        string qualityStatus,
+        bool isPointInTimeEligible,
+        IReadOnlyCollection<MarketOptionChainEntryPublishedV1> entries)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(entries);
+        if (!options.Enabled ||
+            !options.OptionChainEnabled ||
+            !isPointInTimeEligible ||
+            !snapshotStatus.Equals("COMPLETE", StringComparison.OrdinalIgnoreCase) ||
+            !qualityStatus.Equals(
+                MarketDataQualityStatusV1.Valid,
+                StringComparison.OrdinalIgnoreCase) ||
+            entries.Count == 0)
+        {
+            return null;
+        }
+
+        var payload = new MarketOptionChainPublishedV1(
+            snapshotUid,
+            source.UnderlyingProviderInstrumentKey,
+            source.ExpiryDate,
+            source.EventAtUtc,
+            source.ReceivedAtUtc,
+            source.UnderlyingPrice,
+            snapshotStatus,
+            qualityStatus,
+            isPointInTimeEligible,
+            source.Revision,
+            entries,
+            source.CalculationSourceVersion);
+        var identity =
+            $"option-chain|{source.ProviderCode}|{source.SourceEventId}|{source.Revision}";
+        return Create(
+            MarketDataPublicationContractV1.OptionChainEventType,
+            payload,
+            identity,
+            source.EventAtUtc,
+            source.CorrelationId,
+            source.SourceEventId);
     }
 
     private OutboxMessage Create<TPayload>(

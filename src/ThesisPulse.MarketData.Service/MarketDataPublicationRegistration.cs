@@ -20,6 +20,8 @@ public static class MarketDataPublicationRegistration
                 "MarketData:Publication:AiFeatureFactoryEnabled", false),
             AiOrderFlowEnabled = configuration.GetValue(
                 "MarketData:Publication:AiOrderFlowEnabled", false),
+            AiOptionChainEnabled = configuration.GetValue(
+                "MarketData:Publication:AiOptionChainEnabled", false),
             AiServiceBaseUrl = CreateOptionalUri(
                 configuration["MarketData:Publication:AiServiceBaseUrl"]),
             AutomaticPaperWorkflowEnabled = configuration.GetValue(
@@ -37,6 +39,7 @@ public static class MarketDataPublicationRegistration
         services.AddHttpClient("TradingApiMarketData");
         services.AddHttpClient("AiFeatureFactoryMarketData");
         services.AddHttpClient("AiOrderFlowMarketData");
+        services.AddHttpClient("AiOptionChainMarketData");
         services.AddHttpClient("OperationsAutomaticPaperWorkflow");
         services.AddSingleton<MarketDataFanoutClient>();
 

@@ -24,6 +24,19 @@ builder.Services.AddThesisPulseMarketDataPublication(builder.Configuration, serv
 builder.Services.AddThesisPulseMarketDataPersistence(builder.Configuration, serviceName);
 builder.Services.AddUpstoxMarketDataAdapter(builder.Configuration);
 builder.Services.AddMarketDataPublicationTransport(builder.Configuration);
+
+var persistenceProvider =
+    builder.Configuration["MarketData:Persistence:Provider"] ?? "InMemory";
+if (persistenceProvider.Equals("InMemory", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<InMemoryDerivativesMarketDataStore>();
+    builder.Services.AddSingleton<IDerivativesMarketDataStore>(serviceProvider =>
+        new PublishingInMemoryDerivativesMarketDataStore(
+            serviceProvider.GetRequiredService<InMemoryDerivativesMarketDataStore>(),
+            serviceProvider.GetRequiredService<MarketDataPublicationFactory>(),
+            serviceProvider.GetRequiredService<IMarketDataPublicationWriter>()));
+}
+
 builder.Services.AddSingleton(operationsOptions);
 builder.Services.AddSingleton<MarketDataJobState>();
 builder.Services.AddSingleton<MarketDataOrchestrator>();
@@ -57,11 +70,16 @@ app.MapGet("/api/v1/status", (
     operationsEnabled = operationsOptions.Enabled,
     recoveryWorkerEnabled = configuration.GetValue("MarketData:Recovery:Enabled", false),
     publicationEnabled = publication.Enabled,
+    optionChainPublicationEnabled = publication.OptionChainEnabled,
     publicationDispatchEnabled = dispatch.Enabled,
+    aiOptionChainDispatchEnabled = dispatch.AiOptionChainEnabled,
     replayEnabled = true,
     derivativesDataFoundationEnabled = true,
     derivativeContractSelectionAuthority = false,
     optionChainIngestionEnabled = true,
+    optionChainPublicationTarget = "ThesisPulse.AI",
+    optionChainPublicationSignalServiceTarget = false,
+    optionChainPublicationTradingApiTarget = false,
     futuresBasisIngestionEnabled = true,
     derivativesExecutionAuthority = false,
     liveFeed = liveFeedHealthState.GetSnapshot(),

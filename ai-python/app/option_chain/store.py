@@ -151,6 +151,7 @@ class InMemoryOptionChainIntelligenceStore:
                 )
                 and (cutoff is None or stored.output.as_of_utc <= cutoff)
                 and (cutoff is None or stored.source_received_at_utc <= cutoff)
+                and (cutoff is None or stored.output.generated_at_utc <= cutoff)
             ]
             if not candidates:
                 return None
@@ -160,6 +161,7 @@ class InMemoryOptionChainIntelligenceStore:
                     stored.output.as_of_utc,
                     stored.output.revision,
                     stored.source_received_at_utc,
+                    -stored.output.expiry_metrics[0].expiry_date.toordinal(),
                 ),
             )
 

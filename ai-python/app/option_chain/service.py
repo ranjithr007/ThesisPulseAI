@@ -12,33 +12,44 @@ from app.option_chain.models import (
     OptionChainSnapshotObservation,
     OptionContractObservation,
 )
+from app.option_chain.sql_partitioned_store import (
+    PartitionedSqlServerOptionChainIntelligenceStore,
+)
 from app.option_chain.store import (
     InMemoryOptionChainIntelligenceStore,
     OptionChainStoreStatus,
 )
+from app.option_chain.store_protocol import OptionChainIntelligenceStore
+
+_registered_option_chain_service: "OptionChainIntelligenceService | None" = None
 
 
 class OptionChainIntelligenceService:
     def __init__(
         self,
-        store: InMemoryOptionChainIntelligenceStore | None = None,
+        store: OptionChainIntelligenceStore | None = None,
         runtime: OptionChainRuntimeSettings | None = None,
     ) -> None:
+        global _registered_option_chain_service
+        use_application_instance = store is None and runtime is None
+        if use_application_instance and _registered_option_chain_service is not None:
+            registered = _registered_option_chain_service
+            self._runtime = registered._runtime
+            self._calculator = registered._calculator
+            self._store = registered._store
+            return
+
         self._runtime = runtime or OptionChainRuntimeSettings.load()
         self._calculator = DeterministicOptionChainCalculator(
             OptionChainIntelligenceOptions(
                 engine_code=self._runtime.engine_code,
                 engine_version=self._runtime.engine_version,
                 policy_version=self._runtime.policy_version,
-                maximum_output_age_seconds=(
-                    self._runtime.maximum_output_age_seconds
-                ),
+                maximum_output_age_seconds=self._runtime.maximum_output_age_seconds,
                 minimum_contract_count=self._runtime.minimum_contract_count,
                 minimum_strike_count=self._runtime.minimum_strike_count,
                 oi_wall_count=self._runtime.oi_wall_count,
-                oi_wall_moneyness_fraction=(
-                    self._runtime.oi_wall_moneyness_fraction
-                ),
+                oi_wall_moneyness_fraction=self._runtime.oi_wall_moneyness_fraction,
                 minimum_premium_change_fraction=(
                     self._runtime.minimum_premium_change_fraction
                 ),
@@ -46,12 +57,12 @@ class OptionChainIntelligenceService:
                     self._runtime.minimum_open_interest_change_fraction
                 ),
                 directional_threshold=self._runtime.directional_threshold,
-                fusion_confidence_threshold=(
-                    self._runtime.fusion_confidence_threshold
-                ),
+                fusion_confidence_threshold=self._runtime.fusion_confidence_threshold,
             )
         )
-        self._store = store or InMemoryOptionChainIntelligenceStore()
+        self._store = store or _create_store(self._runtime)
+        if use_application_instance:
+            _registered_option_chain_service = self
 
     @property
     def enabled(self) -> bool:
@@ -72,6 +83,10 @@ class OptionChainIntelligenceService:
     @property
     def policy_version(self) -> str:
         return self._runtime.policy_version
+
+    @property
+    def maximum_output_age_seconds(self) -> int:
+        return self._runtime.maximum_output_age_seconds
 
     @property
     def internal_api_key(self) -> str | None:
@@ -115,6 +130,29 @@ class OptionChainIntelligenceService:
 
     def get_status(self) -> OptionChainStoreStatus:
         return self._store.get_status()
+
+
+def register_option_chain_service(service: OptionChainIntelligenceService) -> None:
+    global _registered_option_chain_service
+    _registered_option_chain_service = service
+
+
+def get_registered_option_chain_service() -> OptionChainIntelligenceService | None:
+    return _registered_option_chain_service
+
+
+def _create_store(runtime: OptionChainRuntimeSettings) -> OptionChainIntelligenceStore:
+    if runtime.provider == "SqlServer":
+        return PartitionedSqlServerOptionChainIntelligenceStore(
+            runtime.database_connection_string or "",
+            actor=runtime.actor,
+            engine_code=runtime.engine_code,
+            broker_code=runtime.broker_code,
+            service_version=runtime.service_version,
+            maximum_output_age_seconds=runtime.maximum_output_age_seconds,
+            command_timeout_seconds=runtime.command_timeout_seconds,
+        )
+    return InMemoryOptionChainIntelligenceStore()
 
 
 def _to_snapshot(

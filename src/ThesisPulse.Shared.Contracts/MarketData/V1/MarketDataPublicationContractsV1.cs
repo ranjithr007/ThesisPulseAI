@@ -5,12 +5,14 @@ public static class MarketDataPublicationContractV1
     public const string ContractVersion = "1.0";
     public const string QuoteEventType = "market.quote.published.v1";
     public const string CandleEventType = "market.candle.published.v1";
+    public const string OptionChainEventType = "market.option_chain.published.v1";
 
     public static readonly IReadOnlySet<string> EventTypes =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             QuoteEventType,
             CandleEventType,
+            OptionChainEventType,
         };
 }
 
@@ -48,6 +50,50 @@ public sealed record MarketCandlePublishedV1(
     bool IsUsableForNewExposure,
     DateTimeOffset ReceivedAtUtc,
     string SourceVersion);
+
+public sealed record MarketOptionChainEntryPublishedV1(
+    Guid DerivativeContractUid,
+    string InstrumentKey,
+    DateOnly ExpiryDate,
+    decimal StrikePrice,
+    string OptionType,
+    decimal? LastPrice,
+    decimal? VolumeQuantity,
+    decimal? OpenInterest,
+    decimal? ImpliedVolatility,
+    decimal? Delta,
+    decimal ContractMultiplier,
+    string QualityStatus,
+    string? GreeksSourceVersion);
+
+public sealed record MarketOptionChainPublishedV1(
+    Guid SnapshotUid,
+    string UnderlyingInstrumentKey,
+    DateOnly ExpiryDate,
+    DateTimeOffset EventAtUtc,
+    DateTimeOffset ReceivedAtUtc,
+    decimal UnderlyingPrice,
+    string SnapshotStatus,
+    string QualityStatus,
+    bool IsPointInTimeEligible,
+    int Revision,
+    IReadOnlyCollection<MarketOptionChainEntryPublishedV1> Entries,
+    string? CalculationSourceVersion);
+
+public sealed record OptionChainIntelligenceIntakeV1(
+    Guid SourceMessageUid,
+    Guid SnapshotUid,
+    string UnderlyingInstrumentKey,
+    DateOnly ExpiryDate,
+    DateTimeOffset EventAtUtc,
+    DateTimeOffset ReceivedAtUtc,
+    decimal UnderlyingPrice,
+    string SnapshotStatus,
+    string QualityStatus,
+    bool IsPointInTimeEligible,
+    int Revision,
+    IReadOnlyCollection<MarketOptionChainEntryPublishedV1> Entries,
+    string? CalculationSourceVersion);
 
 public sealed record MarketDataDeliveryV1<TPayload>(
     long StreamPosition,

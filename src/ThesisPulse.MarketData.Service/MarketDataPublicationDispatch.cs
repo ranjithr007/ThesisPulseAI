@@ -18,6 +18,7 @@ public sealed record MarketDataDispatchOptions
     public Uri? TradingApiBaseUrl { get; init; }
     public bool AiFeatureFactoryEnabled { get; init; }
     public bool AiOrderFlowEnabled { get; init; }
+    public bool AiOptionChainEnabled { get; init; }
     public Uri? AiServiceBaseUrl { get; init; }
     public bool AutomaticPaperWorkflowEnabled { get; init; }
     public Uri? OperationsServiceBaseUrl { get; init; }
@@ -34,7 +35,7 @@ public sealed record MarketDataDispatchOptions
         if (string.IsNullOrWhiteSpace(InternalApiKey) ||
             SignalServiceBaseUrl is null ||
             TradingApiBaseUrl is null ||
-            ((AiFeatureFactoryEnabled || AiOrderFlowEnabled) &&
+            ((AiFeatureFactoryEnabled || AiOrderFlowEnabled || AiOptionChainEnabled) &&
                 AiServiceBaseUrl is null) ||
             (AutomaticPaperWorkflowEnabled &&
                 (!AiFeatureFactoryEnabled || OperationsServiceBaseUrl is null)) ||
@@ -192,6 +193,28 @@ public sealed class MarketDataFanoutClient(
         var isCandle = message.Metadata.EventType.Equals(
             MarketDataPublicationContractV1.CandleEventType,
             StringComparison.OrdinalIgnoreCase);
+        var isOptionChain = message.Metadata.EventType.Equals(
+            MarketDataPublicationContractV1.OptionChainEventType,
+            StringComparison.OrdinalIgnoreCase);
+
+        if (isOptionChain)
+        {
+            if (!options.AiOptionChainEnabled || options.AiServiceBaseUrl is null)
+            {
+                throw new InvalidOperationException(
+                    "AI option-chain dispatch is disabled for a pending publication.");
+            }
+
+            await SendToAsync(
+                "AiOptionChainMarketData",
+                options.AiServiceBaseUrl,
+                "/internal/v1/market-data/option-chain",
+                message.Metadata.CorrelationId,
+                BuildOptionChainIntake(message),
+                cancellationToken);
+            return;
+        }
+
         var path = message.Metadata.EventType switch
         {
             MarketDataPublicationContractV1.QuoteEventType =>
@@ -335,6 +358,29 @@ public sealed class MarketDataFanoutClient(
         return new MarketDataDeliveryV1<MarketCandlePublishedV1>(
             message.StreamPosition,
             new EventEnvelope<MarketCandlePublishedV1>(message.Metadata, candle));
+    }
+
+    private static OptionChainIntelligenceIntakeV1 BuildOptionChainIntake(
+        OutboxMessage message)
+    {
+        var payload = JsonSerializer.Deserialize<MarketOptionChainPublishedV1>(
+            message.PayloadJson,
+            JsonOptions) ?? throw new InvalidDataException(
+                "Option-chain publication payload is invalid.");
+        return new OptionChainIntelligenceIntakeV1(
+            message.Metadata.MessageId,
+            payload.SnapshotUid,
+            payload.UnderlyingInstrumentKey,
+            payload.ExpiryDate,
+            payload.EventAtUtc,
+            payload.ReceivedAtUtc,
+            payload.UnderlyingPrice,
+            payload.SnapshotStatus,
+            payload.QualityStatus,
+            payload.IsPointInTimeEligible,
+            payload.Revision,
+            payload.Entries,
+            payload.CalculationSourceVersion);
     }
 }
 

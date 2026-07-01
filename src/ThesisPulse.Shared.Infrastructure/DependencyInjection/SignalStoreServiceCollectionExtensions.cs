@@ -49,7 +49,7 @@ public static class SignalStoreServiceCollectionExtensions
         services.AddSingleton<SqlServerSignalStore>();
         services.AddSingleton<ISignalStore>(p => p.GetRequiredService<SqlServerSignalStore>());
         services.AddSingleton<IFusionSignalStore>(p => p.GetRequiredService<SqlServerSignalStore>());
-        services.AddSingleton<ISignalScannerStore>(p => p.GetRequiredService<SqlServerSignalStore>());
+        services.AddSingleton<ISignalScannerStore, AuthoritativeRiskSignalScannerStore>();
         services.AddSingleton<ISignalStatusStore, SqlServerSignalStatusStore>();
         services.AddSingleton<IDueSignalMaintenanceStore, SqlServerDueSignalMaintenanceStore>();
         return services;

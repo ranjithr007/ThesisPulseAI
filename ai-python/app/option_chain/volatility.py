@@ -2,7 +2,13 @@ from collections import defaultdict
 from decimal import Decimal
 
 from app.contracts.v1.option_chain import OptionChainIvTermPointV1
-from app.option_chain.common import TWO, ZERO, eligible_entries, is_snapshot_eligible, quantize
+from app.option_chain.common import (
+    TWO,
+    ZERO,
+    eligible_entries,
+    is_snapshot_eligible,
+    quantize,
+)
 from app.option_chain.definitions import OptionChainIntelligenceOptions
 from app.option_chain.models import (
     OptionChainSnapshotObservation,

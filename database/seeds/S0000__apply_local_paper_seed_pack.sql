@@ -6,7 +6,7 @@ SET QUOTED_IDENTIFIER ON;
 SET ANSI_PADDING ON;
 SET ANSI_WARNINGS ON;
 SET ARITHABORT ON;
-SET CONCAT_NULL_YIELDS_NULL ON;
+SET CONCAT_YIELDS_NULL ON;
 SET NUMERIC_ROUNDABORT OFF;
 GO
 
@@ -32,6 +32,8 @@ GO
 GO
 :r $(SeedRoot)/intelligence/S0011__seed_multi_timeframe_confirmation_engine.sql
 GO
+:r $(SeedRoot)/intelligence/S0016__seed_thesis_fusion_signal_creator.sql
+GO
 :r $(VerificationRoot)/S0001__verify_reference_seeds.sql
 GO
 :r $(VerificationRoot)/S0002__verify_signal_engine_seed.sql
@@ -45,4 +47,6 @@ GO
 :r $(VerificationRoot)/S0006__verify_market_regime_engine_seed.sql
 GO
 :r $(VerificationRoot)/S0007__verify_multi_timeframe_confirmation_engine_seed.sql
+GO
+:r $(VerificationRoot)/S0016__verify_thesis_fusion_signal_creator.sql
 GO

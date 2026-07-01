@@ -12,16 +12,18 @@ from app.option_chain.models import (
     OptionChainSnapshotObservation,
     OptionContractObservation,
 )
+from app.option_chain.sql_store import SqlServerOptionChainIntelligenceStore
 from app.option_chain.store import (
     InMemoryOptionChainIntelligenceStore,
     OptionChainStoreStatus,
 )
+from app.option_chain.store_protocol import OptionChainIntelligenceStore
 
 
 class OptionChainIntelligenceService:
     def __init__(
         self,
-        store: InMemoryOptionChainIntelligenceStore | None = None,
+        store: OptionChainIntelligenceStore | None = None,
         runtime: OptionChainRuntimeSettings | None = None,
     ) -> None:
         self._runtime = runtime or OptionChainRuntimeSettings.load()
@@ -51,7 +53,7 @@ class OptionChainIntelligenceService:
                 ),
             )
         )
-        self._store = store or InMemoryOptionChainIntelligenceStore()
+        self._store = store or _create_store(self._runtime)
 
     @property
     def enabled(self) -> bool:
@@ -115,6 +117,22 @@ class OptionChainIntelligenceService:
 
     def get_status(self) -> OptionChainStoreStatus:
         return self._store.get_status()
+
+
+def _create_store(
+    runtime: OptionChainRuntimeSettings,
+) -> OptionChainIntelligenceStore:
+    if runtime.provider == "SqlServer":
+        return SqlServerOptionChainIntelligenceStore(
+            runtime.database_connection_string or "",
+            actor=runtime.actor,
+            engine_code=runtime.engine_code,
+            broker_code=runtime.broker_code,
+            service_version=runtime.service_version,
+            maximum_output_age_seconds=runtime.maximum_output_age_seconds,
+            command_timeout_seconds=runtime.command_timeout_seconds,
+        )
+    return InMemoryOptionChainIntelligenceStore()
 
 
 def _to_snapshot(

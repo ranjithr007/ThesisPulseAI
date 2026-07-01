@@ -21,19 +21,35 @@ class OptionChainRuntimeSettings:
     minimum_open_interest_change_fraction: Decimal
     directional_threshold: Decimal
     fusion_confidence_threshold: Decimal
+    database_connection_string: str | None = None
+    broker_code: str = "UPSTOX"
+    service_version: str = "1.0.0"
+    command_timeout_seconds: int = 30
 
     @classmethod
     def load(cls) -> "OptionChainRuntimeSettings":
         enabled = _read_bool("THESISPULSE_OPTION_CHAIN_ENGINE_ENABLED", False)
-        provider = os.getenv("THESISPULSE_OPTION_CHAIN_PROVIDER", "InMemory").strip()
-        if provider not in {"InMemory"}:
+        raw_provider = os.getenv(
+            "THESISPULSE_OPTION_CHAIN_PROVIDER",
+            "InMemory",
+        ).strip()
+        if raw_provider.casefold() not in {"inmemory", "sqlserver"}:
             raise RuntimeError(
-                "THESISPULSE_OPTION_CHAIN_PROVIDER currently supports only InMemory"
+                "THESISPULSE_OPTION_CHAIN_PROVIDER must be InMemory or SqlServer"
             )
+        provider = (
+            "SqlServer" if raw_provider.casefold() == "sqlserver" else "InMemory"
+        )
         internal_api_key = os.getenv("THESISPULSE_OPTION_CHAIN_INTERNAL_API_KEY")
+        connection_string = os.getenv("THESISPULSE_OPERATIONAL_DATABASE")
         if enabled and not internal_api_key:
             raise RuntimeError(
                 "THESISPULSE_OPTION_CHAIN_INTERNAL_API_KEY is required when enabled"
+            )
+        if provider == "SqlServer" and not connection_string:
+            raise RuntimeError(
+                "SqlServer option-chain intelligence requires "
+                "THESISPULSE_OPERATIONAL_DATABASE"
             )
         return cls(
             enabled=enabled,
@@ -108,6 +124,18 @@ class OptionChainRuntimeSettings:
                 Decimal("0.60"),
                 minimum=Decimal("0.000001"),
                 maximum=Decimal("1"),
+            ),
+            database_connection_string=connection_string,
+            broker_code=os.getenv(
+                "THESISPULSE_OPTION_CHAIN_BROKER_CODE",
+                "UPSTOX",
+            ),
+            service_version=os.getenv("THESISPULSE_SERVICE_VERSION", "1.0.0"),
+            command_timeout_seconds=_read_int(
+                "THESISPULSE_SQL_COMMAND_TIMEOUT_SECONDS",
+                30,
+                minimum=1,
+                maximum=300,
             ),
         )
 

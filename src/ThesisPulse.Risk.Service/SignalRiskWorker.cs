@@ -5,6 +5,7 @@ namespace ThesisPulse.Risk.Service;
 public sealed class SignalRiskWorker(
     SignalRiskWorkerOptions options,
     ISignalRiskWorkQueue queue,
+    ISignalRiskOperationalStatusStore operationalStatusStore,
     ISignalRiskProjector projector,
     SignalRiskCoordinator coordinator,
     SignalRiskWorkerState state,
@@ -63,6 +64,11 @@ public sealed class SignalRiskWorker(
                 var reason = string.Join(',', projection.Reasons);
                 if (projection.Reasons.Contains("SIGNAL_EXPIRED", StringComparer.Ordinal))
                 {
+                    await operationalStatusStore.RecordAsync(
+                        item.Intake,
+                        SignalRiskEvaluationContractV1.RiskExpired,
+                        reason,
+                        cancellationToken);
                     await queue.ExpireAsync(item.WorkItemId, reason, cancellationToken);
                     state.Expired();
                 }
@@ -82,11 +88,21 @@ public sealed class SignalRiskWorker(
         {
             if (item.AttemptCount >= options.MaximumAttempts)
             {
-                await queue.FailAsync(item.WorkItemId, exception.Message, cancellationToken);
-                state.Failed();
+                await operationalStatusStore.RecordAsync(
+                    item.Intake,
+                    SignalRiskEvaluationContractV1.RiskExpired,
+                    "RETRY_EXHAUSTED",
+                    cancellationToken);
+                await queue.ExpireAsync(item.WorkItemId, exception.Message, cancellationToken);
+                state.Expired();
             }
             else
             {
+                await operationalStatusStore.RecordAsync(
+                    item.Intake,
+                    SignalRiskEvaluationContractV1.RiskRetryPending,
+                    exception.GetType().Name,
+                    cancellationToken);
                 var delaySeconds = Math.Min(300, 5 * (1 << Math.Min(item.AttemptCount - 1, 6)));
                 await queue.RetryAsync(
                     item.WorkItemId,

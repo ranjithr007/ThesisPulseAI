@@ -9,8 +9,13 @@ public static class RiskStatusTransitionMatrix
     private static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> Allowed =
         new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
         {
-            [NotEvaluated] = Set(SignalRiskEvaluationContractV1.RiskEvaluating, SignalRiskEvaluationContractV1.RiskExpired),
-            [SignalRiskEvaluationContractV1.RiskRetryPending] = Set(SignalRiskEvaluationContractV1.RiskEvaluating, SignalRiskEvaluationContractV1.RiskExpired),
+            [NotEvaluated] = Set(
+                SignalRiskEvaluationContractV1.RiskEvaluating,
+                SignalRiskEvaluationContractV1.RiskRetryPending,
+                SignalRiskEvaluationContractV1.RiskExpired),
+            [SignalRiskEvaluationContractV1.RiskRetryPending] = Set(
+                SignalRiskEvaluationContractV1.RiskEvaluating,
+                SignalRiskEvaluationContractV1.RiskExpired),
             [SignalRiskEvaluationContractV1.RiskEvaluating] = Set(
                 SignalRiskEvaluationContractV1.RiskApproved,
                 SignalRiskEvaluationContractV1.RiskRejected,

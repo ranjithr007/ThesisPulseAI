@@ -21,21 +21,31 @@ var workerOptions = builder.Configuration
     .GetSection(SignalRiskWorkerOptions.SectionName)
     .Get<SignalRiskWorkerOptions>() ?? new SignalRiskWorkerOptions();
 workerOptions.Validate();
+if (workerOptions.Enabled && !persistenceOptions.UseSqlServer)
+    throw new InvalidOperationException("Signal Risk worker requires SQL_SERVER persistence mode.");
 builder.Services.AddSingleton(workerOptions);
 
 builder.Services.AddSingleton<IRiskDecisionEngine, DeterministicRiskDecisionEngine>();
 builder.Services.AddSingleton<ISignalRiskProjector, DeterministicSignalRiskProjector>();
 if (persistenceOptions.UseSqlServer)
+{
     builder.Services.AddSingleton<ISignalRiskEvaluationStore, SqlServerSignalRiskEvaluationStore>();
+    builder.Services.AddSingleton<ISignalRiskWorkQueue, SqlServerSignalRiskWorkQueue>();
+}
 else
+{
     builder.Services.AddSingleton<ISignalRiskEvaluationStore, InMemorySignalRiskEvaluationStore>();
+}
 builder.Services.AddSingleton<SignalRiskCoordinator>();
+builder.Services.AddSingleton<SignalRiskWorkerState>();
+if (workerOptions.Enabled)
+    builder.Services.AddHostedService<SignalRiskWorker>();
 builder.Services.AddSingleton<ITradePlanBuilder, DeterministicTradePlanBuilder>();
 
 var app = builder.Build();
 app.UseThesisPulsePlatformFoundation();
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Risk.Service");
-app.MapGet("/api/v1/status", () => Results.Ok(new
+app.MapGet("/api/v1/status", (SignalRiskWorkerState workerState) => Results.Ok(new
 {
     mode = "DETERMINISTIC_RISK_AND_TRADE_PLAN",
     environment = "PAPER",
@@ -46,6 +56,7 @@ app.MapGet("/api/v1/status", () => Results.Ok(new
     automaticRiskWorkerPollIntervalSeconds = workerOptions.PollIntervalSeconds,
     automaticRiskWorkerBatchSize = workerOptions.BatchSize,
     automaticRiskWorkerMaximumAttempts = workerOptions.MaximumAttempts,
+    automaticRiskWorkerState = workerState.Snapshot(),
     persistenceMode = persistenceOptions.UseSqlServer ? "SQL_SERVER" : "IN_MEMORY_PAPER",
     defaultRiskDecision = RiskDecisionContractV1.Rejected,
     riskDecisionAuthority = true,

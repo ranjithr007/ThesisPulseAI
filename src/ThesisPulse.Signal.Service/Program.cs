@@ -52,9 +52,13 @@ app.MapMarketDataConsumerEndpoints();
 
 app.MapGet("/api/v1/status", (IConfiguration configuration) => Results.Ok(new
 {
-    mode = "FOUNDATION",
+    mode = "AUTHORITATIVE_SIGNAL_LIFECYCLE",
     environment = "PAPER",
     signalIntakeEnabled = true,
+    fusionSignalIntakeEnabled = true,
+    scannerEnabled = true,
+    riskProjectionAuthority = false,
+    executionAuthority = false,
     signalStatusTransitionsEnabled = true,
     signalMaintenanceEnabled = configuration.GetValue("SignalMaintenance:Enabled", false),
     signalPublishingEnabled = configuration.GetValue("SignalRealtime:Enabled", false),
@@ -62,8 +66,9 @@ app.MapGet("/api/v1/status", (IConfiguration configuration) => Results.Ok(new
     signalPersistence = configuration["SignalPersistence:Provider"] ?? "InMemory",
     messagingProvider = configuration["Messaging:Provider"] ?? "InMemory",
     creatorEngineCode = configuration["SignalPersistence:CreatorEngineCode"]
-        ?? "THESIS_PULSE_MOCK_FUSION",
+        ?? "THESIS_PULSE_THESIS_FUSION",
     contractVersion = SignalContractV1.ContractVersion,
+    scannerContractVersion = SignalScannerContractV1.ContractVersion,
 }));
 
 app.Run();

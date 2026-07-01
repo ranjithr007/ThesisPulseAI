@@ -36,7 +36,7 @@
       "sequence": 6,
       "path": "database/seeds/intelligence/S0006__seed_mock_fusion_engine.sql",
       "scope": "paper_intelligence",
-      "activation": "signal_authority"
+      "activation": "legacy_signal_authority"
     },
     {
       "sequence": 7,
@@ -67,6 +67,12 @@
       "path": "database/seeds/intelligence/S0011__seed_multi_timeframe_confirmation_engine.sql",
       "scope": "paper_intelligence",
       "activation": "meta_controller_only"
+    },
+    {
+      "sequence": 12,
+      "path": "database/seeds/intelligence/S0016__seed_thesis_fusion_signal_creator.sql",
+      "scope": "paper_intelligence",
+      "activation": "authoritative_signal_creator"
     }
   ],
   "excluded": [

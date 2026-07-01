@@ -60,6 +60,21 @@ public interface ISignalStore
         CancellationToken cancellationToken = default);
 }
 
+public interface IFusionSignalStore
+{
+    Task<SignalSaveResult> SaveFusionAsync(
+        FusionSignalIntakeV1 intake,
+        CancellationToken cancellationToken = default);
+}
+
+public interface ISignalScannerStore
+{
+    Task<SignalScannerResultV1> ScanAsync(
+        SignalScannerQueryV1 query,
+        DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken = default);
+}
+
 public interface ISignalStatusStore
 {
     Task<SignalTransitionResult> TransitionStatusAsync(

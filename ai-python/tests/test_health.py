@@ -63,8 +63,39 @@ def test_option_chain_status_is_safe_when_disabled() -> None:
 def test_option_chain_internal_intake_fails_closed_when_disabled() -> None:
     response = client.post(
         "/internal/v1/market-data/option-chain",
-        json={},
+        json={
+            "sourceMessageUid": "00000000-0000-0000-0000-000000000001",
+            "snapshotUid": "00000000-0000-0000-0000-000000000002",
+            "underlyingInstrumentKey": "NSE_INDEX|Nifty 50",
+            "expiryDate": "2026-07-30",
+            "eventAtUtc": "2026-07-01T09:15:00Z",
+            "receivedAtUtc": "2026-07-01T09:15:01Z",
+            "underlyingPrice": "25000",
+            "snapshotStatus": "COMPLETE",
+            "qualityStatus": "VALID",
+            "isPointInTimeEligible": True,
+            "revision": 0,
+            "entries": [
+                {
+                    "derivativeContractUid": (
+                        "00000000-0000-0000-0000-000000000003"
+                    ),
+                    "instrumentKey": "NSE_FO|NIFTY-CALL",
+                    "expiryDate": "2026-07-30",
+                    "strikePrice": "25000",
+                    "optionType": "CALL",
+                    "lastPrice": "100",
+                    "volumeQuantity": "10",
+                    "openInterest": "100",
+                    "impliedVolatility": "0.20",
+                    "contractMultiplier": "75",
+                    "qualityStatus": "VALID",
+                }
+            ],
+            "calculationSourceVersion": "provider-option-chain-v1",
+        },
         headers={"X-ThesisPulse-Internal-Key": "not-used-while-disabled"},
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Option-Chain Intelligence Engine is disabled"

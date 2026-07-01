@@ -88,13 +88,13 @@ class OptionChainRuntimeSettings:
             minimum_premium_change_fraction=_read_decimal(
                 "THESISPULSE_OPTION_CHAIN_MINIMUM_PREMIUM_CHANGE_FRACTION",
                 Decimal("0.0025"),
-                minimum=Decimal("0"),
+                minimum=Decimal("0.000001"),
                 maximum=Decimal("1"),
             ),
             minimum_open_interest_change_fraction=_read_decimal(
                 "THESISPULSE_OPTION_CHAIN_MINIMUM_OI_CHANGE_FRACTION",
                 Decimal("0.01"),
-                minimum=Decimal("0"),
+                minimum=Decimal("0.000001"),
                 maximum=Decimal("1"),
             ),
             directional_threshold=_read_decimal(
@@ -106,7 +106,7 @@ class OptionChainRuntimeSettings:
             fusion_confidence_threshold=_read_decimal(
                 "THESISPULSE_OPTION_CHAIN_FUSION_CONFIDENCE_THRESHOLD",
                 Decimal("0.60"),
-                minimum=Decimal("0"),
+                minimum=Decimal("0.000001"),
                 maximum=Decimal("1"),
             ),
         )

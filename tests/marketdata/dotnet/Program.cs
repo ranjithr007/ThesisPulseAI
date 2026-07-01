@@ -139,6 +139,7 @@ RunAsync("instrument sync remains non-tradeable", async () =>
 });
 
 LiveFeedTestSuite.Run(failures);
+DerivativesMarketDataTestSuite.Run(failures);
 
 if (failures.Count > 0)
 {

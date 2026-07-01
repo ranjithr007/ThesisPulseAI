@@ -116,6 +116,7 @@ public sealed class MarketDataOrchestrator(
     IMarketDataProvider provider,
     IInstrumentCatalogStore instrumentCatalogStore,
     IMarketDataStore marketDataStore,
+    IDerivativesMarketDataStore derivativesMarketDataStore,
     IUpstoxLiveFeedNormalizer liveFeedNormalizer,
     MarketDataOperationsOptions options,
     MarketDataJobState jobState)
@@ -135,13 +136,21 @@ public sealed class MarketDataOrchestrator(
                 instruments,
                 receivedAtUtc,
                 cancellationToken);
+            var derivatives = await derivativesMarketDataStore.SynchronizeContractsAsync(
+                instruments,
+                receivedAtUtc,
+                cancellationToken);
+            var combinedWarnings = result.Warnings
+                .Concat(derivatives.Warnings)
+                .Take(500)
+                .ToArray();
             jobState.Completed(
                 operation,
                 result.Received,
                 result.Created + result.Updated,
                 0,
-                result.Skipped);
-            return result;
+                result.Skipped + derivatives.Skipped);
+            return result with { Warnings = combinedWarnings };
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

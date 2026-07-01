@@ -167,7 +167,7 @@ public static class MarketDataEndpointExtensions
         return endpoints;
     }
 
-    private static IResult? Authorize(
+    internal static IResult? Authorize(
         HttpRequest request,
         MarketDataOperationsOptions options)
     {
@@ -192,6 +192,12 @@ public static class MarketDataEndpointExtensions
             ? null
             : Results.Unauthorized();
     }
+
+    internal static IResult Validation(string message) =>
+        Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["request"] = new[] { message },
+        });
 
     private static string GetCorrelationId(HttpRequest request) =>
         request.Headers.TryGetValue("X-Correlation-ID", out var value) &&

@@ -36,10 +36,10 @@ def test_v0018_partitions_same_cutoff_outputs_by_expiry() -> None:
 
     assert "output_partition_key" in migration
     assert "expiryMetrics[0].expiryDate" in migration
-    assert "ux_engine_outputs_revision_partitioned" in migration
-    assert "ux_engine_outputs_current_partitioned" in migration
-    assert "uq_engine_outputs_revision" in migration
-    assert "ux_engine_outputs_current" in migration
+    assert "CREATE UNIQUE INDEX [uq_engine_outputs_revision]" in migration
+    assert "CREATE UNIQUE INDEX [ux_engine_outputs_current]" in migration
+    assert "[output_partition_key], [revision]" in migration
+    assert "[output_partition_key])" in migration
 
 
 def test_option_chain_engine_seed_has_no_authority() -> None:

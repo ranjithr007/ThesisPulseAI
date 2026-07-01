@@ -16,6 +16,11 @@ public sealed record TradePlanInstrumentContextV1(
     decimal? MinimumExecutionQuantity,
     bool AllowPartialFill);
 
+public sealed record TradePlanTargetPolicyV1(
+    int Sequence,
+    decimal RiskRewardMultiple,
+    decimal QuantityFraction);
+
 public sealed record TradePlanExecutionContextV1(
     string PositionIntent,
     string EntryOrderType,
@@ -23,6 +28,7 @@ public sealed record TradePlanExecutionContextV1(
     decimal? StopLimitPrice,
     decimal MaximumSlippageFraction,
     string TimeInForce,
+    IReadOnlyCollection<TradePlanTargetPolicyV1> Targets,
     TradeSessionV1 Session,
     ExitPolicyV1 ExitPolicy,
     string ExecutionPolicyVersion);

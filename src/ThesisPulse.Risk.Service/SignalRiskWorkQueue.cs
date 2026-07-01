@@ -9,8 +9,17 @@ public sealed record SignalRiskWorkItem(
     SignalRiskEvaluationIntakeV1 Intake,
     int AttemptCount);
 
+public sealed record SignalRiskEnqueueResult(
+    string Outcome,
+    Guid MessageUid,
+    Guid SignalUid);
+
 public interface ISignalRiskWorkQueue
 {
+    Task<SignalRiskEnqueueResult> EnqueueAsync(
+        SignalRiskEvaluationIntakeV1 intake,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyCollection<SignalRiskWorkItem>> LeaseAsync(
         int maximumCount,
         string leaseOwner,

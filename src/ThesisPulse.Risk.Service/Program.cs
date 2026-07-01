@@ -17,6 +17,12 @@ var persistenceOptions = builder.Configuration
 persistenceOptions.Validate();
 builder.Services.AddSingleton(persistenceOptions);
 
+var workerOptions = builder.Configuration
+    .GetSection(SignalRiskWorkerOptions.SectionName)
+    .Get<SignalRiskWorkerOptions>() ?? new SignalRiskWorkerOptions();
+workerOptions.Validate();
+builder.Services.AddSingleton(workerOptions);
+
 builder.Services.AddSingleton<IRiskDecisionEngine, DeterministicRiskDecisionEngine>();
 builder.Services.AddSingleton<ISignalRiskProjector, DeterministicSignalRiskProjector>();
 if (persistenceOptions.UseSqlServer)
@@ -36,6 +42,10 @@ app.MapGet("/api/v1/status", () => Results.Ok(new
     failClosed = true,
     automaticSignalProjection = true,
     automaticRiskPersistence = true,
+    automaticRiskWorkerEnabled = workerOptions.Enabled,
+    automaticRiskWorkerPollIntervalSeconds = workerOptions.PollIntervalSeconds,
+    automaticRiskWorkerBatchSize = workerOptions.BatchSize,
+    automaticRiskWorkerMaximumAttempts = workerOptions.MaximumAttempts,
     persistenceMode = persistenceOptions.UseSqlServer ? "SQL_SERVER" : "IN_MEMORY_PAPER",
     defaultRiskDecision = RiskDecisionContractV1.Rejected,
     riskDecisionAuthority = true,

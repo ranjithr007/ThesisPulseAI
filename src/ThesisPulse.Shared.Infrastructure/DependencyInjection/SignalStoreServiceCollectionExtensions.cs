@@ -16,47 +16,40 @@ public static class SignalStoreServiceCollectionExtensions
         ArgumentException.ThrowIfNullOrWhiteSpace(serviceName);
 
         var provider = configuration["SignalPersistence:Provider"] ?? "InMemory";
-
         if (provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase))
         {
             services.AddSingleton<InMemorySignalStore>();
-            services.AddSingleton<ISignalStore>(provider =>
-                provider.GetRequiredService<InMemorySignalStore>());
-            services.AddSingleton<ISignalStatusStore>(provider =>
-                provider.GetRequiredService<InMemorySignalStore>());
-            services.AddSingleton<IDueSignalMaintenanceStore>(provider =>
-                provider.GetRequiredService<InMemorySignalStore>());
+            services.AddSingleton<ISignalStore>(p => p.GetRequiredService<InMemorySignalStore>());
+            services.AddSingleton<IFusionSignalStore>(p => p.GetRequiredService<InMemorySignalStore>());
+            services.AddSingleton<ISignalScannerStore>(p => p.GetRequiredService<InMemorySignalStore>());
+            services.AddSingleton<ISignalStatusStore>(p => p.GetRequiredService<InMemorySignalStore>());
+            services.AddSingleton<IDueSignalMaintenanceStore>(p => p.GetRequiredService<InMemorySignalStore>());
             return services;
         }
 
         if (!provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"Unsupported signal persistence provider '{provider}'.");
-        }
+            throw new InvalidOperationException($"Unsupported signal persistence provider '{provider}'.");
 
         var connectionString = configuration.GetConnectionString("OperationalDatabase");
         if (string.IsNullOrWhiteSpace(connectionString))
-        {
             throw new InvalidOperationException(
-                "ConnectionStrings:OperationalDatabase is required when " +
-                "SignalPersistence:Provider is SqlServer.");
-        }
+                "ConnectionStrings:OperationalDatabase is required when SignalPersistence:Provider is SqlServer.");
 
         var options = new SqlServerSignalStoreOptions
         {
             ConnectionString = connectionString,
             CreatorEngineCode = configuration["SignalPersistence:CreatorEngineCode"]
-                ?? "THESIS_PULSE_MOCK_FUSION",
+                ?? "THESIS_PULSE_THESIS_FUSION",
             Actor = configuration["SignalPersistence:Actor"] ?? serviceName,
-            CommandTimeoutSeconds = configuration.GetValue(
-                "SignalPersistence:CommandTimeoutSeconds",
-                30),
+            CommandTimeoutSeconds = configuration.GetValue("SignalPersistence:CommandTimeoutSeconds", 30),
         };
-
         options.Validate();
+
         services.AddSingleton(options);
-        services.AddSingleton<ISignalStore, SqlServerSignalStore>();
+        services.AddSingleton<SqlServerSignalStore>();
+        services.AddSingleton<ISignalStore>(p => p.GetRequiredService<SqlServerSignalStore>());
+        services.AddSingleton<IFusionSignalStore>(p => p.GetRequiredService<SqlServerSignalStore>());
+        services.AddSingleton<ISignalScannerStore>(p => p.GetRequiredService<SqlServerSignalStore>());
         services.AddSingleton<ISignalStatusStore, SqlServerSignalStatusStore>();
         services.AddSingleton<IDueSignalMaintenanceStore, SqlServerDueSignalMaintenanceStore>();
         return services;

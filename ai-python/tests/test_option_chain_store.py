@@ -120,6 +120,39 @@ def test_historical_latest_read_honors_event_and_receipt_cutoffs() -> None:
     assert current.source_snapshot_uid == UUID(int=31)
 
 
+def test_historical_latest_read_rejects_output_generated_after_knowledge_cutoff() -> None:
+    store = InMemoryOptionChainIntelligenceStore()
+    calculator = _calculator()
+    snapshot = _snapshot(
+        40,
+        100,
+        BASE_TIME,
+        BASE_TIME + timedelta(seconds=1),
+    )
+
+    store.process_snapshot(
+        UUID(int=400),
+        snapshot,
+        calculator,
+        BASE_TIME + timedelta(seconds=10),
+    )
+
+    before_processing = store.get_latest(
+        UNDERLYING,
+        EXPIRY,
+        BASE_TIME + timedelta(seconds=5),
+    )
+    after_processing = store.get_latest(
+        UNDERLYING,
+        EXPIRY,
+        BASE_TIME + timedelta(seconds=10),
+    )
+
+    assert before_processing is None
+    assert after_processing is not None
+    assert after_processing.source_snapshot_uid == UUID(int=40)
+
+
 def _calculator() -> DeterministicOptionChainCalculator:
     return DeterministicOptionChainCalculator(
         OptionChainIntelligenceOptions(

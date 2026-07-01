@@ -20,6 +20,7 @@ from app.features.models import FeatureStoreStatus, StoredFeatureSnapshot
 from app.features.sql_store import SqlServerFeatureFactoryStore
 from app.features.store import FeatureFactoryStore, InMemoryFeatureFactoryStore
 from app.liquidity_derivatives.service import LiquidityDerivativesContextService
+from app.option_chain.service import OptionChainIntelligenceService
 from app.order_flow.service import OrderFlowService
 from app.regime.service import MarketRegimeService
 from app.smart_money.service import SmartMoneyConceptsService
@@ -27,6 +28,7 @@ from app.workflow.calculator import (
     FusionReadyEvidenceCalculator,
     FusionReadyEvidenceOptions,
 )
+from app.workflow.option_chain import append_option_chain_evidence
 
 SCORE_QUANTUM = Decimal("0.01")
 ONE_HUNDRED = Decimal("100")
@@ -43,6 +45,7 @@ class FeatureFactoryService:
         order_flow_service: OrderFlowService | None = None,
         smart_money_service: SmartMoneyConceptsService | None = None,
         liquidity_derivatives_service: LiquidityDerivativesContextService | None = None,
+        option_chain_service: OptionChainIntelligenceService | None = None,
     ) -> None:
         self._settings = settings
         options = FeatureFactoryOptions(
@@ -66,6 +69,7 @@ class FeatureFactoryService:
             liquidity_derivatives_service
             or LiquidityDerivativesContextService(settings)
         )
+        self._option_chain = option_chain_service or OptionChainIntelligenceService()
         self._workflow_calculator = FusionReadyEvidenceCalculator(
             FusionReadyEvidenceOptions(
                 weight_configuration_version=(
@@ -122,6 +126,10 @@ class FeatureFactoryService:
     @property
     def liquidity_derivatives(self) -> LiquidityDerivativesContextService:
         return self._liquidity_derivatives
+
+    @property
+    def option_chain(self) -> OptionChainIntelligenceService:
+        return self._option_chain
 
     def process_candle(
         self,
@@ -239,6 +247,17 @@ class FeatureFactoryService:
             if liquidity_derivatives_result is None
             else liquidity_derivatives_result.output
         )
+        option_chain_output = None
+        if self._option_chain.enabled:
+            try:
+                option_chain_output = self._option_chain.get_latest(
+                    payload.instrument_key,
+                    expiry_date=None,
+                    as_of_utc=payload.close_at_utc,
+                )
+            except (KeyError, LookupError):
+                option_chain_output = None
+
         try:
             evidence = self._workflow_calculator.calculate(
                 delivery,
@@ -250,11 +269,18 @@ class FeatureFactoryService:
                 order_flow_output,
                 smart_money_output,
             )
-            return self._append_liquidity_derivatives_evidence(
+            evidence = self._append_liquidity_derivatives_evidence(
                 evidence,
                 liquidity_output,
                 payload.instrument_key,
                 payload.close_at_utc,
+            )
+            return append_option_chain_evidence(
+                evidence,
+                option_chain_output,
+                payload.instrument_key,
+                payload.close_at_utc,
+                self._option_chain.maximum_output_age_seconds,
             )
         except ValueError:
             return None

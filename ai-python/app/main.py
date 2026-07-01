@@ -35,6 +35,8 @@ from app.features.service import FeatureFactoryService
 from app.liquidity_derivatives.service import (
     LiquidityDerivativesContextService,
 )
+from app.option_chain.router import create_option_chain_router
+from app.option_chain.service import OptionChainIntelligenceService
 from app.order_flow.service import OrderFlowService
 from app.regime.service import MarketRegimeService
 from app.smart_money.service import SmartMoneyConceptsService
@@ -45,6 +47,7 @@ market_regime = MarketRegimeService(settings)
 order_flow = OrderFlowService(settings)
 smart_money = SmartMoneyConceptsService(settings)
 liquidity_derivatives = LiquidityDerivativesContextService(settings)
+option_chain = OptionChainIntelligenceService()
 multi_timeframe_confirmation = MultiTimeframeConfirmationService(
     settings,
     directional_intelligence,
@@ -67,6 +70,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+app.include_router(create_option_chain_router(option_chain))
 
 
 @app.middleware("http")
@@ -87,8 +91,8 @@ async def liveness() -> dict[str, str]:
 
 @app.get("/health/ready", tags=["health"])
 async def readiness() -> JSONResponse:
-    if feature_factory.enabled:
-        try:
+    try:
+        if feature_factory.enabled:
             feature_factory.get_status()
             if directional_intelligence.enabled:
                 directional_intelligence.get_status()
@@ -102,15 +106,17 @@ async def readiness() -> JSONResponse:
                 liquidity_derivatives.get_status()
             if multi_timeframe_confirmation.enabled:
                 multi_timeframe_confirmation.get_status()
-        except Exception as exception:
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "status": "Unhealthy",
-                    "dependency": "IntelligenceStore",
-                    "detail": str(exception)[:500],
-                },
-            )
+        if option_chain.enabled:
+            option_chain.get_status()
+    except Exception as exception:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "Unhealthy",
+                "dependency": "IntelligenceStore",
+                "detail": str(exception)[:500],
+            },
+        )
     return JSONResponse(status_code=200, content={"status": "Healthy"})
 
 
@@ -144,6 +150,9 @@ async def service_info() -> dict[str, str | bool]:
         "smartMoneyPolicyVersion": smart_money.policy_version,
         "liquidityDerivativesEngineEnabled": liquidity_derivatives.enabled,
         "liquidityDerivativesPolicyVersion": liquidity_derivatives.policy_version,
+        "optionChainEngineEnabled": option_chain.enabled,
+        "optionChainProvider": option_chain.provider,
+        "optionChainPolicyVersion": option_chain.policy_version,
         "confirmationEngineEnabled": settings.confirmation_engine_enabled,
         "confirmationPolicyVersion": settings.confirmation_policy_version,
         "startedAtUtc": started_at_utc.isoformat(),
@@ -210,6 +219,17 @@ async def list_engines() -> dict[str, list[object]]:
                 "methodology": "PRICE_POOLS_AND_CANONICAL_OPEN_INTEREST",
                 "optionsChainAvailable": False,
                 "futuresBasisAvailable": False,
+                "canCreateSignals": False,
+                "canExecuteOrders": False,
+            },
+            {
+                "engineCode": option_chain.engine_code,
+                "engineRole": "DIRECTIONAL_VOTER",
+                "enabled": option_chain.enabled,
+                "engineVersion": option_chain.engine_version,
+                "policyVersion": option_chain.policy_version,
+                "methodology": "DETERMINISTIC_CANONICAL_OPTION_CHAIN",
+                "selectionAuthority": False,
                 "canCreateSignals": False,
                 "canExecuteOrders": False,
             },

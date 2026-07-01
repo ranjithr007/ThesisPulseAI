@@ -1,5 +1,6 @@
 import hmac
 from datetime import date, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Query
 
@@ -65,7 +66,10 @@ def create_option_chain_router(
     )
     def latest_option_chain_term_structure(
         underlying_instrument_key: str,
-        as_of_utc: datetime | None = Query(default=None, alias="asOfUtc"),
+        as_of_utc: Annotated[
+            datetime | None,
+            Query(alias="asOfUtc"),
+        ] = None,
     ) -> OptionChainIntelligenceOutputV1:
         output = service.get_latest(
             underlying_instrument_key,
@@ -86,8 +90,14 @@ def create_option_chain_router(
     )
     def latest_option_chain_output(
         underlying_instrument_key: str,
-        expiry_date: date | None = Query(default=None, alias="expiryDate"),
-        as_of_utc: datetime | None = Query(default=None, alias="asOfUtc"),
+        expiry_date: Annotated[
+            date | None,
+            Query(alias="expiryDate"),
+        ] = None,
+        as_of_utc: Annotated[
+            datetime | None,
+            Query(alias="asOfUtc"),
+        ] = None,
     ) -> OptionChainIntelligenceOutputV1:
         output = service.get_latest(
             underlying_instrument_key,

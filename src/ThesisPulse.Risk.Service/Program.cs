@@ -75,6 +75,19 @@ app.MapPost("/api/v1/risk/signal-intake/project", (
         ? Results.Ok(projection)
         : Results.UnprocessableEntity(projection);
 });
+if (persistenceOptions.UseSqlServer)
+{
+    app.MapPost("/api/v1/risk/signal-intake/enqueue", async (
+        SignalRiskEvaluationIntakeV1 intake,
+        ISignalRiskWorkQueue queue,
+        CancellationToken cancellationToken) =>
+    {
+        var result = await queue.EnqueueAsync(intake, cancellationToken);
+        return result.Outcome == "ENQUEUED"
+            ? Results.Accepted($"/api/v1/risk/work-items/{result.MessageUid}", result)
+            : Results.Ok(result);
+    });
+}
 app.MapPost("/api/v1/risk/signal-intake/evaluate", (
     SignalRiskEvaluationIntakeV1 intake,
     ISignalRiskProjector projector,

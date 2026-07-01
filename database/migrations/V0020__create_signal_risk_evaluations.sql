@@ -9,6 +9,8 @@ CREATE TABLE [risk].[signal_risk_evaluations]
     [source_message_uid] uniqueidentifier NOT NULL,
     [signal_id] bigint NOT NULL,
     [risk_decision_id] bigint NULL,
+    [risk_decision_uid] uniqueidentifier NULL,
+    [decision_snapshot_json] nvarchar(max) NULL,
     [contract_version] varchar(20) NOT NULL,
     [risk_policy_version] varchar(100) NOT NULL,
     [current_status] varchar(30) NOT NULL,
@@ -21,6 +23,15 @@ CREATE TABLE [risk].[signal_risk_evaluations]
     CONSTRAINT [fk_signal_risk_decision] FOREIGN KEY ([risk_decision_id]) REFERENCES [risk].[risk_decisions] ([risk_decision_id]),
     CONSTRAINT [ck_signal_risk_contract] CHECK ([contract_version] = '1.0.0'),
     CONSTRAINT [ck_signal_risk_attempt] CHECK ([attempt_count] >= 0),
+    CONSTRAINT [ck_signal_risk_decision_json] CHECK ([decision_snapshot_json] IS NULL OR ISJSON([decision_snapshot_json]) = 1),
+    CONSTRAINT [ck_signal_risk_decision_snapshot] CHECK
+    (
+        ([current_status] IN ('RISK_EVALUATING','RISK_RETRY_PENDING','RISK_EXPIRED')
+            AND [risk_decision_uid] IS NULL AND [decision_snapshot_json] IS NULL)
+        OR
+        ([current_status] IN ('RISK_APPROVED','RISK_REJECTED','RISK_RESTRICTED')
+            AND [risk_decision_uid] IS NOT NULL AND [decision_snapshot_json] IS NOT NULL)
+    ),
     CONSTRAINT [ck_signal_risk_status] CHECK ([current_status] IN ('RISK_EVALUATING','RISK_APPROVED','RISK_REJECTED','RISK_RESTRICTED','RISK_RETRY_PENDING','RISK_EXPIRED'))
 );
 COMMIT TRANSACTION;

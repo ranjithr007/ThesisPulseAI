@@ -21,6 +21,8 @@ from app.option_chain.store import (
 )
 from app.option_chain.store_protocol import OptionChainIntelligenceStore
 
+_registered_option_chain_service: "OptionChainIntelligenceService | None" = None
+
 
 class OptionChainIntelligenceService:
     def __init__(
@@ -117,6 +119,15 @@ class OptionChainIntelligenceService:
 
     def get_status(self) -> OptionChainStoreStatus:
         return self._store.get_status()
+
+
+def register_option_chain_service(service: OptionChainIntelligenceService) -> None:
+    global _registered_option_chain_service
+    _registered_option_chain_service = service
+
+
+def get_registered_option_chain_service() -> OptionChainIntelligenceService | None:
+    return _registered_option_chain_service
 
 
 def _create_store(runtime: OptionChainRuntimeSettings) -> OptionChainIntelligenceStore:

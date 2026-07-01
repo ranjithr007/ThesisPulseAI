@@ -26,55 +26,84 @@ public static class SignalEndpoints
                 ISignalStreamPublisher streamPublisher,
                 CancellationToken cancellationToken) =>
             {
-                var result = await coordinator.ProcessAsync(
-                    envelope,
-                    cancellationToken);
-
-                if (result.Outcome == SignalIntakeOutcome.Invalid)
-                {
-                    return Results.ValidationProblem(new Dictionary<string, string[]>
-                    {
-                        ["signal"] = result.Errors.ToArray(),
-                    });
-                }
-
-                if (result.Outcome == SignalIntakeOutcome.Failed)
-                {
-                    return Results.Problem(
-                        title: "Signal processing failed",
-                        detail: result.Error,
-                        statusCode: StatusCodes.Status500InternalServerError);
-                }
-
-                if (result.Outcome == SignalIntakeOutcome.DuplicateMessage)
-                {
-                    return Results.Ok(ToIntakeResponse(
-                        "DUPLICATE_MESSAGE_IGNORED",
-                        result,
-                        publication: null));
-                }
-
-                if (result.Outcome == SignalIntakeOutcome.DuplicateSignal)
-                {
-                    return Results.Ok(ToIntakeResponse(
-                        "DUPLICATE_SIGNAL_IGNORED",
-                        result,
-                        publication: null));
-                }
-
-                var publication = await PublishCurrentAsync(
-                    statusStore,
-                    streamPublisher,
-                    result.SignalUid,
-                    statusSequence: 0,
+                var result = await coordinator.ProcessAsync(envelope, cancellationToken);
+                return await IntakeResponseAsync(
+                    result,
                     envelope.Metadata.OccurredAtUtc,
                     envelope.Metadata.CorrelationId,
+                    statusStore,
+                    streamPublisher,
                     cancellationToken);
-
-                return Results.Accepted(
-                    $"/api/v1/signals/{result.SignalUid}",
-                    ToIntakeResponse("ACCEPTED", result, publication));
             });
+
+        endpoints.MapPost(
+            "/api/v1/signals/fusion-intake",
+            async (
+                FusionSignalIntakeV1 intake,
+                SignalIntakeCoordinator coordinator,
+                ISignalStatusStore statusStore,
+                ISignalStreamPublisher streamPublisher,
+                CancellationToken cancellationToken) =>
+            {
+                var result = await coordinator.ProcessFusionAsync(intake, cancellationToken);
+                return await IntakeResponseAsync(
+                    result,
+                    intake.Envelope.Metadata.OccurredAtUtc,
+                    intake.Envelope.Metadata.CorrelationId,
+                    statusStore,
+                    streamPublisher,
+                    cancellationToken);
+            });
+    }
+
+    private static async Task<IResult> IntakeResponseAsync(
+        SignalIntakeResult result,
+        DateTimeOffset occurredAtUtc,
+        string correlationId,
+        ISignalStatusStore statusStore,
+        ISignalStreamPublisher streamPublisher,
+        CancellationToken cancellationToken)
+    {
+        if (result.Outcome == SignalIntakeOutcome.Invalid)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["signal"] = result.Errors.ToArray(),
+            });
+        }
+        if (result.Outcome == SignalIntakeOutcome.Failed)
+        {
+            return Results.Problem(
+                title: "Signal processing failed",
+                detail: result.Error,
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
+        if (result.Outcome == SignalIntakeOutcome.DuplicateMessage)
+        {
+            return Results.Ok(ToIntakeResponse(
+                "DUPLICATE_MESSAGE_IGNORED",
+                result,
+                publication: null));
+        }
+        if (result.Outcome == SignalIntakeOutcome.DuplicateSignal)
+        {
+            return Results.Ok(ToIntakeResponse(
+                "DUPLICATE_SIGNAL_IGNORED",
+                result,
+                publication: null));
+        }
+
+        var publication = await PublishCurrentAsync(
+            statusStore,
+            streamPublisher,
+            result.SignalUid,
+            statusSequence: 0,
+            occurredAtUtc,
+            correlationId,
+            cancellationToken);
+        return Results.Accepted(
+            $"/api/v1/signals/{result.SignalUid}",
+            ToIntakeResponse("ACCEPTED", result, publication));
     }
 
     private static void MapStatusTransitions(IEndpointRouteBuilder endpoints)
@@ -100,7 +129,6 @@ public static class SignalEndpoints
                         result,
                         publication: null));
                 }
-
                 if (result.Outcome == SignalTransitionOutcome.Rejected)
                 {
                     return Results.Conflict(ToTransitionResponse(
@@ -108,7 +136,6 @@ public static class SignalEndpoints
                         result,
                         publication: null));
                 }
-
                 if (result.Outcome == SignalTransitionOutcome.Duplicate)
                 {
                     return Results.Ok(ToTransitionResponse(
@@ -125,7 +152,6 @@ public static class SignalEndpoints
                     transition.OccurredAtUtc,
                     transition.CorrelationId,
                     cancellationToken);
-
                 return Results.Ok(ToTransitionResponse(
                     "TRANSITION_APPLIED",
                     result,
@@ -135,6 +161,46 @@ public static class SignalEndpoints
 
     private static void MapQueries(IEndpointRouteBuilder endpoints)
     {
+        endpoints.MapGet(
+            "/api/v1/signals/scanner",
+            async (
+                ISignalScannerStore scannerStore,
+                string? instrumentKey,
+                string? direction,
+                string? status,
+                decimal? minimumConfidence,
+                DateTimeOffset? generatedFromUtc,
+                DateTimeOffset? generatedToUtc,
+                bool? activeOnly,
+                int? limit,
+                DateTimeOffset? asOfUtc,
+                CancellationToken cancellationToken) =>
+            {
+                try
+                {
+                    var result = await scannerStore.ScanAsync(
+                        new SignalScannerQueryV1(
+                            instrumentKey,
+                            direction,
+                            status,
+                            minimumConfidence,
+                            generatedFromUtc,
+                            generatedToUtc,
+                            activeOnly ?? false,
+                            limit ?? 50),
+                        asOfUtc ?? DateTimeOffset.UtcNow,
+                        cancellationToken);
+                    return Results.Ok(result);
+                }
+                catch (ArgumentException exception)
+                {
+                    return Results.ValidationProblem(new Dictionary<string, string[]>
+                    {
+                        ["scanner"] = new[] { exception.Message },
+                    });
+                }
+            });
+
         endpoints.MapGet(
             "/api/v1/signals/{signalUid:guid}",
             async (
@@ -156,12 +222,7 @@ public static class SignalEndpoints
                 var signals = await signalStore.GetLatestAsync(
                     limit ?? 50,
                     cancellationToken);
-
-                return Results.Ok(new
-                {
-                    signals,
-                    count = signals.Count,
-                });
+                return Results.Ok(new { signals, count = signals.Count });
             });
     }
 
@@ -181,7 +242,6 @@ public static class SignalEndpoints
                 SignalStreamPublishOutcome.Failed,
                 "Persisted signal could not be loaded for publication.");
         }
-
         return await streamPublisher.PublishAsync(
             signal,
             statusSequence,

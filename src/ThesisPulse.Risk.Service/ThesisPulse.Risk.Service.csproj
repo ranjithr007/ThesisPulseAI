@@ -6,5 +6,6 @@
   <ItemGroup>
     <ProjectReference Include="..\ThesisPulse.Shared.Contracts\ThesisPulse.Shared.Contracts.csproj" />
     <ProjectReference Include="..\ThesisPulse.Shared.Observability\ThesisPulse.Shared.Observability.csproj" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
   </ItemGroup>
 </Project>

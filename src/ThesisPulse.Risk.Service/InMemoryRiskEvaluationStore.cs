@@ -13,7 +13,9 @@ public sealed record StoredRiskEvaluation(
 public interface ISignalRiskEvaluationStore
 {
     StoredRiskEvaluation? Get(Guid commandUid);
-    StoredRiskEvaluation Save(StoredRiskEvaluation evaluation);
+    StoredRiskEvaluation Save(
+        SignalRiskEvaluationCommandV1 command,
+        StoredRiskEvaluation evaluation);
 }
 
 public sealed class InMemorySignalRiskEvaluationStore : ISignalRiskEvaluationStore
@@ -23,6 +25,8 @@ public sealed class InMemorySignalRiskEvaluationStore : ISignalRiskEvaluationSto
     public StoredRiskEvaluation? Get(Guid commandUid) =>
         _items.TryGetValue(commandUid, out var value) ? value : null;
 
-    public StoredRiskEvaluation Save(StoredRiskEvaluation evaluation) =>
-        _items.GetOrAdd(evaluation.CommandUid, evaluation);
+    public StoredRiskEvaluation Save(
+        SignalRiskEvaluationCommandV1 command,
+        StoredRiskEvaluation evaluation) =>
+        _items.GetOrAdd(command.CommandUid, evaluation);
 }

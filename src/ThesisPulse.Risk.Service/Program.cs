@@ -10,8 +10,20 @@ builder.Services.Configure<DeterministicRiskOptions>(
     builder.Configuration.GetSection(DeterministicRiskOptions.SectionName));
 builder.Services.Configure<DeterministicTradePlanOptions>(
     builder.Configuration.GetSection(DeterministicTradePlanOptions.SectionName));
+
+var persistenceOptions = builder.Configuration
+    .GetSection(SignalRiskPersistenceOptions.SectionName)
+    .Get<SignalRiskPersistenceOptions>() ?? new SignalRiskPersistenceOptions();
+persistenceOptions.Validate();
+builder.Services.AddSingleton(persistenceOptions);
+
 builder.Services.AddSingleton<IRiskDecisionEngine, DeterministicRiskDecisionEngine>();
 builder.Services.AddSingleton<ISignalRiskProjector, DeterministicSignalRiskProjector>();
+if (persistenceOptions.UseSqlServer)
+    builder.Services.AddSingleton<ISignalRiskEvaluationStore, SqlServerSignalRiskEvaluationStore>();
+else
+    builder.Services.AddSingleton<ISignalRiskEvaluationStore, InMemorySignalRiskEvaluationStore>();
+builder.Services.AddSingleton<SignalRiskCoordinator>();
 builder.Services.AddSingleton<ITradePlanBuilder, DeterministicTradePlanBuilder>();
 
 var app = builder.Build();
@@ -23,7 +35,8 @@ app.MapGet("/api/v1/status", () => Results.Ok(new
     environment = "PAPER",
     failClosed = true,
     automaticSignalProjection = true,
-    automaticRiskPersistence = false,
+    automaticRiskPersistence = true,
+    persistenceMode = persistenceOptions.UseSqlServer ? "SQL_SERVER" : "IN_MEMORY_PAPER",
     defaultRiskDecision = RiskDecisionContractV1.Rejected,
     riskDecisionAuthority = true,
     riskStatusAuthority = true,
@@ -40,6 +53,17 @@ app.MapPost("/api/v1/risk/signal-intake/project", (
     return projection.Outcome == SignalRiskEvaluationContractV1.Eligible
         ? Results.Ok(projection)
         : Results.UnprocessableEntity(projection);
+});
+app.MapPost("/api/v1/risk/signal-intake/evaluate", (
+    SignalRiskEvaluationIntakeV1 intake,
+    ISignalRiskProjector projector,
+    SignalRiskCoordinator coordinator) =>
+{
+    var projection = projector.Project(intake);
+    if (projection.Command is null)
+        return Results.UnprocessableEntity(projection);
+
+    return Results.Ok(coordinator.Evaluate(projection.Command));
 });
 app.MapPost("/api/v1/risk/evaluate", (RiskDecisionRequestV1 request, IRiskDecisionEngine engine) =>
 {

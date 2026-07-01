@@ -24,9 +24,10 @@ class FusionDirectionalEvidenceV1(WorkflowContractModel):
         "ORDER_FLOW",
         "SMART_MONEY_CONCEPTS",
         "LIQUIDITY_DERIVATIVES_CONTEXT",
+        "OPTION_CHAIN",
     ]
     engine_version: str = Field(min_length=1, max_length=50)
-    timeframe: Literal["1m", "5m", "15m", "1h", "1d"]
+    timeframe: Literal["1m", "5m", "15m", "1h", "1d", "OPTION_CHAIN"]
     direction: Literal["LONG", "NEUTRAL", "SHORT"]
     score: Decimal = Field(ge=0, le=100)
     confidence: Decimal = Field(ge=0, le=100)

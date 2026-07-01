@@ -72,6 +72,10 @@ class OptionChainIntelligenceService:
         return self._runtime.policy_version
 
     @property
+    def maximum_output_age_seconds(self) -> int:
+        return self._runtime.maximum_output_age_seconds
+
+    @property
     def internal_api_key(self) -> str | None:
         return self._runtime.internal_api_key
 

@@ -49,8 +49,28 @@ jobs:
         run: dotnet test ThesisPulseAI.sln --configuration Release --no-build --verbosity normal
       - name: Contract fixture tests
         run: dotnet run --project tests/contracts/dotnet/ThesisPulse.ContractTests.csproj --configuration Release --no-build
-      - name: Fusion signal lifecycle tests
-        run: dotnet run --project tests/fusion-signal/dotnet/ThesisPulse.FusionSignal.Tests.csproj --configuration Release
+      - name: Fusion signal lifecycle tests with diagnostics
+        shell: bash
+        run: |
+          set +e
+          dotnet run --project tests/fusion-signal/dotnet/ThesisPulse.FusionSignal.Tests.csproj --configuration Release > fusion-signal-tests.log 2>&1
+          status=$?
+          echo "$status" > fusion-signal-tests.status
+          cat fusion-signal-tests.log
+          exit 0
+      - name: Upload Fusion signal test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fusion-signal-test-log
+          path: |
+            fusion-signal-tests.log
+            fusion-signal-tests.status
+          if-no-files-found: error
+          retention-days: 7
+      - name: Enforce Fusion signal test result
+        shell: bash
+        run: exit "$(cat fusion-signal-tests.status)"
       - name: Database migrator tests
         run: dotnet run --project tests/database/dotnet/ThesisPulse.DatabaseMigrator.Tests.csproj --configuration Release --no-build
       - name: Market Data foundation tests

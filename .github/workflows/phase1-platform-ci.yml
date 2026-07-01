@@ -83,6 +83,8 @@ jobs:
         run: dotnet run --project tests/phase32-risk-acceptance/dotnet/ThesisPulse.Phase32RiskAcceptance.Tests.csproj --configuration Release
       - name: Deterministic trade-plan tests
         run: dotnet run --project tests/tradeplans/dotnet/ThesisPulse.TradePlan.Tests.csproj --configuration Release
+      - name: Phase 3.3 Trade Plan projection tests
+        run: dotnet run --project tests/phase33-trade-plan-projection/dotnet/ThesisPulse.Phase33TradePlanProjection.Tests.csproj --configuration Release
       - name: Deterministic paper execution tests
         run: dotnet run --project tests/execution/dotnet/ThesisPulse.Execution.Tests.csproj --configuration Release
       - name: Deterministic portfolio ledger tests

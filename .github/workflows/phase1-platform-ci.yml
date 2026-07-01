@@ -77,6 +77,8 @@ jobs:
         run: dotnet run --project tests/marketdata/dotnet/ThesisPulse.MarketData.Tests.csproj --configuration Release
       - name: Deterministic risk decision tests
         run: dotnet run --project tests/risk/dotnet/ThesisPulse.Risk.Tests.csproj --configuration Release
+      - name: Signal-to-risk projection tests
+        run: dotnet run --project tests/signal-risk-projection/dotnet/ThesisPulse.SignalRiskProjection.Tests.csproj --configuration Release
       - name: Deterministic trade-plan tests
         run: dotnet run --project tests/tradeplans/dotnet/ThesisPulse.TradePlan.Tests.csproj --configuration Release
       - name: Deterministic paper execution tests

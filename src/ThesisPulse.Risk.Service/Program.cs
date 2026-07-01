@@ -11,6 +11,7 @@ builder.Services.Configure<DeterministicRiskOptions>(
 builder.Services.Configure<DeterministicTradePlanOptions>(
     builder.Configuration.GetSection(DeterministicTradePlanOptions.SectionName));
 builder.Services.AddSingleton<IRiskDecisionEngine, DeterministicRiskDecisionEngine>();
+builder.Services.AddSingleton<ISignalRiskProjector, DeterministicSignalRiskProjector>();
 builder.Services.AddSingleton<ITradePlanBuilder, DeterministicTradePlanBuilder>();
 
 var app = builder.Build();
@@ -21,13 +22,25 @@ app.MapGet("/api/v1/status", () => Results.Ok(new
     mode = "DETERMINISTIC_RISK_AND_TRADE_PLAN",
     environment = "PAPER",
     failClosed = true,
+    automaticSignalProjection = true,
+    automaticRiskPersistence = false,
     defaultRiskDecision = RiskDecisionContractV1.Rejected,
     riskDecisionAuthority = true,
+    riskStatusAuthority = true,
     tradePlanAuthority = true,
     positionSizingAuthority = true,
     executionAuthority = false,
     brokerSubmissionAuthority = false,
 }));
+app.MapPost("/api/v1/risk/signal-intake/project", (
+    SignalRiskEvaluationIntakeV1 intake,
+    ISignalRiskProjector projector) =>
+{
+    var projection = projector.Project(intake);
+    return projection.Outcome == SignalRiskEvaluationContractV1.Eligible
+        ? Results.Ok(projection)
+        : Results.UnprocessableEntity(projection);
+});
 app.MapPost("/api/v1/risk/evaluate", (RiskDecisionRequestV1 request, IRiskDecisionEngine engine) =>
 {
     var decision = engine.Evaluate(request);

@@ -21,7 +21,10 @@ public sealed class SqlServerSignalRiskEvaluationStore : ISignalRiskEvaluationSt
     {
         using var connection = new SqlConnection(_options.ConnectionString);
         connection.Open();
-        return FindExisting(connection, null, commandUid, lockRow: false);
+        var row = FindCurrent(connection, null, commandUid, lockRow: false);
+        return row is null || string.IsNullOrWhiteSpace(row.DecisionJson)
+            ? null
+            : ToStored(row);
     }
 
     public StoredRiskEvaluation Save(
@@ -34,39 +37,80 @@ public sealed class SqlServerSignalRiskEvaluationStore : ISignalRiskEvaluationSt
 
         try
         {
-            var existing = FindExisting(connection, transaction, command.CommandUid, lockRow: true);
-            if (existing is not null)
+            var current = FindCurrent(connection, transaction, command.CommandUid, lockRow: true);
+            if (current is not null && !string.IsNullOrWhiteSpace(current.DecisionJson))
             {
                 transaction.Commit();
-                return existing;
+                return ToStored(current);
             }
 
-            var signalId = ResolveSignalId(connection, transaction, command.SignalUid);
             var decisionJson = JsonSerializer.Serialize(evaluation.Decision, JsonOptions);
-            var evaluationId = InsertEvaluation(
-                connection,
-                transaction,
-                command,
-                evaluation,
-                signalId,
-                decisionJson);
+            if (current is null)
+            {
+                var signalId = ResolveSignalId(connection, transaction, command.SignalUid);
+                var evaluationId = InsertEvaluation(
+                    connection,
+                    transaction,
+                    command,
+                    evaluation,
+                    signalId,
+                    decisionJson);
+                InsertStatusEvent(
+                    connection,
+                    transaction,
+                    evaluationId,
+                    1,
+                    RiskStatusTransitionMatrix.NotEvaluated,
+                    SignalRiskEvaluationContractV1.RiskEvaluating,
+                    command);
+                InsertStatusEvent(
+                    connection,
+                    transaction,
+                    evaluationId,
+                    2,
+                    SignalRiskEvaluationContractV1.RiskEvaluating,
+                    evaluation.CurrentStatus,
+                    command);
+            }
+            else
+            {
+                RiskStatusTransitionMatrix.EnsureAllowed(
+                    current.Status,
+                    SignalRiskEvaluationContractV1.RiskEvaluating);
+                UpdateStatus(
+                    connection,
+                    transaction,
+                    current.EvaluationId,
+                    SignalRiskEvaluationContractV1.RiskEvaluating,
+                    null,
+                    null,
+                    evaluation.Decision.EvaluatedAtUtc);
+                InsertStatusEvent(
+                    connection,
+                    transaction,
+                    current.EvaluationId,
+                    current.NextSequence,
+                    current.Status,
+                    SignalRiskEvaluationContractV1.RiskEvaluating,
+                    command);
 
-            InsertStatusEvent(
-                connection,
-                transaction,
-                evaluationId,
-                1,
-                RiskStatusTransitionMatrix.NotEvaluated,
-                SignalRiskEvaluationContractV1.RiskEvaluating,
-                command);
-            InsertStatusEvent(
-                connection,
-                transaction,
-                evaluationId,
-                2,
-                SignalRiskEvaluationContractV1.RiskEvaluating,
-                evaluation.CurrentStatus,
-                command);
+                UpdateStatus(
+                    connection,
+                    transaction,
+                    current.EvaluationId,
+                    evaluation.CurrentStatus,
+                    evaluation.Decision.RiskDecisionUid,
+                    decisionJson,
+                    evaluation.Decision.EvaluatedAtUtc);
+                InsertStatusEvent(
+                    connection,
+                    transaction,
+                    current.EvaluationId,
+                    current.NextSequence + 1,
+                    SignalRiskEvaluationContractV1.RiskEvaluating,
+                    evaluation.CurrentStatus,
+                    command);
+            }
 
             transaction.Commit();
             return evaluation;
@@ -78,7 +122,7 @@ public sealed class SqlServerSignalRiskEvaluationStore : ISignalRiskEvaluationSt
         }
     }
 
-    private static StoredRiskEvaluation? FindExisting(
+    private static CurrentEvaluation? FindCurrent(
         SqlConnection connection,
         SqlTransaction? transaction,
         Guid commandUid,
@@ -86,37 +130,48 @@ public sealed class SqlServerSignalRiskEvaluationStore : ISignalRiskEvaluationSt
     {
         var lockHint = lockRow ? "WITH (UPDLOCK, HOLDLOCK)" : string.Empty;
         var sql = $"""
-            SELECT [command_uid], s.[signal_uid], [risk_decision_uid],
-                   [decision_snapshot_json], [current_status]
+            SELECT e.[signal_risk_evaluation_id], e.[command_uid], s.[signal_uid],
+                   e.[risk_decision_uid], e.[decision_snapshot_json], e.[current_status],
+                   ISNULL(MAX(se.[event_sequence]), 0) + 1
             FROM [risk].[signal_risk_evaluations] e {lockHint}
             INNER JOIN [intelligence].[signals] s ON s.[signal_id] = e.[signal_id]
-            WHERE e.[command_uid] = @command_uid;
+            LEFT JOIN [risk].[signal_risk_status_events] se
+                ON se.[signal_risk_evaluation_id] = e.[signal_risk_evaluation_id]
+            WHERE e.[command_uid] = @command_uid
+            GROUP BY e.[signal_risk_evaluation_id], e.[command_uid], s.[signal_uid],
+                     e.[risk_decision_uid], e.[decision_snapshot_json], e.[current_status];
             """;
 
-        using var command = new SqlCommand(sql, connection, transaction);
-        command.Parameters.Add("@command_uid", SqlDbType.UniqueIdentifier).Value = commandUid;
-        using var reader = command.ExecuteReader();
+        using var sqlCommand = new SqlCommand(sql, connection, transaction);
+        sqlCommand.Parameters.Add("@command_uid", SqlDbType.UniqueIdentifier).Value = commandUid;
+        using var reader = sqlCommand.ExecuteReader();
         if (!reader.Read())
             return null;
 
-        var decisionJson = reader.IsDBNull(3) ? null : reader.GetString(3);
-        if (string.IsNullOrWhiteSpace(decisionJson))
-            throw new InvalidOperationException("Stored terminal risk evaluation is missing its decision snapshot.");
-
-        var decision = JsonSerializer.Deserialize<RiskDecisionV1>(decisionJson, JsonOptions)
-            ?? throw new InvalidOperationException("Stored risk decision snapshot could not be deserialized.");
-        var status = reader.GetString(4);
-
-        return new StoredRiskEvaluation(
-            reader.GetGuid(0),
+        return new CurrentEvaluation(
+            reader.GetInt64(0),
             reader.GetGuid(1),
+            reader.GetGuid(2),
+            reader.IsDBNull(3) ? null : reader.GetGuid(3),
+            reader.IsDBNull(4) ? null : reader.GetString(4),
+            reader.GetString(5),
+            reader.GetInt32(6));
+    }
+
+    private static StoredRiskEvaluation ToStored(CurrentEvaluation row)
+    {
+        var decision = JsonSerializer.Deserialize<RiskDecisionV1>(row.DecisionJson!, JsonOptions)
+            ?? throw new InvalidOperationException("Stored risk decision snapshot could not be deserialized.");
+        return new StoredRiskEvaluation(
+            row.CommandUid,
+            row.SignalUid,
             decision,
-            status,
+            row.Status,
             new[]
             {
                 RiskStatusTransitionMatrix.NotEvaluated,
                 SignalRiskEvaluationContractV1.RiskEvaluating,
-                status,
+                row.Status,
             });
     }
 
@@ -180,6 +235,35 @@ public sealed class SqlServerSignalRiskEvaluationStore : ISignalRiskEvaluationSt
         return Convert.ToInt64(command.ExecuteScalar());
     }
 
+    private static void UpdateStatus(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        long evaluationId,
+        string status,
+        Guid? decisionUid,
+        string? decisionJson,
+        DateTimeOffset updatedAtUtc)
+    {
+        const string sql = """
+            UPDATE [risk].[signal_risk_evaluations]
+            SET [current_status] = @status,
+                [risk_decision_uid] = @risk_decision_uid,
+                [decision_snapshot_json] = @decision_json,
+                [attempt_count] = [attempt_count] + 1,
+                [updated_at_utc] = @updated_at_utc
+            WHERE [signal_risk_evaluation_id] = @evaluation_id;
+            """;
+        using var command = new SqlCommand(sql, connection, transaction);
+        command.Parameters.Add("@status", SqlDbType.VarChar, 30).Value = status;
+        command.Parameters.Add("@risk_decision_uid", SqlDbType.UniqueIdentifier).Value =
+            decisionUid.HasValue ? decisionUid.Value : DBNull.Value;
+        command.Parameters.Add("@decision_json", SqlDbType.NVarChar, -1).Value =
+            decisionJson is null ? DBNull.Value : decisionJson;
+        command.Parameters.Add("@updated_at_utc", SqlDbType.DateTime2).Value = updatedAtUtc.UtcDateTime;
+        command.Parameters.Add("@evaluation_id", SqlDbType.BigInt).Value = evaluationId;
+        command.ExecuteNonQuery();
+    }
+
     private static void InsertStatusEvent(
         SqlConnection connection,
         SqlTransaction transaction,
@@ -217,4 +301,13 @@ public sealed class SqlServerSignalRiskEvaluationStore : ISignalRiskEvaluationSt
             source.CausationMessageUid is Guid causation ? causation : DBNull.Value;
         command.ExecuteNonQuery();
     }
+
+    private sealed record CurrentEvaluation(
+        long EvaluationId,
+        Guid CommandUid,
+        Guid SignalUid,
+        Guid? DecisionUid,
+        string? DecisionJson,
+        string Status,
+        int NextSequence);
 }

@@ -26,6 +26,22 @@ def test_v0017_contains_required_option_chain_output_tables() -> None:
     assert "reference].[derivative_contracts" in migration
 
 
+def test_v0018_partitions_same_cutoff_outputs_by_expiry() -> None:
+    migration = (
+        REPOSITORY_ROOT
+        / "database"
+        / "migrations"
+        / "V0018__partition_option_chain_outputs_by_expiry.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "output_partition_key" in migration
+    assert "expiryMetrics[0].expiryDate" in migration
+    assert "ux_engine_outputs_revision_partitioned" in migration
+    assert "ux_engine_outputs_current_partitioned" in migration
+    assert "uq_engine_outputs_revision" in migration
+    assert "ux_engine_outputs_current" in migration
+
+
 def test_option_chain_engine_seed_has_no_authority() -> None:
     seed = (
         REPOSITORY_ROOT

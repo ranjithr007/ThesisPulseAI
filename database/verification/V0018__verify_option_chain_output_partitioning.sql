@@ -18,32 +18,39 @@ IF COLUMNPROPERTY
 IF NOT EXISTS
 (
     SELECT 1
-    FROM sys.indexes
-    WHERE [name] = N'ux_engine_outputs_revision_partitioned'
-      AND [object_id] = OBJECT_ID(N'[intelligence].[engine_outputs]')
-      AND [is_unique] = 1
+    FROM sys.indexes AS index_definition
+    INNER JOIN sys.index_columns AS index_column
+        ON index_column.[object_id] = index_definition.[object_id]
+       AND index_column.[index_id] = index_definition.[index_id]
+    INNER JOIN sys.columns AS column_definition
+        ON column_definition.[object_id] = index_column.[object_id]
+       AND column_definition.[column_id] = index_column.[column_id]
+    WHERE index_definition.[name] = N'uq_engine_outputs_revision'
+      AND index_definition.[object_id] = OBJECT_ID(N'[intelligence].[engine_outputs]')
+      AND index_definition.[is_unique] = 1
+      AND column_definition.[name] = N'output_partition_key'
+      AND index_column.[is_included_column] = 0
 )
-    THROW 61853, 'Partitioned engine-output revision index is missing.', 1;
+    THROW 61853, 'Expiry-partitioned engine-output revision index is missing.', 1;
 
 IF NOT EXISTS
 (
     SELECT 1
-    FROM sys.indexes
-    WHERE [name] = N'ux_engine_outputs_current_partitioned'
-      AND [object_id] = OBJECT_ID(N'[intelligence].[engine_outputs]')
-      AND [is_unique] = 1
-      AND [has_filter] = 1
+    FROM sys.indexes AS index_definition
+    INNER JOIN sys.index_columns AS index_column
+        ON index_column.[object_id] = index_definition.[object_id]
+       AND index_column.[index_id] = index_definition.[index_id]
+    INNER JOIN sys.columns AS column_definition
+        ON column_definition.[object_id] = index_column.[object_id]
+       AND column_definition.[column_id] = index_column.[column_id]
+    WHERE index_definition.[name] = N'ux_engine_outputs_current'
+      AND index_definition.[object_id] = OBJECT_ID(N'[intelligence].[engine_outputs]')
+      AND index_definition.[is_unique] = 1
+      AND index_definition.[has_filter] = 1
+      AND column_definition.[name] = N'output_partition_key'
+      AND index_column.[is_included_column] = 0
 )
-    THROW 61854, 'Partitioned current engine-output index is missing.', 1;
-
-IF EXISTS
-(
-    SELECT 1
-    FROM sys.indexes
-    WHERE [name] = N'ux_engine_outputs_current'
-      AND [object_id] = OBJECT_ID(N'[intelligence].[engine_outputs]')
-)
-    THROW 61855, 'Legacy unpartitioned current-output index still exists.', 1;
+    THROW 61854, 'Expiry-partitioned current engine-output index is missing.', 1;
 
 IF NOT EXISTS
 (

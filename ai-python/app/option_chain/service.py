@@ -31,6 +31,14 @@ class OptionChainIntelligenceService:
         runtime: OptionChainRuntimeSettings | None = None,
     ) -> None:
         global _registered_option_chain_service
+        use_application_instance = store is None and runtime is None
+        if use_application_instance and _registered_option_chain_service is not None:
+            registered = _registered_option_chain_service
+            self._runtime = registered._runtime
+            self._calculator = registered._calculator
+            self._store = registered._store
+            return
+
         self._runtime = runtime or OptionChainRuntimeSettings.load()
         self._calculator = DeterministicOptionChainCalculator(
             OptionChainIntelligenceOptions(
@@ -53,7 +61,8 @@ class OptionChainIntelligenceService:
             )
         )
         self._store = store or _create_store(self._runtime)
-        _registered_option_chain_service = self
+        if use_application_instance:
+            _registered_option_chain_service = self
 
     @property
     def enabled(self) -> bool:

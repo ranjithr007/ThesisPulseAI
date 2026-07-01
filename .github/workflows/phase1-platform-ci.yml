@@ -79,6 +79,8 @@ jobs:
         run: dotnet run --project tests/risk/dotnet/ThesisPulse.Risk.Tests.csproj --configuration Release
       - name: Signal-to-risk projection tests
         run: dotnet run --project tests/signal-risk-projection/dotnet/ThesisPulse.SignalRiskProjection.Tests.csproj --configuration Release
+      - name: Phase 3.2 Risk acceptance tests
+        run: dotnet run --project tests/phase32-risk-acceptance/dotnet/ThesisPulse.Phase32RiskAcceptance.Tests.csproj --configuration Release
       - name: Deterministic trade-plan tests
         run: dotnet run --project tests/tradeplans/dotnet/ThesisPulse.TradePlan.Tests.csproj --configuration Release
       - name: Deterministic paper execution tests

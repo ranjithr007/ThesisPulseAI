@@ -22,26 +22,25 @@ static Task TestProjectionAsync()
 {
     var request = BuildRequest();
     var projector = new DeterministicFusionSignalProjector(new FusionSignalProjectorOptions());
-
     var first = projector.Project(request);
     var second = projector.Project(request);
 
     Assert(first.Outcome == FusionSignalProjectionContractV1.Projected, "projection should succeed");
-    Assert(first.Intake is not null, "projection must return intake");
-    Assert(second.Intake is not null, "repeat projection must return intake");
-    Assert(first.Intake.Envelope.Metadata.MessageId == second.Intake.Envelope.Metadata.MessageId,
+    var firstIntake = first.Intake ?? throw new InvalidOperationException("projection must return intake");
+    var secondIntake = second.Intake ?? throw new InvalidOperationException("repeat projection must return intake");
+    Assert(firstIntake.Envelope.Metadata.MessageId == secondIntake.Envelope.Metadata.MessageId,
         "message identity must be deterministic");
-    Assert(first.Intake.Envelope.Payload.SignalUid == request.Thesis.Candidate!.SignalUid,
+    Assert(firstIntake.Envelope.Payload.SignalUid == request.Thesis.Candidate!.SignalUid,
         "candidate signal identity must be preserved");
-    Assert(first.Intake.Envelope.Payload.Strength == 0.80m,
+    Assert(firstIntake.Envelope.Payload.Strength == 0.80m,
         "candidate strength must be normalized to the signal contract");
-    Assert(first.Intake.Envelope.Payload.Confidence == 0.75m,
+    Assert(firstIntake.Envelope.Payload.Confidence == 0.75m,
         "candidate confidence must be normalized to the signal contract");
-    Assert(first.Intake.Lineage.FusionEvidenceUid == request.FusionEvidence.EvidenceUid,
+    Assert(firstIntake.Lineage.FusionEvidenceUid == request.FusionEvidence.EvidenceUid,
         "Fusion evidence lineage must be exact");
-    Assert(first.Intake.Envelope.Metadata.CausationId == request.FusionEvidence.EvidenceUid.ToString("D"),
+    Assert(firstIntake.Envelope.Metadata.CausationId == request.FusionEvidence.EvidenceUid.ToString("D"),
         "causation must point to Fusion evidence");
-    Assert(SignalGeneratedV1Validator.Validate(first.Intake.Envelope.Payload).Count == 0,
+    Assert(SignalGeneratedV1Validator.Validate(firstIntake.Envelope.Payload).Count == 0,
         "projected signal must satisfy the canonical signal contract");
     return Task.CompletedTask;
 }

@@ -49,6 +49,8 @@ jobs:
         run: dotnet test ThesisPulseAI.sln --configuration Release --no-build --verbosity normal
       - name: Contract fixture tests
         run: dotnet run --project tests/contracts/dotnet/ThesisPulse.ContractTests.csproj --configuration Release --no-build
+      - name: Fusion signal lifecycle tests
+        run: dotnet run --project tests/fusion-signal/dotnet/ThesisPulse.FusionSignal.Tests.csproj --configuration Release
       - name: Database migrator tests
         run: dotnet run --project tests/database/dotnet/ThesisPulse.DatabaseMigrator.Tests.csproj --configuration Release --no-build
       - name: Market Data foundation tests

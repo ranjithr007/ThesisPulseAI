@@ -1,5 +1,15 @@
 namespace ThesisPulse.Risk.Service;
 
+public sealed record SignalRiskWorkerSnapshot(
+    long Leased,
+    long Completed,
+    long Duplicates,
+    long Expired,
+    long Retried,
+    long Failed,
+    DateTimeOffset? LastSuccessUtc,
+    DateTimeOffset? LastFailureUtc);
+
 public sealed class SignalRiskWorkerState
 {
     private long _leased;
@@ -34,15 +44,15 @@ public sealed class SignalRiskWorkerState
         _lastFailureUtc = DateTimeOffset.UtcNow;
     }
 
-    public object Snapshot() => new
-    {
-        leased = Interlocked.Read(ref _leased),
-        completed = Interlocked.Read(ref _completed),
-        duplicates = Interlocked.Read(ref _duplicates),
-        expired = Interlocked.Read(ref _expired),
-        retried = Interlocked.Read(ref _retried),
-        failed = Interlocked.Read(ref _failed),
-        lastSuccessUtc = _lastSuccessUtc,
-        lastFailureUtc = _lastFailureUtc,
-    };
+    public SignalRiskWorkerSnapshot Read() => new(
+        Interlocked.Read(ref _leased),
+        Interlocked.Read(ref _completed),
+        Interlocked.Read(ref _duplicates),
+        Interlocked.Read(ref _expired),
+        Interlocked.Read(ref _retried),
+        Interlocked.Read(ref _failed),
+        _lastSuccessUtc,
+        _lastFailureUtc);
+
+    public object Snapshot() => Read();
 }

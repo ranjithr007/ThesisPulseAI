@@ -17,25 +17,46 @@ var persistenceOptions = builder.Configuration
 persistenceOptions.Validate();
 builder.Services.AddSingleton(persistenceOptions);
 
+var workerOptions = builder.Configuration
+    .GetSection(SignalRiskWorkerOptions.SectionName)
+    .Get<SignalRiskWorkerOptions>() ?? new SignalRiskWorkerOptions();
+workerOptions.Validate();
+if (workerOptions.Enabled && !persistenceOptions.UseSqlServer)
+    throw new InvalidOperationException("Signal Risk worker requires SQL_SERVER persistence mode.");
+builder.Services.AddSingleton(workerOptions);
+
 builder.Services.AddSingleton<IRiskDecisionEngine, DeterministicRiskDecisionEngine>();
 builder.Services.AddSingleton<ISignalRiskProjector, DeterministicSignalRiskProjector>();
 if (persistenceOptions.UseSqlServer)
+{
     builder.Services.AddSingleton<ISignalRiskEvaluationStore, SqlServerSignalRiskEvaluationStore>();
+    builder.Services.AddSingleton<ISignalRiskWorkQueue, SqlServerSignalRiskWorkQueue>();
+}
 else
+{
     builder.Services.AddSingleton<ISignalRiskEvaluationStore, InMemorySignalRiskEvaluationStore>();
+}
 builder.Services.AddSingleton<SignalRiskCoordinator>();
+builder.Services.AddSingleton<SignalRiskWorkerState>();
+if (workerOptions.Enabled)
+    builder.Services.AddHostedService<SignalRiskWorker>();
 builder.Services.AddSingleton<ITradePlanBuilder, DeterministicTradePlanBuilder>();
 
 var app = builder.Build();
 app.UseThesisPulsePlatformFoundation();
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Risk.Service");
-app.MapGet("/api/v1/status", () => Results.Ok(new
+app.MapGet("/api/v1/status", (SignalRiskWorkerState workerState) => Results.Ok(new
 {
     mode = "DETERMINISTIC_RISK_AND_TRADE_PLAN",
     environment = "PAPER",
     failClosed = true,
     automaticSignalProjection = true,
     automaticRiskPersistence = true,
+    automaticRiskWorkerEnabled = workerOptions.Enabled,
+    automaticRiskWorkerPollIntervalSeconds = workerOptions.PollIntervalSeconds,
+    automaticRiskWorkerBatchSize = workerOptions.BatchSize,
+    automaticRiskWorkerMaximumAttempts = workerOptions.MaximumAttempts,
+    automaticRiskWorkerState = workerState.Snapshot(),
     persistenceMode = persistenceOptions.UseSqlServer ? "SQL_SERVER" : "IN_MEMORY_PAPER",
     defaultRiskDecision = RiskDecisionContractV1.Rejected,
     riskDecisionAuthority = true,
@@ -54,6 +75,19 @@ app.MapPost("/api/v1/risk/signal-intake/project", (
         ? Results.Ok(projection)
         : Results.UnprocessableEntity(projection);
 });
+if (persistenceOptions.UseSqlServer)
+{
+    app.MapPost("/api/v1/risk/signal-intake/enqueue", async (
+        SignalRiskEvaluationIntakeV1 intake,
+        ISignalRiskWorkQueue queue,
+        CancellationToken cancellationToken) =>
+    {
+        var result = await queue.EnqueueAsync(intake, cancellationToken);
+        return result.Outcome == "ENQUEUED"
+            ? Results.Accepted($"/api/v1/risk/work-items/{result.MessageUid}", result)
+            : Results.Ok(result);
+    });
+}
 app.MapPost("/api/v1/risk/signal-intake/evaluate", (
     SignalRiskEvaluationIntakeV1 intake,
     ISignalRiskProjector projector,

@@ -10,6 +10,59 @@ public sealed class SqlServerSignalRiskWorkQueue(
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    public async Task<SignalRiskEnqueueResult> EnqueueAsync(
+        SignalRiskEvaluationIntakeV1 intake,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            IF EXISTS
+            (
+                SELECT 1
+                FROM [risk].[signal_risk_work_items] WITH (UPDLOCK, HOLDLOCK)
+                WHERE [message_uid] = @message_uid
+            )
+            BEGIN
+                SELECT CAST(0 AS bit);
+                RETURN;
+            END;
+
+            INSERT INTO [risk].[signal_risk_work_items]
+            (
+                [message_uid], [signal_uid], [intake_json], [status], [available_at_utc]
+            )
+            VALUES
+            (
+                @message_uid, @signal_uid, @intake_json, 'PENDING', SYSUTCDATETIME()
+            );
+            SELECT CAST(1 AS bit);
+            """;
+
+        await using var connection = new SqlConnection(persistenceOptions.ConnectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
+        try
+        {
+            await using var command = new SqlCommand(sql, connection, transaction);
+            command.Parameters.Add("@message_uid", SqlDbType.UniqueIdentifier).Value = intake.MessageUid;
+            command.Parameters.Add("@signal_uid", SqlDbType.UniqueIdentifier).Value = intake.Signal.SignalUid;
+            command.Parameters.Add("@intake_json", SqlDbType.NVarChar, -1).Value =
+                JsonSerializer.Serialize(intake, JsonOptions);
+            var created = Convert.ToBoolean(await command.ExecuteScalarAsync(cancellationToken));
+            await transaction.CommitAsync(cancellationToken);
+            return new SignalRiskEnqueueResult(
+                created ? "ENQUEUED" : "DUPLICATE",
+                intake.MessageUid,
+                intake.Signal.SignalUid);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
     public async Task<IReadOnlyCollection<SignalRiskWorkItem>> LeaseAsync(
         int maximumCount,
         string leaseOwner,

@@ -51,7 +51,7 @@ else if (persistenceProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreC
     storeOptions.Validate();
     builder.Services.AddSingleton(storeOptions);
     builder.Services.AddSingleton<IPaperExecutionLedgerStore,
-        SqlServerPaperExecutionLedgerStore>();
+        SqlServerPaperExecutionLedgerDecorator>();
 }
 else
 {

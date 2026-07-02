@@ -42,6 +42,7 @@ app.UseCors(frontendCorsPolicy);
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Operations.Service");
 app.MapPaperWorkflowEndpoints();
 app.MapAutomaticPaperWorkflowIntake();
+app.MapExecutionOperationalState();
 
 app.MapGet(
     "/api/v1/status",

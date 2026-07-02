@@ -41,6 +41,14 @@ if (tradePlanWorkerOptions.Enabled && !persistenceOptions.UseSqlServer)
     throw new InvalidOperationException("Automatic Trade Plan worker requires SQL_SERVER persistence mode.");
 builder.Services.AddSingleton(tradePlanWorkerOptions);
 
+var tradePlanIntakeOptions = builder.Configuration
+    .GetSection(AutomaticTradePlanIntakeOptions.SectionName)
+    .Get<AutomaticTradePlanIntakeOptions>() ?? new AutomaticTradePlanIntakeOptions();
+tradePlanIntakeOptions.Validate();
+if (tradePlanIntakeOptions.Enabled && (!persistenceOptions.UseSqlServer || !tradePlanWorkerOptions.Enabled))
+    throw new InvalidOperationException("Automatic Trade Plan intake requires SQL_SERVER persistence and the Automatic Trade Plan worker.");
+builder.Services.AddSingleton(tradePlanIntakeOptions);
+
 builder.Services.AddSingleton<IRiskDecisionEngine, DeterministicRiskDecisionEngine>();
 builder.Services.AddSingleton<ISignalRiskProjector, DeterministicSignalRiskProjector>();
 builder.Services.AddSingleton<IAutomaticTradePlanProjector, DeterministicAutomaticTradePlanProjector>();
@@ -55,6 +63,7 @@ if (persistenceOptions.UseSqlServer)
     builder.Services.AddSingleton<ISignalRiskOperationalStatusStore, SqlServerSignalRiskOperationalStatusStore>();
     builder.Services.AddSingleton<ISignalRiskMetricsStore, SqlServerSignalRiskMetricsStore>();
     builder.Services.AddSingleton<ICanonicalSignalRiskCandidateStore, SqlServerCanonicalSignalRiskCandidateStore>();
+    builder.Services.AddSingleton<IAutomaticTradePlanCandidateStore, SqlServerAutomaticTradePlanCandidateStore>();
     builder.Services.AddSingleton<IAutomaticTradePlanWorkQueue, SqlServerAutomaticTradePlanWorkQueue>();
     builder.Services.AddSingleton<IAutomaticTradePlanResultStore, SqlServerAutomaticTradePlanResultStore>();
 }
@@ -74,6 +83,8 @@ if (canonicalIntakeOptions.Enabled)
 }
 if (tradePlanWorkerOptions.Enabled)
     builder.Services.AddHostedService<AutomaticTradePlanWorker>();
+if (tradePlanIntakeOptions.Enabled)
+    builder.Services.AddHostedService<AutomaticTradePlanIntakeWorker>();
 
 var app = builder.Build();
 app.UseThesisPulsePlatformFoundation();
@@ -87,6 +98,10 @@ app.MapGet("/api/v1/status", (SignalRiskWorkerState workerState) => Results.Ok(n
     automaticRiskPersistence = true,
     automaticTradePlanProjection = true,
     automaticTradePlanLifecycle = true,
+    automaticTradePlanIntakeEnabled = tradePlanIntakeOptions.Enabled,
+    automaticTradePlanIntakeSessionCode = tradePlanIntakeOptions.SessionCode,
+    automaticTradePlanIntakePollIntervalSeconds = tradePlanIntakeOptions.PollIntervalSeconds,
+    automaticTradePlanIntakeBatchSize = tradePlanIntakeOptions.BatchSize,
     automaticTradePlanWorkerEnabled = tradePlanWorkerOptions.Enabled,
     automaticTradePlanWorkerPollIntervalSeconds = tradePlanWorkerOptions.PollIntervalSeconds,
     automaticTradePlanWorkerBatchSize = tradePlanWorkerOptions.BatchSize,

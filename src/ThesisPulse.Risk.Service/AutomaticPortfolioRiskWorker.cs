@@ -104,8 +104,15 @@ public sealed class AutomaticPortfolioRiskWorker(
         {
             try
             {
-                await processor.ProcessAsync(workItem, cancellationToken);
-                state.Evaluated();
+                var outcome = await processor.ProcessAsync(workItem, cancellationToken);
+                if (outcome == AutomaticPortfolioRiskStatus.Evaluated)
+                    state.Evaluated();
+                else if (outcome == AutomaticPortfolioRiskStatus.Duplicate)
+                    state.Duplicate();
+                else if (outcome == AutomaticPortfolioRiskStatus.RetryPending)
+                    state.Retried();
+                else
+                    state.Failed();
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {

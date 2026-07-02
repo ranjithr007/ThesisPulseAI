@@ -132,47 +132,54 @@ public sealed class AutomaticTradePlanCoordinator(
     ITradePlanBuilder builder,
     IAutomaticTradePlanLifecycleStore store)
 {
+    private readonly ConcurrentDictionary<Guid, object> _riskDecisionGates = new();
+
     public AutomaticTradePlanLifecycleSnapshot Build(AutomaticTradePlanIntakeV1 intake)
     {
-        var existing = store.Read(intake.RiskDecision.RiskDecisionUid, intake.MessageUid);
-        if (AutomaticTradePlanLifecycleStatus.IsTerminal(existing.Status))
-            return existing with { Duplicate = true };
-
-        var projection = projector.Project(intake);
-        if (projection.Command is null)
+        var riskDecisionUid = intake.RiskDecision.RiskDecisionUid;
+        var gate = _riskDecisionGates.GetOrAdd(riskDecisionUid, _ => new object());
+        lock (gate)
         {
-            var terminalStatus = projection.Reasons.Any(reason => reason is "SIGNAL_EXPIRED" or "RISK_BUDGET_EXPIRED_OR_MISSING")
-                ? AutomaticTradePlanLifecycleStatus.Expired
-                : AutomaticTradePlanLifecycleStatus.Rejected;
-            return store.Transition(
-                intake.RiskDecision.RiskDecisionUid,
+            var existing = store.Read(riskDecisionUid, intake.MessageUid);
+            if (AutomaticTradePlanLifecycleStatus.IsTerminal(existing.Status))
+                return existing with { Duplicate = true };
+
+            var projection = projector.Project(intake);
+            if (projection.Command is null)
+            {
+                var terminalStatus = projection.Reasons.Any(reason => reason is "SIGNAL_EXPIRED" or "RISK_BUDGET_EXPIRED_OR_MISSING")
+                    ? AutomaticTradePlanLifecycleStatus.Expired
+                    : AutomaticTradePlanLifecycleStatus.Rejected;
+                return store.Transition(
+                    riskDecisionUid,
+                    intake.MessageUid,
+                    intake.CorrelationId,
+                    terminalStatus,
+                    projection.Reasons,
+                    null,
+                    intake.ReceivedAtUtc);
+            }
+
+            store.Transition(
+                riskDecisionUid,
                 intake.MessageUid,
                 intake.CorrelationId,
-                terminalStatus,
-                projection.Reasons,
+                AutomaticTradePlanLifecycleStatus.Building,
+                Array.Empty<string>(),
                 null,
                 intake.ReceivedAtUtc);
+            var result = builder.Build(projection.Command.Request);
+            var status = result.Status == TradePlanContractV1.Ready
+                ? AutomaticTradePlanLifecycleStatus.Ready
+                : AutomaticTradePlanLifecycleStatus.Rejected;
+            return store.Transition(
+                riskDecisionUid,
+                intake.MessageUid,
+                intake.CorrelationId,
+                status,
+                result.Reasons,
+                result,
+                result.EvaluatedAtUtc);
         }
-
-        store.Transition(
-            intake.RiskDecision.RiskDecisionUid,
-            intake.MessageUid,
-            intake.CorrelationId,
-            AutomaticTradePlanLifecycleStatus.Building,
-            Array.Empty<string>(),
-            null,
-            intake.ReceivedAtUtc);
-        var result = builder.Build(projection.Command.Request);
-        var status = result.Status == TradePlanContractV1.Ready
-            ? AutomaticTradePlanLifecycleStatus.Ready
-            : AutomaticTradePlanLifecycleStatus.Rejected;
-        return store.Transition(
-            intake.RiskDecision.RiskDecisionUid,
-            intake.MessageUid,
-            intake.CorrelationId,
-            status,
-            result.Reasons,
-            result,
-            result.EvaluatedAtUtc);
     }
 }

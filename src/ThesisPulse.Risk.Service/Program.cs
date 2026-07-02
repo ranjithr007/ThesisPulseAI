@@ -33,11 +33,20 @@ if (canonicalIntakeOptions.Enabled && (!persistenceOptions.UseSqlServer || !work
     throw new InvalidOperationException("Canonical Signal Risk intake requires SQL_SERVER persistence and the Signal Risk worker.");
 builder.Services.AddSingleton(canonicalIntakeOptions);
 
+var tradePlanWorkerOptions = builder.Configuration
+    .GetSection(AutomaticTradePlanWorkerOptions.SectionName)
+    .Get<AutomaticTradePlanWorkerOptions>() ?? new AutomaticTradePlanWorkerOptions();
+tradePlanWorkerOptions.Validate();
+if (tradePlanWorkerOptions.Enabled && !persistenceOptions.UseSqlServer)
+    throw new InvalidOperationException("Automatic Trade Plan worker requires SQL_SERVER persistence mode.");
+builder.Services.AddSingleton(tradePlanWorkerOptions);
+
 builder.Services.AddSingleton<IRiskDecisionEngine, DeterministicRiskDecisionEngine>();
 builder.Services.AddSingleton<ISignalRiskProjector, DeterministicSignalRiskProjector>();
 builder.Services.AddSingleton<IAutomaticTradePlanProjector, DeterministicAutomaticTradePlanProjector>();
 builder.Services.AddSingleton<IAutomaticTradePlanLifecycleStore, InMemoryAutomaticTradePlanLifecycleStore>();
 builder.Services.AddSingleton<AutomaticTradePlanCoordinator>();
+builder.Services.AddSingleton<ITradePlanBuilder, DeterministicTradePlanBuilder>();
 builder.Services.AddSingleton<SignalRiskWorkerState>();
 if (persistenceOptions.UseSqlServer)
 {
@@ -46,6 +55,8 @@ if (persistenceOptions.UseSqlServer)
     builder.Services.AddSingleton<ISignalRiskOperationalStatusStore, SqlServerSignalRiskOperationalStatusStore>();
     builder.Services.AddSingleton<ISignalRiskMetricsStore, SqlServerSignalRiskMetricsStore>();
     builder.Services.AddSingleton<ICanonicalSignalRiskCandidateStore, SqlServerCanonicalSignalRiskCandidateStore>();
+    builder.Services.AddSingleton<IAutomaticTradePlanWorkQueue, SqlServerAutomaticTradePlanWorkQueue>();
+    builder.Services.AddSingleton<IAutomaticTradePlanResultStore, SqlServerAutomaticTradePlanResultStore>();
 }
 else
 {
@@ -61,7 +72,8 @@ if (canonicalIntakeOptions.Enabled)
         client.BaseAddress = new Uri(canonicalIntakeOptions.PortfolioServiceBaseUrl));
     builder.Services.AddHostedService<CanonicalSignalRiskIntakeWorker>();
 }
-builder.Services.AddSingleton<ITradePlanBuilder, DeterministicTradePlanBuilder>();
+if (tradePlanWorkerOptions.Enabled)
+    builder.Services.AddHostedService<AutomaticTradePlanWorker>();
 
 var app = builder.Build();
 app.UseThesisPulsePlatformFoundation();
@@ -75,6 +87,10 @@ app.MapGet("/api/v1/status", (SignalRiskWorkerState workerState) => Results.Ok(n
     automaticRiskPersistence = true,
     automaticTradePlanProjection = true,
     automaticTradePlanLifecycle = true,
+    automaticTradePlanWorkerEnabled = tradePlanWorkerOptions.Enabled,
+    automaticTradePlanWorkerPollIntervalSeconds = tradePlanWorkerOptions.PollIntervalSeconds,
+    automaticTradePlanWorkerBatchSize = tradePlanWorkerOptions.BatchSize,
+    automaticTradePlanWorkerMaximumAttempts = tradePlanWorkerOptions.MaximumAttempts,
     automaticRiskWorkerEnabled = workerOptions.Enabled,
     automaticCanonicalSignalIntakeEnabled = canonicalIntakeOptions.Enabled,
     automaticRiskWorkerPollIntervalSeconds = workerOptions.PollIntervalSeconds,
@@ -114,6 +130,18 @@ if (persistenceOptions.UseSqlServer)
         return result.Outcome == "ENQUEUED"
             ? Results.Accepted($"/api/v1/risk/work-items/{result.MessageUid}", result)
             : Results.Ok(result);
+    });
+    app.MapPost("/api/v1/trade-plans/automatic/enqueue", async (
+        AutomaticTradePlanIntakeV1 intake,
+        IAutomaticTradePlanWorkQueue queue,
+        CancellationToken cancellationToken) =>
+    {
+        var result = await queue.EnqueueAsync(intake, cancellationToken);
+        return result.Outcome == "ENQUEUED"
+            ? Results.Accepted($"/api/v1/trade-plans/work-items/{result.SourceMessageUid}", result)
+            : result.Outcome == AutomaticTradePlanContractV1.Rejected
+                ? Results.UnprocessableEntity(result)
+                : Results.Ok(result);
     });
 }
 app.MapPost("/api/v1/risk/signal-intake/evaluate", (

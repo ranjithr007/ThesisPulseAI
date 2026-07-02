@@ -50,10 +50,10 @@ await RunAsync("kill switch fails closed and schedules retry", async () =>
 {
     var fixture = CreateFixture();
     var queue = new RecordingQueue();
-    var operations = HealthyOperations() with { KillSwitchActive = true };
     var processor = CreateProcessor(
         queue,
-        new FixedContextProvider(operations),
+        new FixedContextProvider(
+            HealthyOperations() with { KillSwitchActive = true }),
         fixture.Service,
         new AutomaticPaperSubmissionWorkerState(),
         maximumAttempts: 3);
@@ -98,12 +98,10 @@ await RunAsync("expired command expires the unsubmitted order", async () =>
         fixture.Service,
         new AutomaticPaperSubmissionWorkerState(),
         maximumAttempts: 3);
-    var expired = fixture.Item with
-    {
-        ValidUntilUtc = DateTimeOffset.UtcNow.AddSeconds(-1),
-    };
 
-    await processor.ProcessAsync(expired, CancellationToken.None);
+    await processor.ProcessAsync(
+        fixture.Item with { ValidUntilUtc = DateTimeOffset.UtcNow.AddSeconds(-1) },
+        CancellationToken.None);
 
     Equal(AutomaticPaperSubmissionStatus.Expired, queue.LastStatus!);
     Equal(
@@ -111,7 +109,7 @@ await RunAsync("expired command expires the unsubmitted order", async () =>
         fixture.Service.GetOrder(fixture.Order.PaperOrderUid)!.State);
 });
 
-await RunAsync("submitted crash recovery acknowledges without rechecking market gates", async () =>
+await RunAsync("submitted crash recovery acknowledges without rechecking entry gates", async () =>
 {
     var fixture = CreateFixture();
     var submitted = fixture.Service.ApplyEvent(
@@ -312,10 +310,15 @@ static SubmissionFixture CreateFixture()
         $"phase35:{plan.TradePlanUid:N}",
         plan.CorrelationId,
         plan,
-        HealthyOperations(),
+        HealthyOperations(now),
         plan.ExecutionPolicyVersion,
         now));
-    Equal(ExecutionCommandContractV1.Authorized, result.Status);
+    if (result.Status != ExecutionCommandContractV1.Authorized)
+    {
+        throw new InvalidOperationException(
+            $"Execution authorization failed: {string.Join(',', result.Reasons)}");
+    }
+
     var command = result.Command
         ?? throw new InvalidOperationException("Authorized result requires a command.");
     var order = result.PaperOrder
@@ -394,13 +397,16 @@ static TradePlanV1 CreatePlan(DateTimeOffset now)
         now.AddMinutes(2));
 }
 
-static ExecutionOperationalStateV1 HealthyOperations() => new(
+static ExecutionOperationalStateV1 HealthyOperations() =>
+    HealthyOperations(DateTimeOffset.UtcNow);
+
+static ExecutionOperationalStateV1 HealthyOperations(DateTimeOffset observedAtUtc) => new(
     false,
     false,
     true,
     true,
     true,
-    DateTimeOffset.UtcNow);
+    observedAtUtc);
 
 static void Contains(string expected, IReadOnlyCollection<string> values)
 {

@@ -73,11 +73,12 @@ internal static class WorkProcessorAcceptanceTests
         await CheckAsync(failures, "expired intake never reaches builder persistence", async () =>
         {
             var now = DateTimeOffset.UtcNow;
-            var item = CreateItem(attemptCount: 1, now) with
+            var item = CreateItem(attemptCount: 1, now);
+            item = item with
             {
-                Intake = CreateIntake(now) with
+                Intake = item.Intake with
                 {
-                    Signal = CreateIntake(now).Signal with
+                    Signal = item.Intake.Signal with
                     {
                         EntryClosesAtUtc = now.AddSeconds(-1),
                         ValidUntilUtc = now.AddSeconds(-1),
@@ -222,7 +223,7 @@ internal static class WorkProcessorAcceptanceTests
         if (!condition) throw new InvalidOperationException("Acceptance assertion failed.");
     }
 
-    private static void Equal<T>(T expected, T actual) where T : notnull
+    private static void Equal<T>(T expected, T actual)
     {
         if (!EqualityComparer<T>.Default.Equals(expected, actual))
             throw new InvalidOperationException($"Expected '{expected}' but received '{actual}'.");

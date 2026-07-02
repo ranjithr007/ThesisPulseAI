@@ -1,0 +1,91 @@
+name: Phase 4.0 Option-Chain Intelligence CI
+
+on:
+  push:
+    branches:
+      - feature/phase40-option-chain-intelligence
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase40-option-chain-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-verification:
+    name: Option-chain acceptance and deterministic regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Display .NET environment
+        run: dotnet --info
+
+      - name: Restore solution
+        run: dotnet restore ThesisPulseAI.sln
+
+      - name: Build solution with diagnostics
+        shell: bash
+        run: |
+          set +e
+          dotnet build ThesisPulseAI.sln \
+            --configuration Release \
+            --no-restore \
+            --verbosity minimal \
+            2>&1 | tee phase40-build.log
+          status=${PIPESTATUS[0]}
+          echo "$status" > phase40-build.status
+          exit 0
+
+      - name: Upload Phase 4.0 build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase40-option-chain-build-log
+          path: |
+            phase40-build.log
+            phase40-build.status
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Enforce build result
+        shell: bash
+        run: exit "$(cat phase40-build.status)"
+
+      - name: Run Phase 4.0 option-chain acceptance
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet run --project tests/phase40-option-chain/dotnet/ThesisPulse.Phase40OptionChain.Tests.csproj --configuration Release 2>&1 | tee phase40-tests.log
+
+      - name: Run database migrator regression
+        run: dotnet run --project tests/database/dotnet/ThesisPulse.DatabaseMigrator.Tests.csproj --configuration Release
+
+      - name: Run deterministic risk regression
+        run: dotnet run --project tests/risk/dotnet/ThesisPulse.Risk.Tests.csproj --configuration Release
+
+      - name: Run deterministic trade-plan regression
+        run: dotnet run --project tests/tradeplans/dotnet/ThesisPulse.TradePlan.Tests.csproj --configuration Release
+
+      - name: Upload Phase 4.0 acceptance diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase40-option-chain-acceptance-log
+          path: phase40-tests.log
+          if-no-files-found: warn
+          retention-days: 7

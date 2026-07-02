@@ -27,7 +27,15 @@ public sealed record PortfolioRiskSnapshotV1(
     decimal CurrentDrawdownPercent,
     int OpenPositionCount,
     IReadOnlyCollection<PortfolioPositionV1> Positions,
-    DateTimeOffset ObservedAtUtc);
+    DateTimeOffset ObservedAtUtc)
+{
+    public string OperatingMode { get; init; } = PortfolioRiskControlContractV1.Normal;
+    public decimal RiskMultiplier { get; init; } = 1m;
+    public int? MaximumConcurrentNewPositions { get; init; }
+    public Guid? SourcePortfolioSnapshotUid { get; init; }
+    public Guid? SourcePnlSnapshotUid { get; init; }
+    public string? SourcePolicyVersion { get; init; }
+}
 
 public sealed record OperationalRiskStateV1(
     bool KillSwitchActive,

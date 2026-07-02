@@ -8,11 +8,14 @@ builder.Configuration["Platform:ConfigurationVersion"] ??= "platform-foundation-
 builder.Services.AddThesisPulsePlatformFoundation();
 
 var persistenceProvider = builder.Configuration["PortfolioPersistence:Provider"] ?? "InMemory";
+var sqlServerPersistence = persistenceProvider.Equals(
+    "SqlServer",
+    StringComparison.OrdinalIgnoreCase);
 if (persistenceProvider.Equals("InMemory", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddSingleton<IPortfolioLedgerStore, InMemoryPortfolioLedgerStore>();
 }
-else if (persistenceProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
+else if (sqlServerPersistence)
 {
     var connectionString = builder.Configuration.GetConnectionString("OperationalDatabase");
     if (string.IsNullOrWhiteSpace(connectionString))
@@ -35,6 +38,8 @@ else if (persistenceProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreC
     options.Validate();
     builder.Services.AddSingleton(options);
     builder.Services.AddSingleton<IPortfolioLedgerStore, SqlServerPortfolioLedgerStore>();
+    builder.Services.AddSingleton<IPaperPortfolioValuationLedgerStore,
+        SqlServerPaperPortfolioValuationLedgerStore>();
 }
 else
 {
@@ -47,8 +52,7 @@ var automaticProjectionOptions = builder.Configuration
     .Get<AutomaticPortfolioFillProjectionOptions>()
     ?? new AutomaticPortfolioFillProjectionOptions();
 automaticProjectionOptions.Validate();
-if (automaticProjectionOptions.Enabled &&
-    !persistenceProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
+if (automaticProjectionOptions.Enabled && !sqlServerPersistence)
 {
     throw new InvalidOperationException(
         "Automatic PAPER fill portfolio projection requires SQL Server persistence.");
@@ -67,19 +71,49 @@ if (automaticProjectionOptions.Enabled)
     builder.Services.AddHostedService<AutomaticPortfolioFillProjectionWorker>();
 }
 
+var automaticValuationOptions = builder.Configuration
+    .GetSection(AutomaticPaperValuationOptions.SectionName)
+    .Get<AutomaticPaperValuationOptions>()
+    ?? new AutomaticPaperValuationOptions();
+automaticValuationOptions.Validate();
+if (automaticValuationOptions.Enabled && !sqlServerPersistence)
+{
+    throw new InvalidOperationException(
+        "Automatic PAPER valuation requires SQL Server persistence.");
+}
+
+builder.Services.AddSingleton(automaticValuationOptions);
+builder.Services.AddSingleton<AutomaticPaperValuationWorkerState>();
+builder.Services.AddSingleton<DeterministicPaperValuationPolicy>();
+if (automaticValuationOptions.Enabled)
+{
+    builder.Services.AddSingleton<IAutomaticPaperValuationCandidateStore,
+        SqlServerAutomaticPaperValuationCandidateStore>();
+    builder.Services.AddSingleton<IAutomaticPaperValuationWorkQueue,
+        SqlServerAutomaticPaperValuationWorkQueue>();
+    builder.Services.AddSingleton<AutomaticPaperValuationProcessor>();
+    builder.Services.AddHttpClient<IAutomaticPaperValuationMarketDataProvider,
+        HttpAutomaticPaperValuationMarketDataProvider>(client =>
+    {
+        client.BaseAddress = new Uri(automaticValuationOptions.MarketDataServiceBaseUrl);
+        client.Timeout = TimeSpan.FromSeconds(automaticValuationOptions.TimeoutSeconds);
+    });
+    builder.Services.AddHostedService<AutomaticPaperValuationIntakeWorker>();
+    builder.Services.AddHostedService<AutomaticPaperValuationWorker>();
+}
+
 var app = builder.Build();
 app.UseThesisPulsePlatformFoundation();
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Portfolio.Service");
 app.MapGet("/api/v1/status", (
-    AutomaticPortfolioFillProjectionWorkerState projectionState) => Results.Ok(new
+    AutomaticPortfolioFillProjectionWorkerState projectionState,
+    AutomaticPaperValuationWorkerState valuationState) => Results.Ok(new
 {
     mode = "PERSISTENT_PORTFOLIO_LEDGER",
     environment = "PAPER",
     persistenceProvider,
-    sqlServerSourceOfTruth = persistenceProvider.Equals(
-        "SqlServer",
-        StringComparison.OrdinalIgnoreCase),
-    authority = "LEDGER_AND_RECONCILIATION_ONLY",
+    sqlServerSourceOfTruth = sqlServerPersistence,
+    authority = "LEDGER_VALUATION_AND_RECONCILIATION_ONLY",
     fillProjectionAuthority = true,
     automaticFillProjectionAuthority = automaticProjectionOptions.Enabled,
     automaticFillProjectionPolicyVersion = automaticProjectionOptions.ProjectionPolicyVersion,
@@ -87,10 +121,19 @@ app.MapGet("/api/v1/status", (
     automaticFillProjectionBatchSize = automaticProjectionOptions.BatchSize,
     automaticFillProjectionMaximumAttempts = automaticProjectionOptions.MaximumAttempts,
     automaticFillProjectionWorkerState = projectionState.Snapshot(),
+    valuationAuthority = sqlServerPersistence,
+    pnlSnapshotAuthority = sqlServerPersistence,
+    automaticValuationAuthority = automaticValuationOptions.Enabled,
+    automaticValuationPolicyVersion = automaticValuationOptions.ValuationPolicyVersion,
+    automaticValuationPollIntervalSeconds = automaticValuationOptions.PollIntervalSeconds,
+    automaticValuationMaximumCandleAgeSeconds = automaticValuationOptions.MaximumCandleAgeSeconds,
+    automaticValuationWorkerState = valuationState.Snapshot(),
+    markToMarketAuthority = automaticValuationOptions.Enabled,
+    drawdownObservationAuthority = automaticValuationOptions.Enabled,
+    dailyLossEnforcementAuthority = false,
+    drawdownEnforcementAuthority = false,
     reconciliationAuthority = true,
     automaticCorrectionAuthority = false,
-    valuationAuthority = false,
-    markToMarketAuthority = false,
     marginAuthority = false,
     settlementAuthority = false,
     exitOrderAuthority = false,
@@ -102,6 +145,23 @@ app.MapGet("/api/v1/status", (
 app.MapGet(
     "/api/v1/portfolio/automatic-fill-projection/metrics",
     (AutomaticPortfolioFillProjectionWorkerState state) => Results.Ok(state.Snapshot()));
+app.MapGet(
+    "/api/v1/portfolio/automatic-valuation/metrics",
+    (AutomaticPaperValuationWorkerState state) => Results.Ok(state.Snapshot()));
+app.MapGet("/api/v1/portfolio/{portfolioCode}/pnl/latest", async (
+    string portfolioCode,
+    IServiceProvider services,
+    CancellationToken cancellationToken) =>
+{
+    var store = services.GetService<IPaperPortfolioValuationLedgerStore>();
+    if (store is null)
+        return Results.NotFound();
+
+    var snapshot = await store.GetLatestAsync(portfolioCode, cancellationToken);
+    return snapshot is null
+        ? Results.NotFound()
+        : Results.Ok(snapshot);
+});
 app.MapPost("/api/v1/portfolio/fills/project", async (
     PortfolioFillProjectionRequestV1 request,
     IPortfolioLedgerStore store,

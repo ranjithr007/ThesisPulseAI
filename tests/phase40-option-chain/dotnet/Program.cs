@@ -186,7 +186,6 @@ static void True(bool condition, string name)
 }
 
 static void Equal<T>(T expected, T actual, string name)
-    where T : notnull
 {
     if (!EqualityComparer<T>.Default.Equals(expected, actual))
         throw new InvalidOperationException($"{name}: expected {expected}, actual {actual}");

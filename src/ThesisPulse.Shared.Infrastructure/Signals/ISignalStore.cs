@@ -75,6 +75,13 @@ public interface ISignalScannerStore
         CancellationToken cancellationToken = default);
 }
 
+public interface ISignalDecisionProjectionStore
+{
+    Task<SignalDecisionProjectionV1?> GetDecisionProjectionAsync(
+        Guid signalUid,
+        CancellationToken cancellationToken = default);
+}
+
 public interface ISignalStatusStore
 {
     Task<SignalTransitionResult> TransitionStatusAsync(

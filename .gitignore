@@ -54,3 +54,14 @@
 /src/ThesisPulse.Trading.Api/bin/Debug/net8.0
 /frontend-react/node_modules/.bin
 /frontend-react/node_modules
+/src/ThesisPulse.Infrastructure.Brokers.Upstox/obj
+/tests/marketdata/dotnet/obj
+/tests/marketdata-recovery/dotnet/obj
+/tests/execution/dotnet/obj
+/tests/risk/dotnet/obj
+/tests/tradeplans/dotnet/obj
+/tests/portfolio/dotnet/obj
+/tests/automatic-intake/dotnet/obj
+/tests/paper-workflow/dotnet/obj
+/.vs/VSWorkspaceState.json
+/src/ThesisPulse.Infrastructure.Brokers.Upstox/bin/Debug/net8.0

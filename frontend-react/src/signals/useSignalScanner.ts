@@ -9,7 +9,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   RecentSignalEventsResponse,
   SignalConnectionState,
-  SignalListResponse,
+  SignalScannerResponse,
+  SignalScannerRow,
   SignalStreamEventV1,
   SignalSummary,
 } from "./types";
@@ -28,7 +29,53 @@ function normalizeSignal(signal: SignalSummary): SignalSummary {
     confidence: Number(signal.confidence),
     statusSequence: signal.statusSequence ?? 0,
     lastUpdatedAtUtc: signal.lastUpdatedAtUtc ?? signal.generatedAtUtc,
+    tradePlan: signal.tradePlan
+      ? {
+          ...signal.tradePlan,
+          approvedQuantity:
+            signal.tradePlan.approvedQuantity === null
+              ? null
+              : Number(signal.tradePlan.approvedQuantity),
+          entryReferencePrice:
+            signal.tradePlan.entryReferencePrice === null
+              ? null
+              : Number(signal.tradePlan.entryReferencePrice),
+          stopLossPrice:
+            signal.tradePlan.stopLossPrice === null
+              ? null
+              : Number(signal.tradePlan.stopLossPrice),
+        }
+      : signal.tradePlan,
   };
+}
+
+function fromScannerRow(row: SignalScannerRow): SignalSummary {
+  return normalizeSignal({
+    signalId: null,
+    signalUid: row.signalUid,
+    messageId: row.messageUid,
+    instrumentKey: row.instrumentKey,
+    strategyCode: row.strategyCode,
+    strategyVersion: row.strategyVersion,
+    direction: row.direction,
+    primaryTimeframe: row.primaryTimeframe,
+    strength: row.strength,
+    confidence: row.confidence,
+    status: row.status,
+    generatedAtUtc: row.generatedAtUtc,
+    validUntilUtc: row.validUntilUtc,
+    producer: row.producer,
+    creatorEngineCode: row.creatorEngineCode,
+    riskDecisionStatus: row.riskDecisionStatus,
+    riskDecisionUid: row.riskDecisionUid,
+    riskEvaluatedAtUtc: row.riskEvaluatedAtUtc,
+    tradePlan: row.tradePlan,
+    statusSequence: 0,
+    lastUpdatedAtUtc:
+      row.tradePlan?.generatedAtUtc ??
+      row.riskEvaluatedAtUtc ??
+      row.generatedAtUtc,
+  });
 }
 
 function fromStreamEvent(event: SignalStreamEventV1): SignalSummary {
@@ -65,7 +112,15 @@ function mergeSignal(
   const incomingSequence = incoming.statusSequence ?? 0;
 
   if (incomingSequence < currentSequence) {
-    return current;
+    return {
+      ...current,
+      riskDecisionStatus:
+        incoming.riskDecisionStatus ?? current.riskDecisionStatus,
+      riskDecisionUid: incoming.riskDecisionUid ?? current.riskDecisionUid,
+      riskEvaluatedAtUtc:
+        incoming.riskEvaluatedAtUtc ?? current.riskEvaluatedAtUtc,
+      tradePlan: incoming.tradePlan ?? current.tradePlan,
+    };
   }
 
   return {
@@ -88,6 +143,12 @@ function mergeSignal(
       incoming.creatorEngineCode === "STREAM"
         ? current.creatorEngineCode
         : incoming.creatorEngineCode,
+    riskDecisionStatus:
+      incoming.riskDecisionStatus ?? current.riskDecisionStatus,
+    riskDecisionUid: incoming.riskDecisionUid ?? current.riskDecisionUid,
+    riskEvaluatedAtUtc:
+      incoming.riskEvaluatedAtUtc ?? current.riskEvaluatedAtUtc,
+    tradePlan: incoming.tradePlan ?? current.tradePlan,
   };
 }
 
@@ -156,11 +217,11 @@ export function useSignalScanner(): SignalScannerState {
 
   const refresh = useCallback(async () => {
     try {
-      const snapshot = await fetchJson<SignalListResponse>(
-        `${signalApiBaseUrl}/api/v1/signals?limit=200`,
+      const snapshot = await fetchJson<SignalScannerResponse>(
+        `${signalApiBaseUrl}/api/v1/signals/scanner?limit=200`,
       );
-      applySignals(snapshot.signals);
-      setLastSnapshotAtUtc(new Date().toISOString());
+      applySignals(snapshot.signals.map(fromScannerRow));
+      setLastSnapshotAtUtc(snapshot.asOfUtc ?? new Date().toISOString());
       setError(null);
     } catch (requestError) {
       setError(
@@ -181,8 +242,8 @@ export function useSignalScanner(): SignalScannerState {
     const loadInitialData = async () => {
       try {
         const [snapshot, recentEvents] = await Promise.all([
-          fetchJson<SignalListResponse>(
-            `${signalApiBaseUrl}/api/v1/signals?limit=200`,
+          fetchJson<SignalScannerResponse>(
+            `${signalApiBaseUrl}/api/v1/signals/scanner?limit=200`,
             abortController.signal,
           ),
           fetchJson<RecentSignalEventsResponse>(
@@ -195,11 +256,11 @@ export function useSignalScanner(): SignalScannerState {
           return;
         }
 
-        applySignals(snapshot.signals);
+        applySignals(snapshot.signals.map(fromScannerRow));
         for (const event of recentEvents.events) {
           applyEvent(event);
         }
-        setLastSnapshotAtUtc(new Date().toISOString());
+        setLastSnapshotAtUtc(snapshot.asOfUtc ?? new Date().toISOString());
       } catch (requestError) {
         if (!disposed && !abortController.signal.aborted) {
           setError(
@@ -260,17 +321,17 @@ export function useSignalScanner(): SignalScannerState {
     };
 
     void start();
-    const fallbackTimer = window.setInterval(() => {
+    const projectionRefreshTimer = window.setInterval(() => {
       if (connection.state !== HubConnectionState.Connected) {
         setConnectionState("REST_FALLBACK");
-        void refresh();
       }
+      void refresh();
     }, 15_000);
 
     return () => {
       disposed = true;
       abortController.abort();
-      window.clearInterval(fallbackTimer);
+      window.clearInterval(projectionRefreshTimer);
       connection.off("signalUpdated", applyEvent);
       connectionRef.current = null;
       void connection.stop();

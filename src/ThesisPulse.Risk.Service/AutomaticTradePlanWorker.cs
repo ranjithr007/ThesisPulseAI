@@ -8,6 +8,7 @@ public sealed class AutomaticTradePlanWorker(
     IAutomaticTradePlanProjector projector,
     ITradePlanBuilder builder,
     IAutomaticTradePlanResultStore resultStore,
+    AutomaticTradePlanWorkerState state,
     ILogger<AutomaticTradePlanWorker> logger) : BackgroundService
 {
     private readonly string _leaseOwner = $"{Environment.MachineName}:{Environment.ProcessId}:trade-plan";
@@ -31,6 +32,7 @@ public sealed class AutomaticTradePlanWorker(
                     _leaseOwner,
                     leaseDuration,
                     stoppingToken);
+                state.Leased(items.Count);
                 foreach (var item in items)
                     await ProcessAsync(item, stoppingToken);
             }
@@ -40,6 +42,7 @@ public sealed class AutomaticTradePlanWorker(
             }
             catch (Exception exception)
             {
+                state.Failed();
                 logger.LogError(exception, "Automatic Trade Plan worker polling failed.");
             }
 
@@ -58,9 +61,15 @@ public sealed class AutomaticTradePlanWorker(
             {
                 var reason = string.Join(',', projection.Reasons);
                 if (projection.Reasons.Any(code => code is "SIGNAL_EXPIRED" or "RISK_BUDGET_EXPIRED_OR_MISSING"))
+                {
                     await queue.ExpireAsync(item.WorkItemId, reason, cancellationToken);
+                    state.Expired();
+                }
                 else
+                {
                     await queue.RejectAsync(item.WorkItemId, reason, cancellationToken);
+                    state.Rejected();
+                }
                 return;
             }
 
@@ -71,17 +80,23 @@ public sealed class AutomaticTradePlanWorker(
                     item.WorkItemId,
                     string.Join(',', buildResult.Reasons),
                     cancellationToken);
+                state.Rejected();
                 return;
             }
 
-            await resultStore.PersistReadyAsync(projection.Command, buildResult, cancellationToken);
+            var persistence = await resultStore.PersistReadyAsync(
+                projection.Command,
+                buildResult,
+                cancellationToken);
             await queue.CompleteAsync(item.WorkItemId, cancellationToken);
+            state.Completed(string.Equals(persistence.Outcome, "DUPLICATE", StringComparison.Ordinal));
         }
         catch (Exception exception)
         {
             if (item.AttemptCount >= options.MaximumAttempts)
             {
                 await queue.FailAsync(item.WorkItemId, exception.Message, cancellationToken);
+                state.Failed();
             }
             else
             {
@@ -91,6 +106,7 @@ public sealed class AutomaticTradePlanWorker(
                     exception.Message,
                     DateTimeOffset.UtcNow.AddSeconds(delaySeconds),
                     cancellationToken);
+                state.Retried();
             }
 
             logger.LogWarning(

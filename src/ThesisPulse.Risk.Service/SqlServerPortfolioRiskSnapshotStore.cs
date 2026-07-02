@@ -9,7 +9,7 @@ public sealed class SqlServerPortfolioRiskSnapshotStore(
     SignalRiskPersistenceOptions options) : IPortfolioRiskSnapshotStore
 {
     public async Task<PortfolioRiskPersistResult> PersistAsync(
-        PortfolioRiskSnapshotV1 snapshot,
+        PortfolioRiskStateSnapshotV1 snapshot,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -22,11 +22,7 @@ public sealed class SqlServerPortfolioRiskSnapshotStore(
 
         try
         {
-            var existingUid = await ReadExistingSnapshotUidAsync(
-                connection,
-                transaction,
-                snapshot,
-                cancellationToken);
+            var existingUid = await ReadExistingSnapshotUidAsync(connection, transaction, snapshot, cancellationToken);
             if (existingUid is not null)
             {
                 await transaction.CommitAsync(cancellationToken);
@@ -37,24 +33,10 @@ public sealed class SqlServerPortfolioRiskSnapshotStore(
                     Array.Empty<string>());
             }
 
-            var previousMode = await ReadPreviousModeAsync(
-                connection,
-                transaction,
-                snapshot,
-                cancellationToken);
-
+            var previousMode = await ReadPreviousModeAsync(connection, transaction, snapshot, cancellationToken);
             await InsertSnapshotAsync(connection, transaction, snapshot, cancellationToken);
-            var version = await UpsertControlStateAsync(
-                connection,
-                transaction,
-                snapshot,
-                cancellationToken);
-            await InsertEventAsync(
-                connection,
-                transaction,
-                snapshot,
-                previousMode,
-                cancellationToken);
+            var version = await UpsertControlStateAsync(connection, transaction, snapshot, cancellationToken);
+            await InsertEventAsync(connection, transaction, snapshot, previousMode, cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
             return new PortfolioRiskPersistResult(
@@ -82,7 +64,7 @@ public sealed class SqlServerPortfolioRiskSnapshotStore(
     private static async Task<Guid?> ReadExistingSnapshotUidAsync(
         SqlConnection connection,
         SqlTransaction transaction,
-        PortfolioRiskSnapshotV1 snapshot,
+        PortfolioRiskStateSnapshotV1 snapshot,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -106,7 +88,7 @@ public sealed class SqlServerPortfolioRiskSnapshotStore(
     private static async Task<string?> ReadPreviousModeAsync(
         SqlConnection connection,
         SqlTransaction transaction,
-        PortfolioRiskSnapshotV1 snapshot,
+        PortfolioRiskStateSnapshotV1 snapshot,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -125,7 +107,7 @@ public sealed class SqlServerPortfolioRiskSnapshotStore(
     private static async Task InsertSnapshotAsync(
         SqlConnection connection,
         SqlTransaction transaction,
-        PortfolioRiskSnapshotV1 snapshot,
+        PortfolioRiskStateSnapshotV1 snapshot,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -157,7 +139,7 @@ public sealed class SqlServerPortfolioRiskSnapshotStore(
     private static async Task<long> UpsertControlStateAsync(
         SqlConnection connection,
         SqlTransaction transaction,
-        PortfolioRiskSnapshotV1 snapshot,
+        PortfolioRiskStateSnapshotV1 snapshot,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -195,15 +177,14 @@ public sealed class SqlServerPortfolioRiskSnapshotStore(
         AddControlParameters(command, snapshot);
         var result = await command.ExecuteScalarAsync(cancellationToken);
         if (result is null)
-            throw new InvalidOperationException(
-                "Stale portfolio risk snapshot cannot replace current control state.");
+            throw new InvalidOperationException("Stale portfolio risk snapshot cannot replace current control state.");
         return Convert.ToInt64(result);
     }
 
     private static async Task InsertEventAsync(
         SqlConnection connection,
         SqlTransaction transaction,
-        PortfolioRiskSnapshotV1 snapshot,
+        PortfolioRiskStateSnapshotV1 snapshot,
         string? previousMode,
         CancellationToken cancellationToken)
     {
@@ -221,21 +202,19 @@ public sealed class SqlServerPortfolioRiskSnapshotStore(
             """;
 
         await using var command = new SqlCommand(sql, connection, transaction);
-        command.Parameters.Add("@event_uid", SqlDbType.UniqueIdentifier).Value =
-            CreateEventUid(snapshot.RiskSnapshotUid);
+        command.Parameters.Add("@event_uid", SqlDbType.UniqueIdentifier).Value = CreateEventUid(snapshot.RiskSnapshotUid);
         command.Parameters.Add("@risk_snapshot_uid", SqlDbType.UniqueIdentifier).Value = snapshot.RiskSnapshotUid;
         command.Parameters.Add("@portfolio_code", SqlDbType.VarChar, 100).Value = snapshot.PortfolioCode;
         command.Parameters.Add("@environment", SqlDbType.VarChar, 20).Value = snapshot.Environment;
         command.Parameters.Add("@previous_operating_mode", SqlDbType.VarChar, 30).Value =
             (object?)previousMode ?? DBNull.Value;
         command.Parameters.Add("@operating_mode", SqlDbType.VarChar, 30).Value = snapshot.OperatingMode;
-        command.Parameters.Add("@reasons_json", SqlDbType.NVarChar, -1).Value =
-            JsonSerializer.Serialize(snapshot.Reasons);
+        command.Parameters.Add("@reasons_json", SqlDbType.NVarChar, -1).Value = JsonSerializer.Serialize(snapshot.Reasons);
         command.Parameters.Add("@occurred_at_utc", SqlDbType.DateTime2).Value = snapshot.EvaluatedAtUtc.UtcDateTime;
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static void AddSnapshotParameters(SqlCommand command, PortfolioRiskSnapshotV1 snapshot)
+    private static void AddSnapshotParameters(SqlCommand command, PortfolioRiskStateSnapshotV1 snapshot)
     {
         AddControlParameters(command, snapshot);
         command.Parameters.Add("@source_pnl_snapshot_uid", SqlDbType.UniqueIdentifier).Value = snapshot.SourcePnlSnapshotUid;
@@ -252,7 +231,7 @@ public sealed class SqlServerPortfolioRiskSnapshotStore(
         command.Parameters.Add("@evaluated_at_utc", SqlDbType.DateTime2).Value = snapshot.EvaluatedAtUtc.UtcDateTime;
     }
 
-    private static void AddControlParameters(SqlCommand command, PortfolioRiskSnapshotV1 snapshot)
+    private static void AddControlParameters(SqlCommand command, PortfolioRiskStateSnapshotV1 snapshot)
     {
         command.Parameters.Add("@portfolio_code", SqlDbType.VarChar, 100).Value = snapshot.PortfolioCode;
         command.Parameters.Add("@environment", SqlDbType.VarChar, 20).Value = snapshot.Environment;

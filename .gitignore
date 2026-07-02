@@ -65,3 +65,4 @@
 /tests/paper-workflow/dotnet/obj
 /.vs/VSWorkspaceState.json
 /src/ThesisPulse.Infrastructure.Brokers.Upstox/bin/Debug/net8.0
+/.vs/ProjectEvaluation

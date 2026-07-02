@@ -33,35 +33,28 @@ public sealed class AuthoritativeTradePlanSignalScannerStore(
         Guid signalUid,
         CancellationToken cancellationToken = default)
     {
-        var risk = await inner.ScanAsync(
-            new SignalScannerQueryV1(null, null, null, null, null, null, false, 500),
-            DateTimeOffset.UtcNow,
-            cancellationToken);
-        var row = risk.Signals.FirstOrDefault(item => item.SignalUid == signalUid);
-        if (row is null)
+        var projections = await LoadAsync(new[] { signalUid }, cancellationToken);
+        if (!projections.TryGetValue(signalUid, out var value))
             return null;
 
-        var projections = await LoadAsync(new[] { signalUid }, cancellationToken);
-        var plan = projections.TryGetValue(signalUid, out var value)
-            ? value.TradePlan
-            : NotAvailable();
         return new SignalDecisionProjectionV1(
             signalUid,
-            row.RiskDecisionStatus,
-            row.RiskDecisionUid,
-            row.RiskEvaluatedAtUtc,
-            plan);
+            MapRiskStatus(value.RiskStatus),
+            value.RiskDecisionUid,
+            value.RiskEvaluatedAtUtc,
+            value.TradePlan);
     }
 
-    private async Task<IReadOnlyDictionary<Guid, PlanProjection>> LoadAsync(
+    private async Task<IReadOnlyDictionary<Guid, DecisionProjection>> LoadAsync(
         IReadOnlyCollection<Guid> signalUids,
         CancellationToken cancellationToken)
     {
         if (signalUids.Count == 0)
-            return new Dictionary<Guid, PlanProjection>();
+            return new Dictionary<Guid, DecisionProjection>();
 
         const string sql = """
             SELECT s.[signal_uid],
+                   risk.[current_status], risk.[risk_decision_uid], risk.[updated_at_utc],
                    plan.[trade_plan_uid], plan.[approved_quantity],
                    plan.[entry_reference_price], plan.[stop_loss_price],
                    plan.[generated_at_utc], plan.[valid_until_utc],
@@ -73,7 +66,9 @@ public sealed class AuthoritativeTradePlanSignalScannerStore(
                 ON requested.[signal_uid] = s.[signal_uid]
             OUTER APPLY
             (
-                SELECT TOP (1) evaluation.[signal_risk_evaluation_id]
+                SELECT TOP (1)
+                    evaluation.[signal_risk_evaluation_id], evaluation.[current_status],
+                    evaluation.[risk_decision_uid], evaluation.[updated_at_utc]
                 FROM [risk].[signal_risk_evaluations] evaluation
                 WHERE evaluation.[signal_id] = s.[signal_id]
                 ORDER BY evaluation.[updated_at_utc] DESC,
@@ -117,23 +112,27 @@ public sealed class AuthoritativeTradePlanSignalScannerStore(
         command.Parameters.Add("@signal_uids_json", SqlDbType.NVarChar, -1).Value =
             JsonSerializer.Serialize(signalUids);
 
-        var values = new Dictionary<Guid, PlanProjection>();
+        var values = new Dictionary<Guid, DecisionProjection>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var planUid = reader.IsDBNull(1) ? null : reader.GetGuid(1);
+            var planUid = reader.IsDBNull(4) ? null : reader.GetGuid(4);
             var status = planUid.HasValue
-                ? MapPlanStatus(reader.IsDBNull(7) ? null : reader.GetString(7))
-                : MapWorkStatus(reader.IsDBNull(8) ? null : reader.GetString(8));
-            values[reader.GetGuid(0)] = new PlanProjection(new SignalTradePlanProjectionV1(
-                status,
-                planUid,
-                reader.IsDBNull(2) ? null : reader.GetDecimal(2),
-                reader.IsDBNull(3) ? null : reader.GetDecimal(3),
-                reader.IsDBNull(4) ? null : reader.GetDecimal(4),
-                ReadNullableUtc(reader, 5),
-                ReadNullableUtc(reader, 6),
-                false));
+                ? MapPlanStatus(reader.IsDBNull(10) ? null : reader.GetString(10))
+                : MapWorkStatus(reader.IsDBNull(11) ? null : reader.GetString(11));
+            values[reader.GetGuid(0)] = new DecisionProjection(
+                reader.IsDBNull(1) ? null : reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetGuid(2),
+                ReadNullableUtc(reader, 3),
+                new SignalTradePlanProjectionV1(
+                    status,
+                    planUid,
+                    reader.IsDBNull(5) ? null : reader.GetDecimal(5),
+                    reader.IsDBNull(6) ? null : reader.GetDecimal(6),
+                    reader.IsDBNull(7) ? null : reader.GetDecimal(7),
+                    ReadNullableUtc(reader, 8),
+                    ReadNullableUtc(reader, 9),
+                    false));
         }
         return values;
     }
@@ -147,6 +146,14 @@ public sealed class AuthoritativeTradePlanSignalScannerStore(
         null,
         null,
         false);
+
+    private static string MapRiskStatus(string? status) => status switch
+    {
+        "RISK_APPROVED" => SignalScannerContractV1.RiskApproved,
+        "RISK_REJECTED" => SignalScannerContractV1.RiskRejected,
+        "RISK_RESTRICTED" => SignalScannerContractV1.RiskRestricted,
+        _ => SignalScannerContractV1.RiskNotEvaluated,
+    };
 
     private static string MapPlanStatus(string? status) => status switch
     {
@@ -175,5 +182,9 @@ public sealed class AuthoritativeTradePlanSignalScannerStore(
             ? null
             : new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(ordinal), DateTimeKind.Utc));
 
-    private sealed record PlanProjection(SignalTradePlanProjectionV1 TradePlan);
+    private sealed record DecisionProjection(
+        string? RiskStatus,
+        Guid? RiskDecisionUid,
+        DateTimeOffset? RiskEvaluatedAtUtc,
+        SignalTradePlanProjectionV1 TradePlan);
 }

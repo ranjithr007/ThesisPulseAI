@@ -27,7 +27,8 @@ public static class OptionChainIntelligenceEvaluator
         var nearestExpiry = expiries[0];
         var maxPainStrike = CalculateMaxPain(nearestExpiry);
         var walls = CalculateWalls(expiries);
-        var activities = CalculateActivities(expiries);
+        var activities = OptionChainAdvancedAnalytics.CalculateActivities(expiries);
+        var ivStructure = OptionChainAdvancedAnalytics.CalculateIvStructure(expiries);
 
         var bullishScore = Clamp01(((pcrOi - 1m) * 0.5m) + ((pcrVolume - 1m) * 0.5m));
         var bearishScore = Clamp01(((1m - pcrOi) * 0.5m) + ((1m - pcrVolume) * 0.5m));
@@ -38,7 +39,13 @@ public static class OptionChainIntelligenceEvaluator
                 : OptionChainContractConstantsV1.Neutral;
 
         var confidence = Clamp01(Math.Abs(bullishScore - bearishScore) + 0.40m);
-        var reasons = BuildReasons(pcrOi, pcrVolume, maxPainStrike, nearestExpiry.UnderlyingPrice, directionalBias);
+        var reasons = BuildReasons(
+            pcrOi,
+            pcrVolume,
+            maxPainStrike,
+            nearestExpiry.UnderlyingPrice,
+            directionalBias,
+            ivStructure);
         var evidenceUid = DeterministicGuid(
             input.SourceSnapshotUid,
             input.EngineVersion,
@@ -64,7 +71,7 @@ public static class OptionChainIntelligenceEvaluator
             confidence,
             walls,
             activities,
-            Array.Empty<OptionChainIvStructureV1>(),
+            ivStructure,
             reasons,
             Array.Empty<string>());
     }
@@ -98,7 +105,9 @@ public static class OptionChainIntelligenceEvaluator
                     strike.CallOpenInterest < 0 ||
                     strike.PutOpenInterest < 0 ||
                     strike.CallVolume < 0 ||
-                    strike.PutVolume < 0))
+                    strike.PutVolume < 0 ||
+                    strike.CallImpliedVolatility < 0 ||
+                    strike.PutImpliedVolatility < 0))
                 {
                     reasons.Add("NEGATIVE_OR_INVALID_CHAIN_VALUE");
                 }
@@ -163,56 +172,33 @@ public static class OptionChainIntelligenceEvaluator
         return walls;
     }
 
-    private static IReadOnlyCollection<OptionChainStrikeActivityV1> CalculateActivities(
-        IReadOnlyCollection<OptionChainExpiryInputV1> expiries)
-    {
-        return expiries
-            .OrderBy(expiry => expiry.ExpiryDate)
-            .SelectMany(expiry => expiry.Strikes
-                .OrderBy(strike => strike.StrikePrice)
-                .SelectMany(strike => new[]
-                {
-                    Activity(expiry.ExpiryDate, strike.StrikePrice, "CALL", strike.CallOpenInterestChange, strike.CallVolume),
-                    Activity(expiry.ExpiryDate, strike.StrikePrice, "PUT", strike.PutOpenInterestChange, strike.PutVolume),
-                }))
-            .ToArray();
-    }
-
-    private static OptionChainStrikeActivityV1 Activity(
-        DateOnly expiryDate,
-        decimal strikePrice,
-        string side,
-        decimal oiChange,
-        decimal volume)
-    {
-        var classification = oiChange > 0 && volume > 0
-            ? "FRESH_BUILDUP"
-            : oiChange < 0 && volume > 0
-                ? "UNWINDING_OR_COVERING"
-                : "UNCHANGED";
-        return new OptionChainStrikeActivityV1(
-            expiryDate,
-            strikePrice,
-            side,
-            classification,
-            oiChange,
-            volume,
-            new[] { $"OI_CHANGE={oiChange}", $"VOLUME={volume}" });
-    }
-
     private static IReadOnlyCollection<string> BuildReasons(
         decimal pcrOi,
         decimal pcrVolume,
         decimal maxPain,
         decimal underlying,
-        string bias) => new[]
+        string bias,
+        IReadOnlyCollection<OptionChainIvStructureV1> ivStructure)
     {
-        $"PCR_OI={pcrOi}",
-        $"PCR_VOLUME={pcrVolume}",
-        $"MAX_PAIN={maxPain}",
-        $"MAX_PAIN_DISTANCE={DistanceFraction(maxPain, underlying)}",
-        $"BIAS={bias}",
-    };
+        var reasons = new List<string>
+        {
+            $"PCR_OI={pcrOi}",
+            $"PCR_VOLUME={pcrVolume}",
+            $"MAX_PAIN={maxPain}",
+            $"MAX_PAIN_DISTANCE={DistanceFraction(maxPain, underlying)}",
+            $"BIAS={bias}",
+        };
+
+        var nearestIv = ivStructure.OrderBy(value => value.ExpiryDate).FirstOrDefault();
+        if (nearestIv is not null)
+        {
+            reasons.Add($"ATM_PUT_CALL_SKEW={nearestIv.PutCallSkew}");
+            reasons.Add($"WING_SKEW={nearestIv.WingSkew}");
+            reasons.Add($"TERM_PREMIUM={nearestIv.TermPremiumToNextExpiry}");
+        }
+
+        return reasons;
+    }
 
     private static decimal DistanceFraction(decimal strike, decimal underlying) =>
         underlying <= 0 ? 0m : decimal.Round(Math.Abs(strike - underlying) / underlying, 8, MidpointRounding.AwayFromZero);

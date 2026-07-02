@@ -117,7 +117,7 @@
 
 .signal-metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
   gap: 0.8rem;
 }
 
@@ -219,21 +219,16 @@
   font-size: 0.82rem;
 }
 
-.signal-table td:first-child,
-.signal-table td:nth-child(7),
-.signal-table td:last-child {
-  display: table-cell;
-}
-
 .signal-table td:first-child strong,
-.signal-table td:nth-child(7) strong,
+.signal-table td:nth-child(9) strong,
 .signal-table td:last-child strong {
   display: block;
 }
 
-.signal-table td:first-child span,
-.signal-table td:nth-child(7) span,
-.signal-table td:last-child span {
+.signal-table td:first-child > span,
+.signal-table td:nth-child(5) > span:last-child,
+.signal-table td:nth-child(9) > span,
+.signal-table td:last-child > span {
   display: block;
   margin-top: 0.18rem;
   color: #8297ad;
@@ -241,7 +236,8 @@
 }
 
 .direction-badge,
-.status-badge {
+.status-badge,
+.decision-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -252,6 +248,7 @@
   font-size: 0.67rem;
   font-weight: 800;
   letter-spacing: 0.06em;
+  white-space: nowrap;
 }
 
 .direction-badge.long {
@@ -272,7 +269,10 @@
   background: rgba(14, 116, 144, 0.2);
 }
 
-.status-badge.candidate {
+.status-badge.candidate,
+.decision-badge.pending,
+.decision-badge.building,
+.decision-badge.retry_pending {
   border-color: #a16207;
   color: #fde68a;
   background: rgba(161, 98, 7, 0.18);
@@ -284,9 +284,23 @@
   background: rgba(109, 40, 217, 0.18);
 }
 
+.decision-badge.approved,
+.decision-badge.ready {
+  border-color: #166534;
+  color: #86efac;
+  background: rgba(22, 101, 52, 0.22);
+}
+
 .status-badge.rejected,
 .status-badge.expired,
-.status-badge.superseded {
+.status-badge.superseded,
+.decision-badge.rejected,
+.decision-badge.restricted,
+.decision-badge.expired,
+.decision-badge.cancelled,
+.decision-badge.failed,
+.decision-badge.not_available,
+.decision-badge.not_evaluated {
   border-color: #475569;
   color: #cbd5e1;
   background: rgba(71, 85, 105, 0.2);
@@ -338,7 +352,7 @@
   }
 
   .signal-table {
-    min-width: 68rem;
+    min-width: 88rem;
   }
 }
 

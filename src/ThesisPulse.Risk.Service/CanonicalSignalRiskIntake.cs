@@ -21,9 +21,7 @@ public sealed class CanonicalSignalRiskIntakeOptions
     public string RiskPolicyVersion { get; init; } = "risk-policy-v1.0.0";
     public int PollIntervalSeconds { get; init; } = 5;
     public int BatchSize { get; init; } = 50;
-    public decimal CurrentDrawdownPercent { get; init; }
-    public bool KillSwitchActive { get; init; }
-    public bool TradingHalted { get; init; }
+    public int MaximumRiskStateAgeSeconds { get; init; } = 120;
     public bool MarketOpen { get; init; }
     public bool MarketDataHealthy { get; init; }
     public bool PortfolioStateHealthy { get; init; }
@@ -43,8 +41,8 @@ public sealed class CanonicalSignalRiskIntakeOptions
             throw new InvalidOperationException("CanonicalSignalRiskIntake:PollIntervalSeconds must be between 1 and 300.");
         if (BatchSize is < 1 or > 500)
             throw new InvalidOperationException("CanonicalSignalRiskIntake:BatchSize must be between 1 and 500.");
-        if (CurrentDrawdownPercent < 0)
-            throw new InvalidOperationException("CanonicalSignalRiskIntake:CurrentDrawdownPercent cannot be negative.");
+        if (MaximumRiskStateAgeSeconds is < 10 or > 3600)
+            throw new InvalidOperationException("CanonicalSignalRiskIntake:MaximumRiskStateAgeSeconds must be between 10 and 3600.");
     }
 }
 
@@ -122,22 +120,12 @@ public sealed class SqlServerCanonicalSignalRiskCandidateStore(
             var signal = JsonSerializer.Deserialize<SignalGeneratedV1>(reader.GetString(3), JsonOptions)
                 ?? throw new InvalidOperationException("Canonical signal payload could not be deserialized.");
             var lineage = new FusionSignalLineageV1(
-                reader.GetGuid(4),
-                reader.GetGuid(5),
-                reader.GetGuid(6),
-                reader.GetGuid(7),
-                reader.GetGuid(8),
-                reader.GetGuid(9),
-                reader.GetGuid(10),
-                reader.GetString(11),
-                reader.GetString(12),
-                reader.GetString(13));
+                reader.GetGuid(4), reader.GetGuid(5), reader.GetGuid(6), reader.GetGuid(7),
+                reader.GetGuid(8), reader.GetGuid(9), reader.GetGuid(10), reader.GetString(11),
+                reader.GetString(12), reader.GetString(13));
             candidates.Add(new CanonicalSignalRiskCandidate(
-                reader.GetGuid(0),
-                reader.GetGuid(1).ToString("D"),
-                reader.IsDBNull(2) ? null : reader.GetGuid(2),
-                signal,
-                lineage));
+                reader.GetGuid(0), reader.GetGuid(1).ToString("D"),
+                reader.IsDBNull(2) ? null : reader.GetGuid(2), signal, lineage));
         }
 
         return candidates;
@@ -171,6 +159,7 @@ public sealed class HttpCanonicalSignalRiskContextProvider(
 
 public sealed class CanonicalSignalRiskIntakeWorker(
     CanonicalSignalRiskIntakeOptions options,
+    SignalRiskPersistenceOptions persistenceOptions,
     ICanonicalSignalRiskCandidateStore candidateStore,
     ICanonicalSignalRiskContextProvider contextProvider,
     ISignalRiskWorkQueue queue,
@@ -207,7 +196,37 @@ public sealed class CanonicalSignalRiskIntakeWorker(
         var portfolio = await contextProvider.GetPortfolioAsync(options.PortfolioCode, cancellationToken);
         if (portfolio is null)
         {
-            logger.LogWarning("Canonical Signal-to-Risk discovery skipped because portfolio {PortfolioCode} was not found.", options.PortfolioCode);
+            logger.LogWarning(
+                "Canonical Signal-to-Risk discovery skipped because portfolio {PortfolioCode} was not found.",
+                options.PortfolioCode);
+            return;
+        }
+
+        var riskStateStore = new SqlServerCanonicalPortfolioRiskStateStore(persistenceOptions);
+        var riskState = await riskStateStore.ReadLatestAsync(options.PortfolioCode, cancellationToken);
+        if (riskState is null)
+        {
+            logger.LogWarning(
+                "Canonical Signal-to-Risk discovery failed closed because authoritative portfolio risk state is unavailable for {PortfolioCode}.",
+                options.PortfolioCode);
+            return;
+        }
+
+        var riskStateAge = now - riskState.SourceAsOfUtc;
+        if (riskStateAge < TimeSpan.Zero ||
+            riskStateAge > TimeSpan.FromSeconds(options.MaximumRiskStateAgeSeconds))
+        {
+            logger.LogWarning(
+                "Canonical Signal-to-Risk discovery failed closed because portfolio risk state {RiskSnapshotUid} is stale.",
+                riskState.RiskSnapshotUid);
+            return;
+        }
+
+        if (!riskState.NewExposureAllowed)
+        {
+            logger.LogInformation(
+                "Canonical Signal-to-Risk discovery skipped because operating mode {OperatingMode} blocks new exposure.",
+                riskState.OperatingMode);
             return;
         }
 
@@ -220,10 +239,10 @@ public sealed class CanonicalSignalRiskIntakeWorker(
                 candidate.CausationMessageUid,
                 candidate.Signal,
                 candidate.Lineage,
-                BuildPortfolio(portfolio, now),
+                BuildPortfolio(portfolio, riskState),
                 new OperationalRiskStateV1(
-                    options.KillSwitchActive,
-                    options.TradingHalted,
+                    riskState.OperatingMode == PortfolioRiskContractV1.Halted,
+                    !riskState.NewExposureAllowed,
                     options.MarketOpen,
                     options.MarketDataHealthy,
                     options.PortfolioStateHealthy,
@@ -237,7 +256,7 @@ public sealed class CanonicalSignalRiskIntakeWorker(
 
     private PortfolioRiskSnapshotV1 BuildPortfolio(
         PortfolioLedgerSnapshotV1 portfolio,
-        DateTimeOffset now)
+        CanonicalPortfolioRiskState riskState)
     {
         var availableCash = portfolio.CashBalances.Sum(item => item.AvailableAmount);
         var totalCash = portfolio.CashBalances.Sum(item => item.TotalBalanceAmount);
@@ -250,7 +269,7 @@ public sealed class CanonicalSignalRiskIntakeWorker(
             portfolio.NetExposureAmount,
             portfolio.RealizedPnlAmount,
             portfolio.UnrealizedPnlAmount,
-            options.CurrentDrawdownPercent,
+            riskState.PortfolioDrawdownPercent,
             portfolio.OpenPositionCount,
             portfolio.Positions
                 .Where(item => string.Equals(item.Status, "OPEN", StringComparison.Ordinal))
@@ -260,6 +279,10 @@ public sealed class CanonicalSignalRiskIntakeWorker(
                     item.MarketValueAmount,
                     item.OpenedAtUtc ?? item.UpdatedAtUtc))
                 .ToArray(),
-            now);
+            riskState.SourceAsOfUtc,
+            riskState.OperatingMode,
+            riskState.EffectiveRiskMultiplier,
+            riskState.NewExposureAllowed,
+            riskState.RiskSnapshotUid);
     }
 }

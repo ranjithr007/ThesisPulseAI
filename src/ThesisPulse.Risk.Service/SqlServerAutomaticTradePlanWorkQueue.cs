@@ -35,32 +35,47 @@ public sealed class SqlServerAutomaticTradePlanWorkQueue(
         }
 
         const string sql = """
+            DECLARE @evaluation_id bigint =
+            (
+                SELECT [signal_risk_evaluation_id]
+                FROM [risk].[signal_risk_evaluations] WITH (UPDLOCK, HOLDLOCK)
+                WHERE [risk_decision_uid] = @risk_decision_uid
+                  AND [current_status] = 'RISK_APPROVED'
+            );
+
+            IF @evaluation_id IS NULL
+            BEGIN
+                SELECT CAST(-1 AS int);
+                RETURN;
+            END;
+
             IF EXISTS
             (
                 SELECT 1
                 FROM [risk].[trade_plan_work_items] WITH (UPDLOCK, HOLDLOCK)
-                WHERE [source_message_uid] = @source_message_uid
+                WHERE [signal_risk_evaluation_id] = @evaluation_id
+                   OR [source_message_uid] = @source_message_uid
                    OR [command_uid] = @command_uid
                    OR [risk_decision_uid] = @risk_decision_uid
             )
             BEGIN
-                SELECT CAST(0 AS bit);
+                SELECT CAST(0 AS int);
                 RETURN;
             END;
 
             INSERT INTO [risk].[trade_plan_work_items]
             (
-                [source_message_uid], [command_uid], [request_uid], [risk_decision_uid],
-                [signal_uid], [thesis_uid], [correlation_id], [causation_id],
+                [signal_risk_evaluation_id], [source_message_uid], [command_uid], [request_uid],
+                [risk_decision_uid], [signal_uid], [thesis_uid], [correlation_id], [causation_id],
                 [payload_json], [current_status], [next_attempt_at_utc]
             )
             VALUES
             (
-                @source_message_uid, @command_uid, @request_uid, @risk_decision_uid,
-                @signal_uid, @thesis_uid, @correlation_id, @causation_id,
+                @evaluation_id, @source_message_uid, @command_uid, @request_uid,
+                @risk_decision_uid, @signal_uid, @thesis_uid, @correlation_id, @causation_id,
                 @payload_json, 'PENDING', SYSUTCDATETIME()
             );
-            SELECT CAST(1 AS bit);
+            SELECT CAST(1 AS int);
             """;
 
         await using var connection = new SqlConnection(persistenceOptions.ConnectionString);
@@ -82,13 +97,20 @@ public sealed class SqlServerAutomaticTradePlanWorkQueue(
                 intake.CausationMessageUid is Guid causation ? causation : DBNull.Value;
             command.Parameters.Add("@payload_json", SqlDbType.NVarChar, -1).Value =
                 JsonSerializer.Serialize(intake, JsonOptions);
-            var created = Convert.ToBoolean(await command.ExecuteScalarAsync(cancellationToken));
+            var outcome = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
             await transaction.CommitAsync(cancellationToken);
-            return new AutomaticTradePlanEnqueueResult(
-                created ? "ENQUEUED" : "DUPLICATE",
-                intake.MessageUid,
-                intake.RiskDecision.RiskDecisionUid,
-                Array.Empty<string>());
+            return outcome switch
+            {
+                1 => new AutomaticTradePlanEnqueueResult(
+                    "ENQUEUED", intake.MessageUid, intake.RiskDecision.RiskDecisionUid, Array.Empty<string>()),
+                0 => new AutomaticTradePlanEnqueueResult(
+                    "DUPLICATE", intake.MessageUid, intake.RiskDecision.RiskDecisionUid, Array.Empty<string>()),
+                _ => new AutomaticTradePlanEnqueueResult(
+                    AutomaticTradePlanContractV1.Rejected,
+                    intake.MessageUid,
+                    intake.RiskDecision.RiskDecisionUid,
+                    new[] { "AUTHORITATIVE_RISK_EVALUATION_NOT_FOUND" }),
+            };
         }
         catch
         {

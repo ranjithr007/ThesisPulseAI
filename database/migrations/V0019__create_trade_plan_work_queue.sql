@@ -44,7 +44,7 @@ BEGIN TRY
             CONSTRAINT [ck_trade_plan_work_status] CHECK
             (
                 [current_status] IN
-                ('PENDING', 'LEASED', 'COMPLETED', 'RETRY_PENDING', 'EXPIRED', 'FAILED', 'CANCELLED')
+                ('PENDING', 'LEASED', 'COMPLETED', 'RETRY_PENDING', 'REJECTED', 'EXPIRED', 'FAILED', 'CANCELLED')
             ),
             CONSTRAINT [ck_trade_plan_work_lease] CHECK
             (

@@ -218,12 +218,24 @@ public sealed class PersistentPaperExecutionService : IPaperExecutionService
             return null;
         }
 
+        var brokerOrderId = request.BrokerOrderId?.Trim();
+        if (!string.IsNullOrWhiteSpace(snapshot.BrokerOrderId) &&
+            !string.IsNullOrWhiteSpace(brokerOrderId) &&
+            !string.Equals(snapshot.BrokerOrderId, brokerOrderId, StringComparison.Ordinal))
+        {
+            reasons.Add("BROKER_ORDER_ID_MISMATCH");
+            return null;
+        }
+
         return snapshot with
         {
             State = nextState,
             Version = snapshot.Version + 1,
             UpdatedAtUtc = request.OccurredAtUtc,
             LastReason = request.Reason,
+            BrokerOrderId = string.IsNullOrWhiteSpace(brokerOrderId)
+                ? snapshot.BrokerOrderId
+                : brokerOrderId,
         };
     }
 

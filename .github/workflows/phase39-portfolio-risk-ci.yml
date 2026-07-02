@@ -1,0 +1,69 @@
+name: Phase 3.9 Portfolio Risk CI
+
+on:
+  push:
+    branches:
+      - feature/phase39-paper-portfolio-risk
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    name: Portfolio risk authority acceptance and regressions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore solution
+        run: dotnet restore ThesisPulseAI.sln
+      - name: Build solution with diagnostics
+        shell: bash
+        run: |
+          set +e
+          dotnet build ThesisPulseAI.sln --configuration Release --no-restore --verbosity minimal 2>&1 | tee phase39-build.log
+          status=${PIPESTATUS[0]}
+          echo "$status" > phase39-build.status
+          exit 0
+      - name: Upload Phase 3.9 build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase39-portfolio-risk-build-log
+          path: |
+            phase39-build.log
+            phase39-build.status
+          if-no-files-found: error
+          retention-days: 7
+      - name: Enforce build result
+        shell: bash
+        run: exit "$(cat phase39-build.status)"
+      - name: Run Phase 3.9 acceptance
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet run --project tests/phase39-portfolio-risk/dotnet/ThesisPulse.Phase39PortfolioRisk.Tests.csproj --configuration Release 2>&1 | tee phase39-tests.log
+      - name: Run deterministic risk regression
+        run: dotnet run --project tests/risk/dotnet/ThesisPulse.Risk.Tests.csproj --configuration Release
+      - name: Run Signal-to-Risk regression
+        run: dotnet run --project tests/signal-risk-projection/dotnet/ThesisPulse.SignalRiskProjection.Tests.csproj --configuration Release
+      - name: Run Phase 3.2 Risk acceptance regression
+        run: dotnet run --project tests/phase32-risk-acceptance/dotnet/ThesisPulse.Phase32RiskAcceptance.Tests.csproj --configuration Release
+      - name: Run deterministic trade-plan regression
+        run: dotnet run --project tests/tradeplans/dotnet/ThesisPulse.TradePlan.Tests.csproj --configuration Release
+      - name: Run database migrator regression
+        run: dotnet run --project tests/database/dotnet/ThesisPulse.DatabaseMigrator.Tests.csproj --configuration Release
+      - name: Upload Phase 3.9 diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase39-portfolio-risk-log
+          path: phase39-tests.log
+          if-no-files-found: warn
+          retention-days: 7

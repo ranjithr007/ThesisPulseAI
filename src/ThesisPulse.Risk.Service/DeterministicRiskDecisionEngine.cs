@@ -60,6 +60,19 @@ public sealed class DeterministicRiskDecisionEngine : IRiskDecisionEngine
             null, null,
             $"Environment '{request.Portfolio.Environment}' is not enabled by this risk policy.");
 
+        AddCheck(checks, "PORTFOLIO_OPERATING_MODE_ALLOWED",
+            request.Portfolio.NewExposureAllowed &&
+            request.Portfolio.OperatingMode is PortfolioRiskContractV1.Normal or PortfolioRiskContractV1.Restricted,
+            request.Portfolio.NewExposureAllowed ? 1 : 0,
+            1,
+            $"Portfolio operating mode '{request.Portfolio.OperatingMode}' controls new exposure.");
+
+        AddCheck(checks, "PORTFOLIO_RISK_MULTIPLIER_VALID",
+            request.Portfolio.EffectiveRiskMultiplier is > 0m and <= 1m,
+            request.Portfolio.EffectiveRiskMultiplier,
+            1m,
+            "Effective risk multiplier must be greater than zero and no more than one.");
+
         AddCheck(checks, "KILL_SWITCH_CLEAR", !request.Operations.KillSwitchActive, null, null, "Kill switch blocks every new exposure.");
         AddCheck(checks, "TRADING_NOT_HALTED", !request.Operations.TradingHalted, null, null, "Operational trading halt blocks every new exposure.");
         AddCheck(checks, "MARKET_OPEN", request.Operations.MarketOpen, null, null, "New exposure requires an open market session.");
@@ -117,15 +130,17 @@ public sealed class DeterministicRiskDecisionEngine : IRiskDecisionEngine
             _policy.AllowPyramiding ? 1 : 0,
             "A pre-existing instrument position blocks additional exposure when pyramiding is disabled.");
 
+        var multiplier = request.Portfolio.EffectiveRiskMultiplier;
         var maximumDailyLossAmount = equity > 0 ? equity * _policy.MaximumDailyLossPercent / 100m : 0m;
         var remainingDailyLossCapacity = Math.Max(0m, maximumDailyLossAmount - dailyLossAmount);
         var policyRiskAmount = equity > 0 ? equity * _policy.MaximumRiskPerTradePercent / 100m : 0m;
-        var maximumRiskAmount = Math.Min(policyRiskAmount, remainingDailyLossCapacity);
+        var maximumRiskAmount = Math.Min(policyRiskAmount, remainingDailyLossCapacity) * multiplier;
         var grossExposureCapacity = equity > 0
             ? Math.Max(0m, equity * _policy.MaximumGrossExposurePercent / 100m - request.Portfolio.GrossExposure)
             : 0m;
         var singlePositionCap = equity > 0 ? equity * _policy.MaximumSinglePositionExposurePercent / 100m : 0m;
-        var maximumCapitalAllocation = Math.Min(request.Portfolio.AvailableCash, Math.Min(grossExposureCapacity, singlePositionCap));
+        var maximumCapitalAllocation =
+            Math.Min(request.Portfolio.AvailableCash, Math.Min(grossExposureCapacity, singlePositionCap)) * multiplier;
 
         AddCheck(checks, "RISK_BUDGET_AVAILABLE", maximumRiskAmount > 0, maximumRiskAmount, 0, "No risk-loss capacity remains under the active policy.");
         AddCheck(checks, "CAPITAL_CAPACITY_AVAILABLE", maximumCapitalAllocation > 0, maximumCapitalAllocation, 0, "No capital or gross-exposure capacity remains.");

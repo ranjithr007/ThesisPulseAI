@@ -119,7 +119,7 @@ public interface IAutomaticPortfolioRiskWorkQueue
 public interface IPortfolioRiskSnapshotStore
 {
     Task<PortfolioRiskPersistResult> PersistAsync(
-        PortfolioRiskSnapshotV1 snapshot,
+        PortfolioRiskStateSnapshotV1 snapshot,
         CancellationToken cancellationToken);
 }
 

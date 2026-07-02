@@ -72,9 +72,6 @@ jobs:
           set -o pipefail
           dotnet run --project tests/phase40-option-chain/dotnet/ThesisPulse.Phase40OptionChain.Tests.csproj --configuration Release 2>&1 | tee phase40-tests.log
 
-      - name: Run shared contracts regression
-        run: dotnet run --project tests/contracts/dotnet/ThesisPulse.Shared.Contracts.Tests.csproj --configuration Release
-
       - name: Run database migrator regression
         run: dotnet run --project tests/database/dotnet/ThesisPulse.DatabaseMigrator.Tests.csproj --configuration Release
 

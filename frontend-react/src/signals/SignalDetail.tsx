@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 
-import type { SignalSummary } from "./types";
+import type {
+  SignalDecisionProjection,
+  SignalSummary,
+} from "./types";
 
 const signalApiBaseUrl =
   import.meta.env.VITE_SIGNAL_API_BASE_URL?.replace(/\/$/, "") ??
@@ -15,7 +18,11 @@ function formatPercentage(value: number): string {
   return `${Math.round(Number(value) * 100)}%`;
 }
 
-function formatTime(value: string): string {
+function formatTime(value: string | null | undefined): string {
+  if (!value) {
+    return "Not available";
+  }
+
   const timestamp = Date.parse(value);
 
   if (Number.isNaN(timestamp)) {
@@ -42,8 +49,26 @@ function formatRemaining(validUntilUtc: string): string {
     : `${Math.ceil(minutes / 60)} hours remaining`;
 }
 
+function formatNumber(value: number | null | undefined): string {
+  return value === null || value === undefined
+    ? "Not available"
+    : new Intl.NumberFormat("en-IN", { maximumFractionDigits: 6 }).format(value);
+}
+
+async function readJson<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    throw new Error(
+      response.status === 404
+        ? "The selected signal was not found."
+        : `Signal Service returned HTTP ${response.status}.`,
+    );
+  }
+  return (await response.json()) as T;
+}
+
 export function SignalDetail({ signalUid, onBack }: SignalDetailProps) {
   const [signal, setSignal] = useState<SignalSummary | null>(null);
+  const [decision, setDecision] = useState<SignalDecisionProjection | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,27 +80,44 @@ export function SignalDetail({ signalUid, onBack }: SignalDetailProps) {
       setError(null);
 
       try {
-        const response = await fetch(
-          `${signalApiBaseUrl}/api/v1/signals/${encodeURIComponent(signalUid)}`,
-          {
+        const [signalResponse, decisionResponse] = await Promise.all([
+          fetch(`${signalApiBaseUrl}/api/v1/signals/${encodeURIComponent(signalUid)}`, {
             headers: { Accept: "application/json" },
             signal: controller.signal,
-          },
-        );
+          }),
+          fetch(
+            `${signalApiBaseUrl}/api/v1/signals/${encodeURIComponent(signalUid)}/decision-projection`,
+            {
+              headers: { Accept: "application/json" },
+              signal: controller.signal,
+            },
+          ),
+        ]);
 
-        if (!response.ok) {
-          throw new Error(
-            response.status === 404
-              ? "The selected signal was not found."
-              : `Signal Service returned HTTP ${response.status}.`,
-          );
-        }
-
-        const payload = (await response.json()) as SignalSummary;
+        const payload = await readJson<SignalSummary>(signalResponse);
+        const projection = await readJson<SignalDecisionProjection>(decisionResponse);
         setSignal({
           ...payload,
           strength: Number(payload.strength),
           confidence: Number(payload.confidence),
+        });
+        setDecision({
+          ...projection,
+          tradePlan: {
+            ...projection.tradePlan,
+            approvedQuantity:
+              projection.tradePlan.approvedQuantity === null
+                ? null
+                : Number(projection.tradePlan.approvedQuantity),
+            entryReferencePrice:
+              projection.tradePlan.entryReferencePrice === null
+                ? null
+                : Number(projection.tradePlan.entryReferencePrice),
+            stopLossPrice:
+              projection.tradePlan.stopLossPrice === null
+                ? null
+                : Number(projection.tradePlan.stopLossPrice),
+          },
         });
       } catch (requestError) {
         if (!controller.signal.aborted) {
@@ -102,12 +144,12 @@ export function SignalDetail({ signalUid, onBack }: SignalDetailProps) {
         <button className="back-button" type="button" onClick={onBack}>
           Back to scanner
         </button>
-        <div className="page-state-card">Loading canonical signal details...</div>
+        <div className="page-state-card">Loading canonical signal decisions...</div>
       </section>
     );
   }
 
-  if (error || !signal) {
+  if (error || !signal || !decision) {
     return (
       <section className="detail-page">
         <button className="back-button" type="button" onClick={onBack}>
@@ -120,6 +162,8 @@ export function SignalDetail({ signalUid, onBack }: SignalDetailProps) {
       </section>
     );
   }
+
+  const plan = decision.tradePlan;
 
   return (
     <section className="detail-page" aria-labelledby="signal-detail-title">
@@ -159,25 +203,47 @@ export function SignalDetail({ signalUid, onBack }: SignalDetailProps) {
           <meter min="0" max="1" value={signal.confidence} />
         </article>
         <article>
-          <span>Timeframe</span>
-          <strong>{signal.primaryTimeframe}</strong>
-          <small>Primary horizon</small>
+          <span>Risk decision</span>
+          <strong>{decision.riskDecisionStatus}</strong>
+          <small>{formatTime(decision.riskEvaluatedAtUtc)}</small>
         </article>
         <article>
-          <span>Environment</span>
-          <strong>PAPER</strong>
-          <small>Live orders disabled</small>
+          <span>Trade plan</span>
+          <strong>{plan.status}</strong>
+          <small>Execution authorized: No</small>
         </article>
       </div>
 
       <div className="detail-grid">
         <article className="detail-card">
-          <h3>Lifecycle</h3>
+          <h3>Signal lifecycle</h3>
           <dl>
             <div><dt>Status</dt><dd>{signal.status}</dd></div>
             <div><dt>Generated</dt><dd>{formatTime(signal.generatedAtUtc)}</dd></div>
             <div><dt>Valid until</dt><dd>{formatTime(signal.validUntilUtc)}</dd></div>
             <div><dt>Freshness</dt><dd>{formatRemaining(signal.validUntilUtc)}</dd></div>
+          </dl>
+        </article>
+
+        <article className="detail-card">
+          <h3>Authoritative Risk</h3>
+          <dl>
+            <div><dt>Decision</dt><dd>{decision.riskDecisionStatus}</dd></div>
+            <div><dt>Evaluated</dt><dd>{formatTime(decision.riskEvaluatedAtUtc)}</dd></div>
+            <div><dt>Decision UID</dt><dd className="monospace">{decision.riskDecisionUid ?? "Not available"}</dd></div>
+            <div><dt>Authority</dt><dd>Risk Service</dd></div>
+          </dl>
+        </article>
+
+        <article className="detail-card">
+          <h3>Trade Plan</h3>
+          <dl>
+            <div><dt>Status</dt><dd>{plan.status}</dd></div>
+            <div><dt>Quantity</dt><dd>{formatNumber(plan.approvedQuantity)}</dd></div>
+            <div><dt>Entry reference</dt><dd>{formatNumber(plan.entryReferencePrice)}</dd></div>
+            <div><dt>Stop loss</dt><dd>{formatNumber(plan.stopLossPrice)}</dd></div>
+            <div><dt>Generated</dt><dd>{formatTime(plan.generatedAtUtc)}</dd></div>
+            <div><dt>Valid until</dt><dd>{formatTime(plan.validUntilUtc)}</dd></div>
           </dl>
         </article>
 
@@ -196,7 +262,9 @@ export function SignalDetail({ signalUid, onBack }: SignalDetailProps) {
           <dl className="lineage-grid">
             <div><dt>Signal UID</dt><dd className="monospace">{signal.signalUid}</dd></div>
             <div><dt>Message UID</dt><dd className="monospace">{signal.messageId || "Unavailable"}</dd></div>
-            <div><dt>Database ID</dt><dd>{signal.signalId ?? "Local memory"}</dd></div>
+            <div><dt>Risk decision UID</dt><dd className="monospace">{decision.riskDecisionUid ?? "Unavailable"}</dd></div>
+            <div><dt>Trade Plan UID</dt><dd className="monospace">{plan.tradePlanUid ?? "Unavailable"}</dd></div>
+            <div><dt>Database ID</dt><dd>{signal.signalId ?? "Not projected"}</dd></div>
             <div><dt>Instrument key</dt><dd>{signal.instrumentKey}</dd></div>
           </dl>
         </article>
@@ -205,8 +273,9 @@ export function SignalDetail({ signalUid, onBack }: SignalDetailProps) {
       <aside className="safety-note">
         <strong>Controlled boundary</strong>
         <span>
-          This view contains signal intelligence only. Risk approval and order
-          handling remain separate services.
+          Risk and Trade Plan values are authoritative read-only projections. The plan
+          cannot submit an order, contact a broker, or mutate the portfolio. Execution
+          remains a separate service boundary.
         </span>
       </aside>
     </section>

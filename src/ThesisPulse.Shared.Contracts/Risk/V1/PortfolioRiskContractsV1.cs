@@ -36,7 +36,7 @@ public sealed record PortfolioRiskEvaluationInputV1(
     DateTimeOffset EvaluatedAtUtc,
     PortfolioRiskPolicyV1 Policy);
 
-public sealed record PortfolioRiskSnapshotV1(
+public sealed record PortfolioRiskStateSnapshotV1(
     Guid RiskSnapshotUid,
     Guid SourcePnlSnapshotUid,
     Guid PolicyUid,

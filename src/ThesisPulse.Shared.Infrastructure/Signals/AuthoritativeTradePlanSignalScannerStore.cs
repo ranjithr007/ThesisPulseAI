@@ -116,7 +116,7 @@ public sealed class AuthoritativeTradePlanSignalScannerStore(
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var planUid = reader.IsDBNull(4) ? null : reader.GetGuid(4);
+            Guid? planUid = reader.IsDBNull(4) ? null : reader.GetGuid(4);
             var status = planUid.HasValue
                 ? MapPlanStatus(reader.IsDBNull(10) ? null : reader.GetString(10))
                 : MapWorkStatus(reader.IsDBNull(11) ? null : reader.GetString(11));

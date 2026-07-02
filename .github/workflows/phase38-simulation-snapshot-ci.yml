@@ -1,0 +1,67 @@
+name: Phase 3.8 Simulation Snapshot CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - fix/phase37-main-integration-clean
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    name: Simulation snapshot acceptance and regressions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore solution
+        run: dotnet restore ThesisPulseAI.sln
+      - name: Build solution with diagnostics
+        shell: bash
+        run: |
+          set +e
+          dotnet build ThesisPulseAI.sln --configuration Release --no-restore --verbosity minimal 2>&1 | tee phase38-build.log
+          status=${PIPESTATUS[0]}
+          echo "$status" > phase38-build.status
+          exit 0
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase38-simulation-build-log
+          path: |
+            phase38-build.log
+            phase38-build.status
+          if-no-files-found: error
+          retention-days: 7
+      - name: Enforce build result
+        shell: bash
+        run: exit "$(cat phase38-build.status)"
+      - name: Run Phase 3.8 acceptance
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet run --project tests/phase38-paper-valuation/dotnet/ThesisPulse.Phase38PaperValuation.Tests.csproj --configuration Release 2>&1 | tee phase38-tests.log
+      - name: Run Phase 3.7 regression
+        run: dotnet run --project tests/phase37-portfolio-projection/dotnet/ThesisPulse.Phase37PortfolioProjection.Tests.csproj --configuration Release
+      - name: Run portfolio regression
+        run: dotnet run --project tests/portfolio/dotnet/ThesisPulse.Portfolio.Tests.csproj --configuration Release
+      - name: Run Phase 3.6 regression
+        run: dotnet run --project tests/phase36-paper-fill/dotnet/ThesisPulse.Phase36PaperFill.Tests.csproj --configuration Release
+      - name: Run Market Data regression
+        run: dotnet run --project tests/marketdata/dotnet/ThesisPulse.MarketData.Tests.csproj --configuration Release
+      - name: Run database migrator regression
+        run: dotnet run --project tests/database/dotnet/ThesisPulse.DatabaseMigrator.Tests.csproj --configuration Release
+      - name: Upload acceptance diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase38-simulation-test-log
+          path: phase38-tests.log
+          if-no-files-found: warn
+          retention-days: 7

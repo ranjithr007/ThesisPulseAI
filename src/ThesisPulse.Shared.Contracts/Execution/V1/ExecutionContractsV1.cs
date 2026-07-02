@@ -112,7 +112,8 @@ public sealed record PaperOrderSnapshotV1(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc,
     DateTimeOffset? TerminalAtUtc,
-    string? LastReason);
+    string? LastReason,
+    string? BrokerOrderId = null);
 
 public sealed record ExecutionCommandResultV1(
     Guid RequestUid,
@@ -132,7 +133,8 @@ public sealed record PaperOrderEventRequestV1(
     decimal? FillQuantity,
     decimal? FillPrice,
     string? Reason,
-    DateTimeOffset OccurredAtUtc);
+    DateTimeOffset OccurredAtUtc,
+    string? BrokerOrderId = null);
 
 public sealed record PaperOrderTransitionResultV1(
     bool Applied,

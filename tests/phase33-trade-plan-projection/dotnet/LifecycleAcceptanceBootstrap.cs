@@ -9,6 +9,6 @@ internal static class LifecycleAcceptanceBootstrap
         foreach (var failure in failures)
             Console.Error.WriteLine(failure);
         if (failures.Count > 0)
-            Environment.ExitCode = 1;
+            throw new InvalidOperationException("Phase 3.3 lifecycle acceptance tests failed.");
     }
 }

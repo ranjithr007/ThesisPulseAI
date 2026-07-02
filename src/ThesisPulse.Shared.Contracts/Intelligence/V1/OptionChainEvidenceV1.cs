@@ -1,6 +1,6 @@
 namespace ThesisPulse.Shared.Contracts.Intelligence.V1;
 
-public sealed record OptionChainOiWallV1(
+public sealed record OptionChainOpenInterestWallV1(
     DateOnly ExpiryDate,
     decimal StrikePrice,
     string Side,
@@ -41,7 +41,7 @@ public sealed record OptionChainIntelligenceEvidenceV1(
     decimal BullishScore,
     decimal BearishScore,
     decimal Confidence,
-    IReadOnlyCollection<OptionChainOiWallV1> OpenInterestWalls,
+    IReadOnlyCollection<OptionChainOpenInterestWallV1> OpenInterestWalls,
     IReadOnlyCollection<OptionChainStrikeActivityV1> StrikeActivity,
     IReadOnlyCollection<OptionChainIvStructureV1> ImpliedVolatilityStructure,
     IReadOnlyCollection<string> Reasons,

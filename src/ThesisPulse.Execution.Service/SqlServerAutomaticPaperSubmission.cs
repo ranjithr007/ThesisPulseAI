@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using ThesisPulse.Shared.Infrastructure.Execution;
 
@@ -267,18 +268,126 @@ public sealed class SqlServerAutomaticPaperSubmissionWorkQueue(
         return items;
     }
 
-    public Task AcknowledgeAsync(
+    public async Task AcknowledgeAsync(
         long workItemId,
         string brokerOrderId,
-        CancellationToken cancellationToken) =>
-        UpdateAsync(
-            workItemId,
-            AutomaticPaperSubmissionStatus.Acknowledged,
-            new[] { "INTERNAL_PAPER_GATEWAY_ACKNOWLEDGED" },
-            null,
-            brokerOrderId,
-            null,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            DECLARE @order_id bigint;
+            DECLARE @execution_command_id bigint;
+            DECLARE @submit_event_uid uniqueidentifier;
+            DECLARE @acknowledge_event_uid uniqueidentifier;
+            DECLARE @correlation_id uniqueidentifier;
+
+            SELECT
+                @order_id = [order_id],
+                @execution_command_id = [execution_command_id],
+                @submit_event_uid = [submit_event_uid],
+                @acknowledge_event_uid = [acknowledge_event_uid],
+                @correlation_id = [correlation_id]
+            FROM [execution].[paper_submission_work_items] WITH (UPDLOCK, HOLDLOCK)
+            WHERE [paper_submission_work_item_id] = @work_item_id
+              AND [broker_order_id] = @broker_order_id
+              AND [current_status] IN ('LEASED', 'ACKNOWLEDGED');
+
+            IF @order_id IS NULL OR @execution_command_id IS NULL
+                THROW 59410, 'Automatic PAPER submission work item was not found.', 1;
+
+            UPDATE [execution].[orders]
+            SET [broker_order_id] = @broker_order_id,
+                [broker_client_tag] = 'INTERNAL_DETERMINISTIC_PAPER',
+                [updated_at_utc] = SYSUTCDATETIME(),
+                [updated_by] = @actor
+            WHERE [order_id] = @order_id
+              AND [environment] = 'PAPER'
+              AND [current_status] = 'ACKNOWLEDGED'
+              AND [filled_quantity] = 0
+              AND [remaining_quantity] = [requested_quantity]
+              AND ([broker_order_id] IS NULL OR [broker_order_id] = @broker_order_id);
+
+            IF @@ROWCOUNT <> 1
+                THROW 59411, 'ACKNOWLEDGED PAPER order invariant was not satisfied.', 1;
+
+            UPDATE [execution].[order_events]
+            SET [broker_order_id] = @broker_order_id,
+                [broker_status] = [normalized_status]
+            WHERE [order_id] = @order_id
+              AND [order_event_uid] IN (@submit_event_uid, @acknowledge_event_uid);
+
+            IF NOT EXISTS
+            (
+                SELECT 1
+                FROM [execution].[execution_command_events] WITH (UPDLOCK, HOLDLOCK)
+                WHERE [execution_command_id] = @execution_command_id
+                  AND [event_sequence] = 1
+            )
+            BEGIN
+                INSERT INTO [execution].[execution_command_events]
+                (
+                    [execution_command_event_uid], [execution_command_id], [event_sequence],
+                    [event_type], [command_status], [outcome_classification],
+                    [occurred_at_utc], [source_service], [source_version],
+                    [correlation_id], [created_by]
+                )
+                VALUES
+                (
+                    @acknowledge_event_uid, @execution_command_id, 1,
+                    'SUBMISSION_SUCCEEDED', 'ACKNOWLEDGED', 'NONE',
+                    SYSUTCDATETIME(), @actor, @source_version,
+                    @correlation_id, @actor
+                );
+            END;
+
+            UPDATE [execution].[execution_command_states]
+            SET [current_status] = 'ACKNOWLEDGED',
+                [outcome_classification] = 'NONE',
+                [last_event_sequence] = CASE
+                    WHEN [last_event_sequence] < 1 THEN 1
+                    ELSE [last_event_sequence]
+                END,
+                [broker_contacted] = 0,
+                [reconciliation_required] = 0,
+                [can_retry_without_reconciliation] = 0,
+                [last_error_code] = NULL,
+                [last_error_message] = NULL,
+                [updated_at_utc] = SYSUTCDATETIME(),
+                [updated_by] = @actor
+            WHERE [execution_command_id] = @execution_command_id;
+
+            UPDATE [execution].[paper_submission_work_items]
+            SET [current_status] = 'ACKNOWLEDGED',
+                [lease_owner] = NULL,
+                [lease_expires_at_utc] = NULL,
+                [reasons_json] = N'["INTERNAL_PAPER_GATEWAY_ACKNOWLEDGED"]',
+                [last_error] = NULL,
+                [updated_at_utc] = SYSUTCDATETIME()
+            WHERE [paper_submission_work_item_id] = @work_item_id;
+            """;
+
+        await using var connection = new SqlConnection(options.ConnectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(
+            IsolationLevel.Serializable,
             cancellationToken);
+        try
+        {
+            await using var command = CreateCommand(connection, transaction, sql);
+            command.Parameters.Add("@work_item_id", SqlDbType.BigInt).Value = workItemId;
+            command.Parameters.Add("@broker_order_id", SqlDbType.VarChar, 200).Value =
+                brokerOrderId;
+            command.Parameters.Add("@actor", SqlDbType.NVarChar, 256).Value = options.Actor;
+            command.Parameters.Add("@source_version", SqlDbType.VarChar, 50).Value =
+                options.SourceVersion;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
 
     public Task RetryAsync(
         long workItemId,
@@ -291,7 +400,6 @@ public sealed class SqlServerAutomaticPaperSubmissionWorkQueue(
             reasons,
             availableAtUtc,
             null,
-            null,
             cancellationToken);
 
     public Task RejectAsync(
@@ -302,7 +410,6 @@ public sealed class SqlServerAutomaticPaperSubmissionWorkQueue(
             workItemId,
             AutomaticPaperSubmissionStatus.Rejected,
             reasons,
-            null,
             null,
             null,
             cancellationToken);
@@ -317,7 +424,6 @@ public sealed class SqlServerAutomaticPaperSubmissionWorkQueue(
             new[] { reason },
             null,
             null,
-            null,
             cancellationToken);
 
     public Task FailAsync(
@@ -329,7 +435,6 @@ public sealed class SqlServerAutomaticPaperSubmissionWorkQueue(
             AutomaticPaperSubmissionStatus.Failed,
             new[] { "PAPER_SUBMISSION_FAILED" },
             null,
-            null,
             error,
             cancellationToken);
 
@@ -338,7 +443,6 @@ public sealed class SqlServerAutomaticPaperSubmissionWorkQueue(
         string status,
         IReadOnlyCollection<string> reasons,
         DateTimeOffset? availableAtUtc,
-        string? brokerOrderId,
         string? error,
         CancellationToken cancellationToken)
     {
@@ -348,7 +452,6 @@ public sealed class SqlServerAutomaticPaperSubmissionWorkQueue(
                 [next_attempt_at_utc] = COALESCE(@next_attempt_at_utc, [next_attempt_at_utc]),
                 [lease_owner] = NULL,
                 [lease_expires_at_utc] = NULL,
-                [broker_order_id] = COALESCE(@broker_order_id, [broker_order_id]),
                 [reasons_json] = @reasons_json,
                 [last_error] = @last_error,
                 [updated_at_utc] = SYSUTCDATETIME()
@@ -360,10 +463,8 @@ public sealed class SqlServerAutomaticPaperSubmissionWorkQueue(
         command.Parameters.Add("@status", SqlDbType.VarChar, 30).Value = status;
         command.Parameters.Add("@next_attempt_at_utc", SqlDbType.DateTime2).Value =
             availableAtUtc.HasValue ? availableAtUtc.Value.UtcDateTime : DBNull.Value;
-        command.Parameters.Add("@broker_order_id", SqlDbType.VarChar, 200).Value =
-            string.IsNullOrWhiteSpace(brokerOrderId) ? DBNull.Value : brokerOrderId;
         command.Parameters.Add("@reasons_json", SqlDbType.NVarChar, -1).Value =
-            System.Text.Json.JsonSerializer.Serialize(reasons);
+            JsonSerializer.Serialize(reasons);
         command.Parameters.Add("@last_error", SqlDbType.NVarChar, 2000).Value =
             string.IsNullOrWhiteSpace(error) ? DBNull.Value : error;
         command.Parameters.Add("@work_item_id", SqlDbType.BigInt).Value = workItemId;

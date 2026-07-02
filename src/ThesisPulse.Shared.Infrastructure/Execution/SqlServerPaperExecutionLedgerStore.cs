@@ -7,6 +7,10 @@ using ThesisPulse.Shared.Infrastructure.Messaging;
 
 namespace ThesisPulse.Shared.Infrastructure.Execution;
 
+/// <summary>
+/// SQL Server execution ledger that accepts both the authoritative signal-risk lineage introduced
+/// in Phase 3.2 and the legacy risk_decisions lineage. New automatic execution uses the former.
+/// </summary>
 public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerStore
 {
     private static readonly JsonSerializerOptions JsonOptions =
@@ -46,7 +50,7 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
             "Authorized result must contain an execution command.",
             nameof(result));
         var orderContract = result.PaperOrder ?? throw new ArgumentException(
-            "Authorized result must contain a paper order.",
+            "Authorized result must contain a PAPER order.",
             nameof(result));
 
         await using var connection = new SqlConnection(_options.ConnectionString);
@@ -83,8 +87,10 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
                     @trade_plan_id = tp.[trade_plan_id],
                     @instrument_id = tp.[instrument_id]
                 FROM [risk].[trade_plans] tp WITH (UPDLOCK, HOLDLOCK)
-                INNER JOIN [risk].[risk_decisions] rd
+                LEFT JOIN [risk].[risk_decisions] rd
                     ON rd.[risk_decision_id] = tp.[risk_decision_id]
+                LEFT JOIN [risk].[signal_risk_evaluations] sre
+                    ON sre.[signal_risk_evaluation_id] = tp.[signal_risk_evaluation_id]
                 INNER JOIN [thesis].[theses] th
                     ON th.[thesis_id] = tp.[thesis_id]
                 INNER JOIN [intelligence].[signals] s
@@ -94,11 +100,21 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
                 INNER JOIN [reference].[exchanges] e
                     ON e.[exchange_id] = i.[exchange_id]
                 WHERE tp.[trade_plan_uid] = @trade_plan_uid
-                  AND rd.[risk_decision_uid] = @risk_decision_uid
+                  AND
+                  (
+                      (tp.[risk_decision_id] IS NOT NULL
+                          AND rd.[risk_decision_uid] = @risk_decision_uid)
+                      OR
+                      (tp.[signal_risk_evaluation_id] IS NOT NULL
+                          AND sre.[risk_decision_uid] = @risk_decision_uid
+                          AND sre.[current_status] = 'RISK_APPROVED')
+                  )
                   AND th.[thesis_uid] = @thesis_uid
                   AND s.[signal_uid] = @signal_uid
+                  AND tp.[initial_status] = 'READY'
                   AND tp.[environment] = 'PAPER'
                   AND tp.[is_current] = 1
+                  AND tp.[valid_until_utc] > @authorized_at_utc
                   AND e.[exchange_code] = @exchange_code
                   AND i.[canonical_symbol] = @instrument_value;
 
@@ -110,7 +126,7 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
                   AND ba.[allows_risk_reducing_exits] = 1;
 
                 IF @trade_plan_id IS NULL OR @instrument_id IS NULL
-                    THROW 57101, 'Canonical PAPER trade-plan lineage was not found.', 1;
+                    THROW 57101, 'Canonical PAPER PLAN_READY lineage was not found.', 1;
 
                 IF @broker_account_id IS NULL
                     THROW 57102, 'Configured PAPER broker account was not found.', 1;
@@ -283,13 +299,13 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
 
         try
         {
-            var replayFillUid = await FindEventReplayAsync(
+            var replay = await FindEventReplayAsync(
                 connection,
                 transaction,
                 request.EventUid,
                 paperOrderUid,
                 cancellationToken);
-            if (replayFillUid.Found)
+            if (replay.Found)
             {
                 var replayOrder = await ReadOrderRowAsync(
                     connection,
@@ -304,7 +320,7 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
                     Array.Empty<string>(),
                     replayOrder?.Snapshot,
                     request.OccurredAtUtc,
-                    replayFillUid.FillUid);
+                    replay.FillUid);
             }
 
             var row = await ReadOrderRowAsync(
@@ -319,7 +335,7 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
                 return new PaperOrderTransitionResultV1(
                     false,
                     false,
-                    ["PAPER_ORDER_NOT_FOUND"],
+                    new[] { "PAPER_ORDER_NOT_FOUND" },
                     null,
                     request.OccurredAtUtc);
             }
@@ -341,7 +357,7 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
             if (updateCount != 1)
             {
                 throw new PaperExecutionConcurrencyException(
-                    "The paper order changed while the event was being applied.");
+                    "The PAPER order changed while the event was being applied.");
             }
 
             await InsertOrderEventAsync(
@@ -424,7 +440,7 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
         }
 
         throw new PaperExecutionIdempotencyConflictException(
-            "The idempotency key is already bound to another trade plan.");
+            "The idempotency key is already bound to another Trade Plan.");
     }
 
     private void AddAuthorizationParameters(
@@ -472,7 +488,9 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
         AddDateTime(command, "@authorized_at_utc", contract.AuthorizedAtUtc);
         AddDateTime(command, "@valid_until_utc", contract.ValidUntilUtc);
         command.Parameters.Add("@correlation_id", SqlDbType.UniqueIdentifier).Value =
-            SqlServerMessageValues.ToDatabaseGuid(contract.CorrelationId, nameof(contract.CorrelationId));
+            SqlServerMessageValues.ToDatabaseGuid(
+                contract.CorrelationId,
+                nameof(contract.CorrelationId));
         command.Parameters.Add("@raw_result_json", SqlDbType.NVarChar, -1).Value = rawResultJson;
         command.Parameters.Add("@result_hash", SqlDbType.Char, 64).Value =
             SqlServerMessageValues.ComputePayloadHash(rawResultJson);
@@ -524,7 +542,8 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
                 o.[order_id], o.[place_execution_command_id], o.[trade_plan_id],
                 o.[broker_account_id], o.[instrument_id], o.[order_uid],
                 ec.[execution_command_uid], tp.[trade_plan_uid],
-                rd.[risk_decision_uid], th.[thesis_uid], s.[signal_uid],
+                COALESCE(rd.[risk_decision_uid], sre.[risk_decision_uid]),
+                th.[thesis_uid], s.[signal_uid],
                 tp.[correlation_id], ec.[idempotency_key], o.[environment],
                 e.[exchange_code], i.[canonical_symbol], o.[side], o.[current_status],
                 o.[requested_quantity], o.[filled_quantity], o.[remaining_quantity],
@@ -534,21 +553,24 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
             FROM [execution].[orders] o{lockHint}
             INNER JOIN [execution].[execution_commands] ec
                 ON ec.[execution_command_id] = o.[place_execution_command_id]
-            INNER JOIN [risk].[trade_plans] tp ON tp.[trade_plan_id] = o.[trade_plan_id]
-            INNER JOIN [risk].[risk_decisions] rd ON rd.[risk_decision_id] = tp.[risk_decision_id]
+            INNER JOIN [risk].[trade_plans] tp
+                ON tp.[trade_plan_id] = o.[trade_plan_id]
+            LEFT JOIN [risk].[risk_decisions] rd
+                ON rd.[risk_decision_id] = tp.[risk_decision_id]
+            LEFT JOIN [risk].[signal_risk_evaluations] sre
+                ON sre.[signal_risk_evaluation_id] = tp.[signal_risk_evaluation_id]
             INNER JOIN [thesis].[theses] th ON th.[thesis_id] = tp.[thesis_id]
             INNER JOIN [intelligence].[signals] s ON s.[signal_id] = tp.[signal_id]
             INNER JOIN [reference].[instruments] i ON i.[instrument_id] = o.[instrument_id]
             INNER JOIN [reference].[exchanges] e ON e.[exchange_id] = i.[exchange_id]
-            WHERE o.[order_uid] = @order_uid;
+            WHERE o.[order_uid] = @order_uid
+              AND COALESCE(rd.[risk_decision_uid], sre.[risk_decision_uid]) IS NOT NULL;
             """;
         await using var command = CreateCommand(connection, transaction, sql);
         command.Parameters.Add("@order_uid", SqlDbType.UniqueIdentifier).Value = orderUid;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
-        {
             return null;
-        }
 
         var side = reader.GetString(16);
         var snapshot = new PaperOrderSnapshotV1(
@@ -755,8 +777,7 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
     private SqlCommand CreateCommand(
         SqlConnection connection,
         SqlTransaction? transaction,
-        string sql) =>
-        new(sql, connection, transaction)
+        string sql) => new(sql, connection, transaction)
         {
             CommandTimeout = _options.CommandTimeoutSeconds,
         };
@@ -769,7 +790,9 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
             string.IsNullOrWhiteSpace(parts[0]) ||
             string.IsNullOrWhiteSpace(parts[1]))
         {
-            throw new ArgumentException("Instrument key format is invalid.", nameof(value));
+            throw new ArgumentException(
+                "Instrument key format is invalid.",
+                nameof(value));
         }
 
         var exchangeToken = parts[0];

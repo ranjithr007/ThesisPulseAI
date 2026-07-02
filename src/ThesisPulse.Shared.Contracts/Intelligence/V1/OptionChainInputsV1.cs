@@ -11,7 +11,9 @@ public sealed record OptionChainStrikeInputV1(
     decimal? CallImpliedVolatility,
     decimal? PutImpliedVolatility,
     decimal? CallLastPrice,
-    decimal? PutLastPrice);
+    decimal? PutLastPrice,
+    decimal? CallPriceChange,
+    decimal? PutPriceChange);
 
 public sealed record OptionChainExpiryInputV1(
     DateOnly ExpiryDate,

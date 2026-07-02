@@ -177,4 +177,7 @@ public sealed record StoredCandleV1(
     decimal VolumeQuantity,
     string QualityStatus,
     bool IsUsableForNewExposure,
-    DateTimeOffset ReceivedAtUtc);
+    DateTimeOffset ReceivedAtUtc)
+{
+    public bool IsClosed { get; init; } = true;
+}

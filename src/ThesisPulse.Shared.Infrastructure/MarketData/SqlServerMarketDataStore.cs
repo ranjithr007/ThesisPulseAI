@@ -49,7 +49,7 @@ public sealed partial class SqlServerMarketDataStore : IMarketDataStore
                 candle.[open_price], candle.[high_price], candle.[low_price],
                 candle.[close_price], candle.[volume_qty],
                 candle.[quality_status], candle.[is_usable_for_new_exposure],
-                candle.[received_at_utc]
+                candle.[received_at_utc], candle.[is_closed]
             FROM [market].[candles] candle
             INNER JOIN [reference].[broker_instrument_mappings] mapping
                 ON mapping.[instrument_id] = candle.[instrument_id]
@@ -92,7 +92,10 @@ public sealed partial class SqlServerMarketDataStore : IMarketDataStore
                 reader.GetDecimal(10),
                 reader.GetString(11),
                 reader.GetBoolean(12),
-                ReadUtc(reader, 13)));
+                ReadUtc(reader, 13))
+            {
+                IsClosed = reader.GetBoolean(14),
+            });
         }
 
         return candles;

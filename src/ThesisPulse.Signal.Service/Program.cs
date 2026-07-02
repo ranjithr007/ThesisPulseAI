@@ -47,6 +47,7 @@ app.UseThesisPulsePlatformFoundation();
 app.UseCors(frontendCorsPolicy);
 app.MapThesisPulsePlatformEndpoints(serviceName);
 app.MapSignalEndpoints();
+app.MapSignalDecisionProjectionEndpoints();
 app.MapSignalMaintenance();
 app.MapMarketDataConsumerEndpoints();
 
@@ -58,6 +59,7 @@ app.MapGet("/api/v1/status", (IConfiguration configuration) => Results.Ok(new
     fusionSignalIntakeEnabled = true,
     scannerEnabled = true,
     riskProjectionAuthority = false,
+    tradePlanProjectionAuthority = false,
     executionAuthority = false,
     signalStatusTransitionsEnabled = true,
     signalMaintenanceEnabled = configuration.GetValue("SignalMaintenance:Enabled", false),

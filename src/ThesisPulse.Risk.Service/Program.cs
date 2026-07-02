@@ -33,9 +33,31 @@ if (canonicalIntakeOptions.Enabled && (!persistenceOptions.UseSqlServer || !work
     throw new InvalidOperationException("Canonical Signal Risk intake requires SQL_SERVER persistence and the Signal Risk worker.");
 builder.Services.AddSingleton(canonicalIntakeOptions);
 
+var tradePlanWorkerOptions = builder.Configuration
+    .GetSection(AutomaticTradePlanWorkerOptions.SectionName)
+    .Get<AutomaticTradePlanWorkerOptions>() ?? new AutomaticTradePlanWorkerOptions();
+tradePlanWorkerOptions.Validate();
+if (tradePlanWorkerOptions.Enabled && !persistenceOptions.UseSqlServer)
+    throw new InvalidOperationException("Automatic Trade Plan worker requires SQL_SERVER persistence mode.");
+builder.Services.AddSingleton(tradePlanWorkerOptions);
+
+var tradePlanIntakeOptions = builder.Configuration
+    .GetSection(AutomaticTradePlanIntakeOptions.SectionName)
+    .Get<AutomaticTradePlanIntakeOptions>() ?? new AutomaticTradePlanIntakeOptions();
+tradePlanIntakeOptions.Validate();
+if (tradePlanIntakeOptions.Enabled && (!persistenceOptions.UseSqlServer || !tradePlanWorkerOptions.Enabled))
+    throw new InvalidOperationException("Automatic Trade Plan intake requires SQL_SERVER persistence and the Automatic Trade Plan worker.");
+builder.Services.AddSingleton(tradePlanIntakeOptions);
+
 builder.Services.AddSingleton<IRiskDecisionEngine, DeterministicRiskDecisionEngine>();
 builder.Services.AddSingleton<ISignalRiskProjector, DeterministicSignalRiskProjector>();
+builder.Services.AddSingleton<IAutomaticTradePlanProjector, DeterministicAutomaticTradePlanProjector>();
+builder.Services.AddSingleton<IAutomaticTradePlanLifecycleStore, InMemoryAutomaticTradePlanLifecycleStore>();
+builder.Services.AddSingleton<AutomaticTradePlanCoordinator>();
+builder.Services.AddSingleton<ITradePlanBuilder, DeterministicTradePlanBuilder>();
 builder.Services.AddSingleton<SignalRiskWorkerState>();
+builder.Services.AddSingleton<AutomaticTradePlanWorkerState>();
+builder.Services.AddSingleton<AutomaticTradePlanWorkProcessor>();
 if (persistenceOptions.UseSqlServer)
 {
     builder.Services.AddSingleton<ISignalRiskEvaluationStore, SqlServerSignalRiskEvaluationStore>();
@@ -43,11 +65,16 @@ if (persistenceOptions.UseSqlServer)
     builder.Services.AddSingleton<ISignalRiskOperationalStatusStore, SqlServerSignalRiskOperationalStatusStore>();
     builder.Services.AddSingleton<ISignalRiskMetricsStore, SqlServerSignalRiskMetricsStore>();
     builder.Services.AddSingleton<ICanonicalSignalRiskCandidateStore, SqlServerCanonicalSignalRiskCandidateStore>();
+    builder.Services.AddSingleton<IAutomaticTradePlanCandidateStore, SqlServerAutomaticTradePlanCandidateStore>();
+    builder.Services.AddSingleton<IAutomaticTradePlanWorkQueue, SqlServerAutomaticTradePlanWorkQueue>();
+    builder.Services.AddSingleton<IAutomaticTradePlanResultStore, SqlServerAutomaticTradePlanResultStore>();
+    builder.Services.AddSingleton<IAutomaticTradePlanMetricsStore, SqlServerAutomaticTradePlanMetricsStore>();
 }
 else
 {
     builder.Services.AddSingleton<ISignalRiskEvaluationStore, InMemorySignalRiskEvaluationStore>();
     builder.Services.AddSingleton<ISignalRiskMetricsStore, InMemorySignalRiskMetricsStore>();
+    builder.Services.AddSingleton<IAutomaticTradePlanMetricsStore, InMemoryAutomaticTradePlanMetricsStore>();
 }
 builder.Services.AddSingleton<SignalRiskCoordinator>();
 if (workerOptions.Enabled)
@@ -58,18 +85,34 @@ if (canonicalIntakeOptions.Enabled)
         client.BaseAddress = new Uri(canonicalIntakeOptions.PortfolioServiceBaseUrl));
     builder.Services.AddHostedService<CanonicalSignalRiskIntakeWorker>();
 }
-builder.Services.AddSingleton<ITradePlanBuilder, DeterministicTradePlanBuilder>();
+if (tradePlanWorkerOptions.Enabled)
+    builder.Services.AddHostedService<AutomaticTradePlanWorker>();
+if (tradePlanIntakeOptions.Enabled)
+    builder.Services.AddHostedService<AutomaticTradePlanIntakeWorker>();
 
 var app = builder.Build();
 app.UseThesisPulsePlatformFoundation();
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Risk.Service");
-app.MapGet("/api/v1/status", (SignalRiskWorkerState workerState) => Results.Ok(new
+app.MapGet("/api/v1/status", (
+    SignalRiskWorkerState workerState,
+    AutomaticTradePlanWorkerState tradePlanState) => Results.Ok(new
 {
     mode = "DETERMINISTIC_RISK_AND_TRADE_PLAN",
     environment = "PAPER",
     failClosed = true,
     automaticSignalProjection = true,
     automaticRiskPersistence = true,
+    automaticTradePlanProjection = true,
+    automaticTradePlanLifecycle = true,
+    automaticTradePlanIntakeEnabled = tradePlanIntakeOptions.Enabled,
+    automaticTradePlanIntakeSessionCode = tradePlanIntakeOptions.SessionCode,
+    automaticTradePlanIntakePollIntervalSeconds = tradePlanIntakeOptions.PollIntervalSeconds,
+    automaticTradePlanIntakeBatchSize = tradePlanIntakeOptions.BatchSize,
+    automaticTradePlanWorkerEnabled = tradePlanWorkerOptions.Enabled,
+    automaticTradePlanWorkerPollIntervalSeconds = tradePlanWorkerOptions.PollIntervalSeconds,
+    automaticTradePlanWorkerBatchSize = tradePlanWorkerOptions.BatchSize,
+    automaticTradePlanWorkerMaximumAttempts = tradePlanWorkerOptions.MaximumAttempts,
+    automaticTradePlanWorkerState = tradePlanState.Snapshot(),
     automaticRiskWorkerEnabled = workerOptions.Enabled,
     automaticCanonicalSignalIntakeEnabled = canonicalIntakeOptions.Enabled,
     automaticRiskWorkerPollIntervalSeconds = workerOptions.PollIntervalSeconds,
@@ -87,6 +130,10 @@ app.MapGet("/api/v1/status", (SignalRiskWorkerState workerState) => Results.Ok(n
 }));
 app.MapGet("/api/v1/risk/operations/metrics", async (
     ISignalRiskMetricsStore metricsStore,
+    CancellationToken cancellationToken) =>
+    Results.Ok(await metricsStore.ReadAsync(cancellationToken)));
+app.MapGet("/api/v1/trade-plans/operations/metrics", async (
+    IAutomaticTradePlanMetricsStore metricsStore,
     CancellationToken cancellationToken) =>
     Results.Ok(await metricsStore.ReadAsync(cancellationToken)));
 app.MapPost("/api/v1/risk/signal-intake/project", (
@@ -110,6 +157,18 @@ if (persistenceOptions.UseSqlServer)
             ? Results.Accepted($"/api/v1/risk/work-items/{result.MessageUid}", result)
             : Results.Ok(result);
     });
+    app.MapPost("/api/v1/trade-plans/automatic/enqueue", async (
+        AutomaticTradePlanIntakeV1 intake,
+        IAutomaticTradePlanWorkQueue queue,
+        CancellationToken cancellationToken) =>
+    {
+        var result = await queue.EnqueueAsync(intake, cancellationToken);
+        return result.Outcome == "ENQUEUED"
+            ? Results.Accepted($"/api/v1/trade-plans/work-items/{result.SourceMessageUid}", result)
+            : result.Outcome == AutomaticTradePlanContractV1.Rejected
+                ? Results.UnprocessableEntity(result)
+                : Results.Ok(result);
+    });
 }
 app.MapPost("/api/v1/risk/signal-intake/evaluate", (
     SignalRiskEvaluationIntakeV1 intake,
@@ -129,6 +188,29 @@ app.MapPost("/api/v1/risk/evaluate", (RiskDecisionRequestV1 request, IRiskDecisi
         ? Results.Ok(decision)
         : Results.UnprocessableEntity(decision);
 });
+app.MapPost("/api/v1/trade-plans/automatic/project", (
+    AutomaticTradePlanIntakeV1 intake,
+    IAutomaticTradePlanProjector projector) =>
+{
+    var projection = projector.Project(intake);
+    return projection.Outcome == AutomaticTradePlanContractV1.Eligible
+        ? Results.Ok(projection)
+        : Results.UnprocessableEntity(projection);
+});
+app.MapPost("/api/v1/trade-plans/automatic/build", (
+    AutomaticTradePlanIntakeV1 intake,
+    AutomaticTradePlanCoordinator coordinator) =>
+{
+    var result = coordinator.Build(intake);
+    return result.Status == AutomaticTradePlanLifecycleStatus.Ready
+        ? Results.Ok(result)
+        : Results.UnprocessableEntity(result);
+});
+app.MapGet("/api/v1/trade-plans/automatic/{riskDecisionUid:guid}/{messageUid:guid}", (
+    Guid riskDecisionUid,
+    Guid messageUid,
+    IAutomaticTradePlanLifecycleStore store) =>
+    Results.Ok(store.Read(riskDecisionUid, messageUid)));
 app.MapPost("/api/v1/trade-plans/build", (TradePlanBuildRequestV1 request, ITradePlanBuilder planBuilder) =>
 {
     var result = planBuilder.Build(request);

@@ -112,6 +112,19 @@ export function SignalScanner() {
     );
     return result;
   }, [scanner.signals]);
+  const riskApproved = useMemo(
+    () =>
+      scanner.signals.filter(
+        (signal) => signal.riskDecisionStatus === "APPROVED",
+      ).length,
+    [scanner.signals],
+  );
+  const plansReady = useMemo(
+    () =>
+      scanner.signals.filter((signal) => signal.tradePlan?.status === "READY")
+        .length,
+    [scanner.signals],
+  );
 
   return (
     <section className="signal-scanner" aria-labelledby="signal-scanner-title">
@@ -120,8 +133,8 @@ export function SignalScanner() {
           <p className="eyebrow">REAL-TIME INTELLIGENCE</p>
           <h2 id="signal-scanner-title">Signal Scanner</h2>
           <p className="scanner-description">
-            Versioned PAPER signals with lifecycle state, confidence, freshness,
-            and automatic expiry visibility.
+            Versioned PAPER signals with authoritative Risk decisions, Trade Plan
+            readiness, freshness, and lifecycle visibility. Execution remains disabled.
           </p>
         </div>
         <div className="scanner-actions">
@@ -133,7 +146,7 @@ export function SignalScanner() {
             <div>
               <strong>{connectionLabel(scanner.connectionState)}</strong>
               <span>
-                Last event: {formatTime(scanner.lastEventAtUtc ?? scanner.lastSnapshotAtUtc)}
+                Last update: {formatTime(scanner.lastEventAtUtc ?? scanner.lastSnapshotAtUtc)}
               </span>
             </div>
           </div>
@@ -154,10 +167,11 @@ export function SignalScanner() {
         </div>
       ) : null}
 
-      <div className="signal-metrics" aria-label="Signal lifecycle counts">
+      <div className="signal-metrics" aria-label="Signal decision counts">
         <article><span>Total signals</span><strong>{scanner.signals.length}</strong></article>
         <article><span>Validated</span><strong>{counts.get("VALIDATED") ?? 0}</strong></article>
-        <article><span>Candidates</span><strong>{counts.get("CANDIDATE") ?? 0}</strong></article>
+        <article><span>Risk approved</span><strong>{riskApproved}</strong></article>
+        <article><span>Plans ready</span><strong>{plansReady}</strong></article>
         <article><span>Expired</span><strong>{counts.get("EXPIRED") ?? 0}</strong></article>
       </div>
 
@@ -226,31 +240,44 @@ export function SignalScanner() {
         <table className="signal-table">
           <thead>
             <tr>
-              <th>Instrument</th><th>Direction</th><th>Status</th><th>Timeframe</th>
-              <th>Strength</th><th>Confidence</th><th>Validity</th><th>Strategy</th>
+              <th>Instrument</th><th>Direction</th><th>Signal</th><th>Risk</th>
+              <th>Trade plan</th><th>Timeframe</th><th>Strength</th>
+              <th>Confidence</th><th>Validity</th><th>Strategy</th>
             </tr>
           </thead>
           <tbody>
-            {filteredSignals.map((signal) => (
-              <tr key={signal.signalUid}>
-                <td>
-                  <a
-                    className="instrument-link"
-                    href={`#/signals/${encodeURIComponent(signal.signalUid)}`}
-                  >
-                    {signal.instrumentKey}
-                  </a>
-                  <span>{formatTime(signal.generatedAtUtc)}</span>
-                </td>
-                <td><span className={`direction-badge ${signal.direction.toLowerCase()}`}>{signal.direction}</span></td>
-                <td><span className={`status-badge ${signal.status.toLowerCase()}`}>{signal.status}</span></td>
-                <td>{signal.primaryTimeframe}</td>
-                <td><div className="score-cell"><span>{formatPercentage(signal.strength)}</span><meter min="0" max="1" value={signal.strength} /></div></td>
-                <td><div className="score-cell"><span>{formatPercentage(signal.confidence)}</span><meter min="0" max="1" value={signal.confidence} /></div></td>
-                <td><strong>{formatRemaining(signal.validUntilUtc)}</strong><span>{formatTime(signal.validUntilUtc)}</span></td>
-                <td><strong>{signal.strategyCode}</strong><span>v{signal.strategyVersion}</span></td>
-              </tr>
-            ))}
+            {filteredSignals.map((signal) => {
+              const riskStatus = signal.riskDecisionStatus ?? "NOT_EVALUATED";
+              const planStatus = signal.tradePlan?.status ?? "NOT_AVAILABLE";
+              return (
+                <tr key={signal.signalUid}>
+                  <td>
+                    <a
+                      className="instrument-link"
+                      href={`#/signals/${encodeURIComponent(signal.signalUid)}`}
+                    >
+                      {signal.instrumentKey}
+                    </a>
+                    <span>{formatTime(signal.generatedAtUtc)}</span>
+                  </td>
+                  <td><span className={`direction-badge ${signal.direction.toLowerCase()}`}>{signal.direction}</span></td>
+                  <td><span className={`status-badge ${signal.status.toLowerCase()}`}>{signal.status}</span></td>
+                  <td><span className={`decision-badge ${riskStatus.toLowerCase()}`}>{riskStatus}</span></td>
+                  <td>
+                    <span className={`decision-badge ${planStatus.toLowerCase()}`}>{planStatus}</span>
+                    {signal.tradePlan?.approvedQuantity !== null &&
+                    signal.tradePlan?.approvedQuantity !== undefined ? (
+                      <span>{signal.tradePlan.approvedQuantity} units</span>
+                    ) : null}
+                  </td>
+                  <td>{signal.primaryTimeframe}</td>
+                  <td><div className="score-cell"><span>{formatPercentage(signal.strength)}</span><meter min="0" max="1" value={signal.strength} /></div></td>
+                  <td><div className="score-cell"><span>{formatPercentage(signal.confidence)}</span><meter min="0" max="1" value={signal.confidence} /></div></td>
+                  <td><strong>{formatRemaining(signal.validUntilUtc)}</strong><span>{formatTime(signal.validUntilUtc)}</span></td>
+                  <td><strong>{signal.strategyCode}</strong><span>v{signal.strategyVersion}</span></td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 

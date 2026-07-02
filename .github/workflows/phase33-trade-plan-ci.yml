@@ -1,0 +1,32 @@
+name: Phase 3.3 Trade Plan CI
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    name: Trade Plan acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Run Phase 3.3 acceptance
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet run --project tests/phase33-trade-plan-projection/dotnet/ThesisPulse.Phase33TradePlanProjection.Tests.csproj --configuration Release 2>&1 | tee phase33-tests.log
+      - name: Upload Phase 3.3 diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase33-trade-plan-acceptance-log
+          path: phase33-tests.log
+          if-no-files-found: error
+          retention-days: 7

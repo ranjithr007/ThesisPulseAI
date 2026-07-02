@@ -28,6 +28,14 @@ public sealed class DeterministicRiskDecisionEngine : IRiskDecisionEngine
             string.Equals(request.RiskPolicyVersion, _policy.RiskPolicyVersion, StringComparison.Ordinal),
             null, null,
             $"Requested '{request.RiskPolicyVersion}', active '{_policy.RiskPolicyVersion}'.");
+        AddCheck(checks, "PORTFOLIO_POLICY_VERSION",
+            string.IsNullOrWhiteSpace(request.Portfolio.SourcePolicyVersion) ||
+            string.Equals(
+                request.Portfolio.SourcePolicyVersion,
+                request.RiskPolicyVersion,
+                StringComparison.Ordinal),
+            null, null,
+            "The authoritative portfolio snapshot must use the requested risk policy version.");
 
         AddCheck(checks, "CANONICAL_CANDIDATE_REQUIRED",
             string.Equals(request.Candidate.Status, ThesisFusionContractV1.CandidateStatus, StringComparison.Ordinal) &&
@@ -59,6 +67,33 @@ public sealed class DeterministicRiskDecisionEngine : IRiskDecisionEngine
             _policy.AllowedEnvironments.Contains(request.Portfolio.Environment, StringComparer.OrdinalIgnoreCase),
             null, null,
             $"Environment '{request.Portfolio.Environment}' is not enabled by this risk policy.");
+
+        var operatingMode = request.Portfolio.OperatingMode.Trim().ToUpperInvariant();
+        var recognizedMode = operatingMode is
+            PortfolioRiskControlContractV1.Normal or
+            PortfolioRiskControlContractV1.Restricted or
+            PortfolioRiskControlContractV1.CloseOnly or
+            PortfolioRiskControlContractV1.Paused or
+            PortfolioRiskControlContractV1.Halted;
+        AddCheck(checks, "PORTFOLIO_OPERATING_MODE_RECOGNIZED",
+            recognizedMode,
+            null, null,
+            $"Portfolio operating mode '{request.Portfolio.OperatingMode}' is not recognized.");
+        AddCheck(checks, "PORTFOLIO_NEW_EXPOSURE_ALLOWED",
+            recognizedMode && !PortfolioRiskControlContractV1.BlocksNewExposure(operatingMode),
+            null, null,
+            $"Portfolio operating mode '{operatingMode}' blocks new exposure.");
+        AddCheck(checks, "PORTFOLIO_RISK_MULTIPLIER",
+            request.Portfolio.RiskMultiplier > 0m && request.Portfolio.RiskMultiplier <= 1m,
+            request.Portfolio.RiskMultiplier, 1m,
+            "The portfolio risk multiplier must be greater than zero and no greater than one.");
+        AddCheck(checks, "RESTRICTED_POSITION_CAPACITY",
+            operatingMode != PortfolioRiskControlContractV1.Restricted ||
+            !request.Portfolio.MaximumConcurrentNewPositions.HasValue ||
+            request.Portfolio.OpenPositionCount < request.Portfolio.MaximumConcurrentNewPositions.Value,
+            request.Portfolio.OpenPositionCount,
+            request.Portfolio.MaximumConcurrentNewPositions,
+            "The restricted-mode concurrent-position allowance is exhausted.");
 
         AddCheck(checks, "KILL_SWITCH_CLEAR", !request.Operations.KillSwitchActive, null, null, "Kill switch blocks every new exposure.");
         AddCheck(checks, "TRADING_NOT_HALTED", !request.Operations.TradingHalted, null, null, "Operational trading halt blocks every new exposure.");
@@ -119,7 +154,9 @@ public sealed class DeterministicRiskDecisionEngine : IRiskDecisionEngine
 
         var maximumDailyLossAmount = equity > 0 ? equity * _policy.MaximumDailyLossPercent / 100m : 0m;
         var remainingDailyLossCapacity = Math.Max(0m, maximumDailyLossAmount - dailyLossAmount);
-        var policyRiskAmount = equity > 0 ? equity * _policy.MaximumRiskPerTradePercent / 100m : 0m;
+        var policyRiskAmount = equity > 0
+            ? equity * _policy.MaximumRiskPerTradePercent / 100m * request.Portfolio.RiskMultiplier
+            : 0m;
         var maximumRiskAmount = Math.Min(policyRiskAmount, remainingDailyLossCapacity);
         var grossExposureCapacity = equity > 0
             ? Math.Max(0m, equity * _policy.MaximumGrossExposurePercent / 100m - request.Portfolio.GrossExposure)

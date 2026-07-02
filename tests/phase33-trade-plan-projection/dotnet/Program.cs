@@ -111,6 +111,8 @@ Run("invalid target fractions fail closed", () =>
     Contains("TARGET_FRACTIONS_INVALID", result.Reasons);
 });
 
+failures.AddRange(await WorkProcessorAcceptanceTests.RunAsync());
+
 if (failures.Count > 0)
 {
     foreach (var failure in failures) Console.Error.WriteLine(failure);

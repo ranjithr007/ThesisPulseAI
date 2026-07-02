@@ -138,10 +138,10 @@ public static class OptionChainIntelligenceEvaluator
             .StrikePrice;
     }
 
-    private static IReadOnlyCollection<OptionChainOiWallV1> CalculateWalls(
+    private static IReadOnlyCollection<OptionChainOpenInterestWallV1> CalculateWalls(
         IReadOnlyCollection<OptionChainExpiryInputV1> expiries)
     {
-        var walls = new List<OptionChainOiWallV1>();
+        var walls = new List<OptionChainOpenInterestWallV1>();
         foreach (var expiry in expiries.OrderBy(value => value.ExpiryDate))
         {
             var callWall = expiry.Strikes
@@ -155,13 +155,13 @@ public static class OptionChainIntelligenceEvaluator
                 .ThenBy(strike => strike.StrikePrice)
                 .First();
 
-            walls.Add(new OptionChainOiWallV1(
+            walls.Add(new OptionChainOpenInterestWallV1(
                 expiry.ExpiryDate,
                 callWall.StrikePrice,
                 "CALL",
                 callWall.CallOpenInterest,
                 DistanceFraction(callWall.StrikePrice, expiry.UnderlyingPrice)));
-            walls.Add(new OptionChainOiWallV1(
+            walls.Add(new OptionChainOpenInterestWallV1(
                 expiry.ExpiryDate,
                 putWall.StrikePrice,
                 "PUT",
@@ -231,7 +231,7 @@ public static class OptionChainIntelligenceEvaluator
             0m,
             0m,
             0m,
-            Array.Empty<OptionChainOiWallV1>(),
+            Array.Empty<OptionChainOpenInterestWallV1>(),
             Array.Empty<OptionChainStrikeActivityV1>(),
             Array.Empty<OptionChainIvStructureV1>(),
             Array.Empty<string>(),

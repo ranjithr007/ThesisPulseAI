@@ -81,10 +81,23 @@ if (submissionOptions.Enabled &&
         "Automatic PAPER submission requires SQL Server persistence.");
 }
 
+var fillOptions = builder.Configuration
+    .GetSection(AutomaticPaperFillOptions.SectionName)
+    .Get<AutomaticPaperFillOptions>() ?? new AutomaticPaperFillOptions();
+fillOptions.Validate();
+if (fillOptions.Enabled &&
+    !persistenceProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
+{
+    throw new InvalidOperationException(
+        "Automatic PAPER fill simulation requires SQL Server persistence.");
+}
+
 builder.Services.AddSingleton(automaticOptions);
 builder.Services.AddSingleton(submissionOptions);
+builder.Services.AddSingleton(fillOptions);
 builder.Services.AddSingleton<AutomaticPaperExecutionWorkerState>();
 builder.Services.AddSingleton<AutomaticPaperSubmissionWorkerState>();
+builder.Services.AddSingleton<AutomaticPaperFillWorkerState>();
 builder.Services.AddSingleton<IPaperExecutionService, PersistentPaperExecutionService>();
 
 if (automaticOptions.Enabled)
@@ -121,12 +134,31 @@ if (submissionOptions.Enabled)
     builder.Services.AddHostedService<AutomaticPaperSubmissionWorker>();
 }
 
+if (fillOptions.Enabled)
+{
+    builder.Services.AddSingleton<IAutomaticPaperFillCandidateStore,
+        SqlServerAutomaticPaperFillCandidateStore>();
+    builder.Services.AddSingleton<IAutomaticPaperFillWorkQueue,
+        SqlServerAutomaticPaperFillWorkQueue>();
+    builder.Services.AddHttpClient<IAutomaticPaperFillMarketDataProvider,
+        HttpAutomaticPaperFillMarketDataProvider>(client =>
+    {
+        client.BaseAddress = new Uri(fillOptions.MarketDataServiceBaseUrl);
+        client.Timeout = TimeSpan.FromSeconds(fillOptions.TimeoutSeconds);
+    });
+    builder.Services.AddSingleton<DeterministicPaperFillPolicy>();
+    builder.Services.AddSingleton<AutomaticPaperFillProcessor>();
+    builder.Services.AddHostedService<AutomaticPaperFillIntakeWorker>();
+    builder.Services.AddHostedService<AutomaticPaperFillWorker>();
+}
+
 var app = builder.Build();
 app.UseThesisPulsePlatformFoundation();
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Execution.Service");
 app.MapGet("/api/v1/status", (
     AutomaticPaperExecutionWorkerState automaticState,
-    AutomaticPaperSubmissionWorkerState submissionState) => Results.Ok(new
+    AutomaticPaperSubmissionWorkerState submissionState,
+    AutomaticPaperFillWorkerState fillState) => Results.Ok(new
 {
     mode = "PERSISTENT_PAPER_EXECUTION",
     environment = ExecutionCommandContractV1.PaperEnvironment,
@@ -148,10 +180,16 @@ app.MapGet("/api/v1/status", (
     automaticPaperSubmissionBatchSize = submissionOptions.BatchSize,
     automaticPaperSubmissionMaximumAttempts = submissionOptions.MaximumAttempts,
     automaticPaperSubmissionWorkerState = submissionState.Snapshot(),
+    automaticPaperFillAuthority = fillOptions.Enabled,
+    automaticPaperFillPolicyVersion = fillOptions.FillPolicyVersion,
+    automaticPaperFillPollIntervalSeconds = fillOptions.PollIntervalSeconds,
+    automaticPaperFillBatchSize = fillOptions.BatchSize,
+    automaticPaperFillWorkerState = fillState.Snapshot(),
+    automaticPartialFillAuthority = false,
+    portfolioMutationAuthority = false,
     paperGateway = "INTERNAL_DETERMINISTIC",
     brokerSubmissionAuthority = false,
     liveExecutionAuthority = false,
-    automaticFillAuthority = false,
     idempotencyRequired = true,
 }));
 app.MapGet(
@@ -160,6 +198,9 @@ app.MapGet(
 app.MapGet(
     "/api/v1/execution/automatic-submission/metrics",
     (AutomaticPaperSubmissionWorkerState state) => Results.Ok(state.Snapshot()));
+app.MapGet(
+    "/api/v1/execution/automatic-fill/metrics",
+    (AutomaticPaperFillWorkerState state) => Results.Ok(state.Snapshot()));
 app.MapPost("/api/v1/execution/commands", (
     ExecutionCommandRequestV1 request,
     IPaperExecutionService executionService) =>

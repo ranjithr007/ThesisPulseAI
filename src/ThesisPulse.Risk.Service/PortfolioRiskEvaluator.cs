@@ -4,7 +4,7 @@ namespace ThesisPulse.Risk.Service;
 
 public static class PortfolioRiskEvaluator
 {
-    public static PortfolioRiskSnapshotV1 Evaluate(PortfolioRiskEvaluationInputV1 input)
+    public static PortfolioRiskStateSnapshotV1 Evaluate(PortfolioRiskEvaluationInputV1 input)
     {
         ArgumentNullException.ThrowIfNull(input);
         Validate(input);
@@ -63,7 +63,7 @@ public static class PortfolioRiskEvaluator
 
         var newExposureAllowed = operatingMode is PortfolioRiskContractV1.Normal or PortfolioRiskContractV1.Restricted;
 
-        return new PortfolioRiskSnapshotV1(
+        return new PortfolioRiskStateSnapshotV1(
             RiskSnapshotUid: CreateDeterministicSnapshotUid(input),
             SourcePnlSnapshotUid: input.PnlSnapshotUid,
             PolicyUid: input.Policy.PolicyUid,

@@ -36,6 +36,8 @@ jobs:
         run: dotnet run --project tests/phase33-trade-plan-projection/dotnet/ThesisPulse.Phase33TradePlanProjection.Tests.csproj --configuration Release
       - name: Run deterministic execution regression
         run: dotnet run --project tests/execution/dotnet/ThesisPulse.Execution.Tests.csproj --configuration Release
+      - name: Run Market Data foundation regression
+        run: dotnet run --project tests/marketdata/dotnet/ThesisPulse.MarketData.Tests.csproj --configuration Release
       - name: Run database migrator regression
         run: dotnet run --project tests/database/dotnet/ThesisPulse.DatabaseMigrator.Tests.csproj --configuration Release
       - name: Upload Phase 3.6 diagnostics

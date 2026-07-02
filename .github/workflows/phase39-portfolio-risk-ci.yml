@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - main
+      - fix/phase37-main-integration-clean
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:

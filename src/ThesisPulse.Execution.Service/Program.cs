@@ -50,7 +50,8 @@ else if (persistenceProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreC
     };
     storeOptions.Validate();
     builder.Services.AddSingleton(storeOptions);
-    builder.Services.AddSingleton<IPaperExecutionLedgerStore, SqlServerPaperExecutionLedgerStore>();
+    builder.Services.AddSingleton<IPaperExecutionLedgerStore,
+        AuthoritativeSqlServerPaperExecutionLedgerStore>();
 }
 else
 {
@@ -109,6 +110,7 @@ app.MapGet("/api/v1/status", (AutomaticPaperExecutionWorkerState automaticState)
     automaticPlanReadyBatchSize = automaticOptions.BatchSize,
     automaticPlanReadyMaximumAttempts = automaticOptions.MaximumAttempts,
     automaticPlanReadyWorkerState = automaticState.Snapshot(),
+    automaticPaperSubmissionAuthority = false,
     brokerSubmissionAuthority = false,
     liveExecutionAuthority = false,
     automaticFillAuthority = false,

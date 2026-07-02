@@ -58,12 +58,41 @@ else
         $"Unsupported paper execution persistence provider '{persistenceProvider}'.");
 }
 
+var automaticOptions = builder.Configuration
+    .GetSection(AutomaticPaperExecutionOptions.SectionName)
+    .Get<AutomaticPaperExecutionOptions>() ?? new AutomaticPaperExecutionOptions();
+automaticOptions.Validate();
+if (automaticOptions.Enabled &&
+    !persistenceProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
+{
+    throw new InvalidOperationException(
+        "Automatic PLAN_READY-to-PAPER execution requires SQL Server persistence.");
+}
+builder.Services.AddSingleton(automaticOptions);
+builder.Services.AddSingleton<AutomaticPaperExecutionWorkerState>();
+
 builder.Services.AddSingleton<IPaperExecutionService, PersistentPaperExecutionService>();
+if (automaticOptions.Enabled)
+{
+    builder.Services.AddSingleton<IAutomaticPaperExecutionCandidateStore,
+        SqlServerAutomaticPaperExecutionCandidateStore>();
+    builder.Services.AddSingleton<IAutomaticPaperExecutionWorkQueue,
+        SqlServerAutomaticPaperExecutionWorkQueue>();
+    builder.Services.AddHttpClient<IAutomaticPaperExecutionContextProvider,
+        HttpAutomaticPaperExecutionContextProvider>(client =>
+    {
+        client.BaseAddress = new Uri(automaticOptions.OperationsServiceBaseUrl);
+        client.Timeout = TimeSpan.FromSeconds(automaticOptions.TimeoutSeconds);
+    });
+    builder.Services.AddSingleton<AutomaticPaperExecutionProcessor>();
+    builder.Services.AddHostedService<AutomaticPaperExecutionIntakeWorker>();
+    builder.Services.AddHostedService<AutomaticPaperExecutionWorker>();
+}
 
 var app = builder.Build();
 app.UseThesisPulsePlatformFoundation();
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Execution.Service");
-app.MapGet("/api/v1/status", () => Results.Ok(new
+app.MapGet("/api/v1/status", (AutomaticPaperExecutionWorkerState automaticState) => Results.Ok(new
 {
     mode = "PERSISTENT_PAPER_EXECUTION",
     environment = ExecutionCommandContractV1.PaperEnvironment,
@@ -73,11 +102,21 @@ app.MapGet("/api/v1/status", () => Results.Ok(new
         StringComparison.OrdinalIgnoreCase),
     acceptsReadyTradePlans = true,
     executionCommandAuthority = true,
+    paperOrderCreationAuthority = true,
     paperSubmissionAuthority = true,
+    automaticPlanReadyIntakeEnabled = automaticOptions.Enabled,
+    automaticPlanReadyPollIntervalSeconds = automaticOptions.PollIntervalSeconds,
+    automaticPlanReadyBatchSize = automaticOptions.BatchSize,
+    automaticPlanReadyMaximumAttempts = automaticOptions.MaximumAttempts,
+    automaticPlanReadyWorkerState = automaticState.Snapshot(),
     brokerSubmissionAuthority = false,
     liveExecutionAuthority = false,
+    automaticFillAuthority = false,
     idempotencyRequired = true,
 }));
+app.MapGet(
+    "/api/v1/execution/automatic/metrics",
+    (AutomaticPaperExecutionWorkerState state) => Results.Ok(state.Snapshot()));
 app.MapPost("/api/v1/execution/commands", (
     ExecutionCommandRequestV1 request,
     IPaperExecutionService executionService) =>

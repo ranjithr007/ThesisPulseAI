@@ -57,6 +57,7 @@ builder.Services.AddSingleton<AutomaticTradePlanCoordinator>();
 builder.Services.AddSingleton<ITradePlanBuilder, DeterministicTradePlanBuilder>();
 builder.Services.AddSingleton<SignalRiskWorkerState>();
 builder.Services.AddSingleton<AutomaticTradePlanWorkerState>();
+builder.Services.AddSingleton<AutomaticTradePlanWorkProcessor>();
 if (persistenceOptions.UseSqlServer)
 {
     builder.Services.AddSingleton<ISignalRiskEvaluationStore, SqlServerSignalRiskEvaluationStore>();

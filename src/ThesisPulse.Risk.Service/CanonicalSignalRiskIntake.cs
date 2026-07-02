@@ -120,22 +120,12 @@ public sealed class SqlServerCanonicalSignalRiskCandidateStore(
             var signal = JsonSerializer.Deserialize<SignalGeneratedV1>(reader.GetString(3), JsonOptions)
                 ?? throw new InvalidOperationException("Canonical signal payload could not be deserialized.");
             var lineage = new FusionSignalLineageV1(
-                reader.GetGuid(4),
-                reader.GetGuid(5),
-                reader.GetGuid(6),
-                reader.GetGuid(7),
-                reader.GetGuid(8),
-                reader.GetGuid(9),
-                reader.GetGuid(10),
-                reader.GetString(11),
-                reader.GetString(12),
-                reader.GetString(13));
+                reader.GetGuid(4), reader.GetGuid(5), reader.GetGuid(6), reader.GetGuid(7),
+                reader.GetGuid(8), reader.GetGuid(9), reader.GetGuid(10), reader.GetString(11),
+                reader.GetString(12), reader.GetString(13));
             candidates.Add(new CanonicalSignalRiskCandidate(
-                reader.GetGuid(0),
-                reader.GetGuid(1).ToString("D"),
-                reader.IsDBNull(2) ? null : reader.GetGuid(2),
-                signal,
-                lineage));
+                reader.GetGuid(0), reader.GetGuid(1).ToString("D"),
+                reader.IsDBNull(2) ? null : reader.GetGuid(2), signal, lineage));
         }
 
         return candidates;
@@ -169,9 +159,9 @@ public sealed class HttpCanonicalSignalRiskContextProvider(
 
 public sealed class CanonicalSignalRiskIntakeWorker(
     CanonicalSignalRiskIntakeOptions options,
+    SignalRiskPersistenceOptions persistenceOptions,
     ICanonicalSignalRiskCandidateStore candidateStore,
     ICanonicalSignalRiskContextProvider contextProvider,
-    ICanonicalPortfolioRiskStateStore portfolioRiskStateStore,
     ISignalRiskWorkQueue queue,
     ILogger<CanonicalSignalRiskIntakeWorker> logger) : BackgroundService
 {
@@ -212,9 +202,8 @@ public sealed class CanonicalSignalRiskIntakeWorker(
             return;
         }
 
-        var riskState = await portfolioRiskStateStore.ReadLatestAsync(
-            options.PortfolioCode,
-            cancellationToken);
+        var riskStateStore = new SqlServerCanonicalPortfolioRiskStateStore(persistenceOptions);
+        var riskState = await riskStateStore.ReadLatestAsync(options.PortfolioCode, cancellationToken);
         if (riskState is null)
         {
             logger.LogWarning(
@@ -252,13 +241,13 @@ public sealed class CanonicalSignalRiskIntakeWorker(
                 candidate.Lineage,
                 BuildPortfolio(portfolio, riskState),
                 new OperationalRiskStateV1(
-                    KillSwitchActive: riskState.OperatingMode == PortfolioRiskContractV1.Halted,
-                    TradingHalted: !riskState.NewExposureAllowed,
-                    MarketOpen: options.MarketOpen,
-                    MarketDataHealthy: options.MarketDataHealthy,
-                    PortfolioStateHealthy: options.PortfolioStateHealthy,
-                    BrokerConnectivityHealthy: options.BrokerConnectivityHealthy,
-                    ObservedAtUtc: now),
+                    riskState.OperatingMode == PortfolioRiskContractV1.Halted,
+                    !riskState.NewExposureAllowed,
+                    options.MarketOpen,
+                    options.MarketDataHealthy,
+                    options.PortfolioStateHealthy,
+                    options.BrokerConnectivityHealthy,
+                    now),
                 options.RiskPolicyVersion,
                 now);
             await queue.EnqueueAsync(intake, cancellationToken);

@@ -60,11 +60,6 @@ public sealed class DeterministicRiskDecisionEngine : IRiskDecisionEngine
             null, null,
             $"Environment '{request.Portfolio.Environment}' is not enabled by this risk policy.");
 
-        AddCheck(checks, "PORTFOLIO_RISK_SNAPSHOT_REQUIRED",
-            request.Portfolio.PortfolioRiskSnapshotUid is not null,
-            null, null,
-            "Canonical Signal-to-Risk intake requires authoritative portfolio risk state.");
-
         AddCheck(checks, "PORTFOLIO_OPERATING_MODE_ALLOWED",
             request.Portfolio.NewExposureAllowed &&
             request.Portfolio.OperatingMode is PortfolioRiskContractV1.Normal or PortfolioRiskContractV1.Restricted,

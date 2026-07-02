@@ -52,8 +52,7 @@ var automaticProjectionOptions = builder.Configuration
     .Get<AutomaticPortfolioFillProjectionOptions>()
     ?? new AutomaticPortfolioFillProjectionOptions();
 automaticProjectionOptions.Validate();
-if (automaticProjectionOptions.Enabled &&
-    !persistenceProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
+if (automaticProjectionOptions.Enabled && !sqlServerPersistence)
 {
     throw new InvalidOperationException(
         "Automatic PAPER fill portfolio projection requires SQL Server persistence.");
@@ -70,6 +69,37 @@ if (automaticProjectionOptions.Enabled)
     builder.Services.AddSingleton<AutomaticPortfolioFillProjectionProcessor>();
     builder.Services.AddHostedService<AutomaticPortfolioFillProjectionIntakeWorker>();
     builder.Services.AddHostedService<AutomaticPortfolioFillProjectionWorker>();
+}
+
+var automaticValuationOptions = builder.Configuration
+    .GetSection(AutomaticPaperValuationOptions.SectionName)
+    .Get<AutomaticPaperValuationOptions>()
+    ?? new AutomaticPaperValuationOptions();
+automaticValuationOptions.Validate();
+if (automaticValuationOptions.Enabled && !sqlServerPersistence)
+{
+    throw new InvalidOperationException(
+        "Automatic PAPER valuation requires SQL Server persistence.");
+}
+
+builder.Services.AddSingleton(automaticValuationOptions);
+builder.Services.AddSingleton<AutomaticPaperValuationWorkerState>();
+builder.Services.AddSingleton<DeterministicPaperValuationPolicy>();
+if (automaticValuationOptions.Enabled)
+{
+    builder.Services.AddSingleton<IAutomaticPaperValuationCandidateStore,
+        SqlServerAutomaticPaperValuationCandidateStore>();
+    builder.Services.AddSingleton<IAutomaticPaperValuationWorkQueue,
+        SqlServerAutomaticPaperValuationWorkQueue>();
+    builder.Services.AddSingleton<AutomaticPaperValuationProcessor>();
+    builder.Services.AddHttpClient<IAutomaticPaperValuationMarketDataProvider,
+        HttpAutomaticPaperValuationMarketDataProvider>(client =>
+    {
+        client.BaseAddress = new Uri(automaticValuationOptions.MarketDataServiceBaseUrl);
+        client.Timeout = TimeSpan.FromSeconds(automaticValuationOptions.TimeoutSeconds);
+    });
+    builder.Services.AddHostedService<AutomaticPaperValuationIntakeWorker>();
+    builder.Services.AddHostedService<AutomaticPaperValuationWorker>();
 }
 
 var app = builder.Build();
@@ -104,8 +134,6 @@ app.MapGet("/api/v1/status", (
     drawdownEnforcementAuthority = false,
     reconciliationAuthority = true,
     automaticCorrectionAuthority = false,
-    valuationAuthority = false,
-    markToMarketAuthority = false,
     marginAuthority = false,
     settlementAuthority = false,
     exitOrderAuthority = false,

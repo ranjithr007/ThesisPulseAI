@@ -129,7 +129,7 @@ public sealed class AutomaticPortfolioRiskProcessor(
     IAutomaticPortfolioRiskWorkQueue queue,
     AutomaticPortfolioRiskOptions options)
 {
-    public async Task ProcessAsync(
+    public async Task<string> ProcessAsync(
         AutomaticPortfolioRiskWorkItem workItem,
         CancellationToken cancellationToken)
     {
@@ -142,7 +142,7 @@ public sealed class AutomaticPortfolioRiskProcessor(
                     workItem.WorkItemId,
                     "PORTFOLIO_RISK_CONTEXT_NOT_FOUND_OR_CHANGED",
                     cancellationToken);
-                return;
+                return AutomaticPortfolioRiskStatus.Failed;
             }
 
             if (DateTimeOffset.UtcNow - input.SourceAsOfUtc >
@@ -152,7 +152,7 @@ public sealed class AutomaticPortfolioRiskProcessor(
                     workItem.WorkItemId,
                     "PORTFOLIO_PNL_SNAPSHOT_STALE",
                     cancellationToken);
-                return;
+                return AutomaticPortfolioRiskStatus.Failed;
             }
 
             var snapshot = PortfolioRiskEvaluator.Evaluate(input);
@@ -162,6 +162,7 @@ public sealed class AutomaticPortfolioRiskProcessor(
                 persisted.Outcome,
                 persisted.RiskSnapshotUid,
                 cancellationToken);
+            return persisted.Outcome;
         }
         catch (Exception exception) when (
             exception is not OperationCanceledException &&
@@ -173,10 +174,12 @@ public sealed class AutomaticPortfolioRiskProcessor(
                 exception.Message,
                 DateTimeOffset.UtcNow.AddSeconds(delaySeconds),
                 cancellationToken);
+            return AutomaticPortfolioRiskStatus.RetryPending;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             await queue.FailAsync(workItem.WorkItemId, exception.Message, cancellationToken);
+            return AutomaticPortfolioRiskStatus.Failed;
         }
     }
 }

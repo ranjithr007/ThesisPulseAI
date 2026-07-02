@@ -1,13 +1,6 @@
 namespace ThesisPulse.Risk.Service;
 
-public sealed record AutomaticPortfolioRiskWorkerSnapshot(
-    long Discovered,
-    long Enqueued,
-    long Duplicates,
-    long Leased,
-    long Evaluated,
-    long Retried,
-    long Failed);
+public sealed record AutomaticPortfolioRiskWorkerSnapshot(long Discovered, long Enqueued, long Duplicates, long Leased, long Evaluated, long Retried, long Failed);
 
 public sealed class AutomaticPortfolioRiskWorkerState
 {
@@ -45,8 +38,7 @@ public sealed class AutomaticPortfolioRiskWorker(
     AutomaticPortfolioRiskWorkerState state,
     ILogger<AutomaticPortfolioRiskWorker> logger) : BackgroundService
 {
-    private readonly string _leaseOwner =
-        $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}";
+    private readonly string _leaseOwner = $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -66,28 +58,21 @@ public sealed class AutomaticPortfolioRiskWorker(
                 logger.LogError(exception, "Automatic portfolio risk worker cycle failed.");
             }
 
-            await Task.Delay(
-                TimeSpan.FromSeconds(options.PollIntervalSeconds),
-                stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(options.PollIntervalSeconds), stoppingToken);
         }
     }
 
     private async Task DiscoverAsync(CancellationToken cancellationToken)
     {
-        var candidates = await candidateStore.ReadPendingAsync(
-            options.BatchSize,
-            cancellationToken);
+        var candidates = await candidateStore.ReadPendingAsync(options.BatchSize, cancellationToken);
         state.Discovered(candidates.Count);
 
         foreach (var candidate in candidates)
         {
             var result = await queue.EnqueueAsync(candidate, cancellationToken);
-            if (result.Outcome == "ENQUEUED")
-                state.Enqueued();
-            else if (result.Outcome == AutomaticPortfolioRiskStatus.Duplicate)
-                state.Duplicate();
-            else
-                state.Failed();
+            if (result.Outcome == "ENQUEUED") state.Enqueued();
+            else if (result.Outcome == AutomaticPortfolioRiskStatus.Duplicate) state.Duplicate();
+            else state.Failed();
         }
     }
 
@@ -104,8 +89,11 @@ public sealed class AutomaticPortfolioRiskWorker(
         {
             try
             {
-                await processor.ProcessAsync(workItem, cancellationToken);
-                state.Evaluated();
+                var outcome = await processor.ProcessAsync(workItem, cancellationToken);
+                if (outcome == AutomaticPortfolioRiskStatus.Evaluated) state.Evaluated();
+                else if (outcome == AutomaticPortfolioRiskStatus.Duplicate) state.Duplicate();
+                else if (outcome == AutomaticPortfolioRiskStatus.RetryPending) state.Retried();
+                else state.Failed();
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -114,10 +102,7 @@ public sealed class AutomaticPortfolioRiskWorker(
             catch (Exception exception)
             {
                 state.Failed();
-                logger.LogError(
-                    exception,
-                    "Portfolio risk work item {WorkItemId} failed outside processor handling.",
-                    workItem.WorkItemId);
+                logger.LogError(exception, "Portfolio risk work item {WorkItemId} failed outside processor handling.", workItem.WorkItemId);
             }
         }
     }

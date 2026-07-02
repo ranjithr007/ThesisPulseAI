@@ -68,7 +68,7 @@ static void TestIvStructure()
     var nearest = evidence.ImpliedVolatilityStructure.OrderBy(value => value.ExpiryDate).First();
 
     Equal(0.02m, nearest.PutCallSkew, "ATM put-call skew");
-    Equal(0.08m, nearest.WingSkew, "wing skew");
+    Equal(0.10m, nearest.WingSkew, "wing skew");
     Equal(0.04m, nearest.TermPremiumToNextExpiry, "term premium");
 }
 

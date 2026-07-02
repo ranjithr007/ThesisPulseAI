@@ -79,7 +79,9 @@ public sealed class SqlServerAutomaticPortfolioFillProjectionCandidateStore(
                 if (status is not "ACTIVE" and not "RESTRICTED" and not "CLOSE_ONLY")
                     reasons.Add("PAPER_PORTFOLIO_NOT_POSTABLE");
                 var effectiveFromUtc = ReadUtc(reader, 8);
-                var effectiveToUtc = reader.IsDBNull(9) ? null : ReadUtc(reader, 9);
+                DateTimeOffset? effectiveToUtc = reader.IsDBNull(9)
+                    ? null
+                    : ReadUtc(reader, 9);
                 if (fillAtUtc < effectiveFromUtc ||
                     (effectiveToUtc.HasValue && fillAtUtc >= effectiveToUtc.Value))
                     reasons.Add("PAPER_PORTFOLIO_EFFECTIVE_WINDOW_INVALID");

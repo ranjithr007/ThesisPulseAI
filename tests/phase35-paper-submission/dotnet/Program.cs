@@ -310,7 +310,7 @@ static SubmissionFixture CreateFixture()
         $"phase35:{plan.TradePlanUid:N}",
         plan.CorrelationId,
         plan,
-        HealthyOperations(now),
+        HealthyOperationsAt(now),
         plan.ExecutionPolicyVersion,
         now));
     if (result.Status != ExecutionCommandContractV1.Authorized)
@@ -398,9 +398,9 @@ static TradePlanV1 CreatePlan(DateTimeOffset now)
 }
 
 static ExecutionOperationalStateV1 HealthyOperations() =>
-    HealthyOperations(DateTimeOffset.UtcNow);
+    HealthyOperationsAt(DateTimeOffset.UtcNow);
 
-static ExecutionOperationalStateV1 HealthyOperations(DateTimeOffset observedAtUtc) => new(
+static ExecutionOperationalStateV1 HealthyOperationsAt(DateTimeOffset observedAtUtc) => new(
     false,
     false,
     true,

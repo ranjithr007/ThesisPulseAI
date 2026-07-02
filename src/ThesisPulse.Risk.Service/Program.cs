@@ -56,6 +56,7 @@ builder.Services.AddSingleton<IAutomaticTradePlanLifecycleStore, InMemoryAutomat
 builder.Services.AddSingleton<AutomaticTradePlanCoordinator>();
 builder.Services.AddSingleton<ITradePlanBuilder, DeterministicTradePlanBuilder>();
 builder.Services.AddSingleton<SignalRiskWorkerState>();
+builder.Services.AddSingleton<AutomaticTradePlanWorkerState>();
 if (persistenceOptions.UseSqlServer)
 {
     builder.Services.AddSingleton<ISignalRiskEvaluationStore, SqlServerSignalRiskEvaluationStore>();
@@ -66,11 +67,13 @@ if (persistenceOptions.UseSqlServer)
     builder.Services.AddSingleton<IAutomaticTradePlanCandidateStore, SqlServerAutomaticTradePlanCandidateStore>();
     builder.Services.AddSingleton<IAutomaticTradePlanWorkQueue, SqlServerAutomaticTradePlanWorkQueue>();
     builder.Services.AddSingleton<IAutomaticTradePlanResultStore, SqlServerAutomaticTradePlanResultStore>();
+    builder.Services.AddSingleton<IAutomaticTradePlanMetricsStore, SqlServerAutomaticTradePlanMetricsStore>();
 }
 else
 {
     builder.Services.AddSingleton<ISignalRiskEvaluationStore, InMemorySignalRiskEvaluationStore>();
     builder.Services.AddSingleton<ISignalRiskMetricsStore, InMemorySignalRiskMetricsStore>();
+    builder.Services.AddSingleton<IAutomaticTradePlanMetricsStore, InMemoryAutomaticTradePlanMetricsStore>();
 }
 builder.Services.AddSingleton<SignalRiskCoordinator>();
 if (workerOptions.Enabled)
@@ -89,7 +92,9 @@ if (tradePlanIntakeOptions.Enabled)
 var app = builder.Build();
 app.UseThesisPulsePlatformFoundation();
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Risk.Service");
-app.MapGet("/api/v1/status", (SignalRiskWorkerState workerState) => Results.Ok(new
+app.MapGet("/api/v1/status", (
+    SignalRiskWorkerState workerState,
+    AutomaticTradePlanWorkerState tradePlanState) => Results.Ok(new
 {
     mode = "DETERMINISTIC_RISK_AND_TRADE_PLAN",
     environment = "PAPER",
@@ -106,6 +111,7 @@ app.MapGet("/api/v1/status", (SignalRiskWorkerState workerState) => Results.Ok(n
     automaticTradePlanWorkerPollIntervalSeconds = tradePlanWorkerOptions.PollIntervalSeconds,
     automaticTradePlanWorkerBatchSize = tradePlanWorkerOptions.BatchSize,
     automaticTradePlanWorkerMaximumAttempts = tradePlanWorkerOptions.MaximumAttempts,
+    automaticTradePlanWorkerState = tradePlanState.Snapshot(),
     automaticRiskWorkerEnabled = workerOptions.Enabled,
     automaticCanonicalSignalIntakeEnabled = canonicalIntakeOptions.Enabled,
     automaticRiskWorkerPollIntervalSeconds = workerOptions.PollIntervalSeconds,
@@ -123,6 +129,10 @@ app.MapGet("/api/v1/status", (SignalRiskWorkerState workerState) => Results.Ok(n
 }));
 app.MapGet("/api/v1/risk/operations/metrics", async (
     ISignalRiskMetricsStore metricsStore,
+    CancellationToken cancellationToken) =>
+    Results.Ok(await metricsStore.ReadAsync(cancellationToken)));
+app.MapGet("/api/v1/trade-plans/operations/metrics", async (
+    IAutomaticTradePlanMetricsStore metricsStore,
     CancellationToken cancellationToken) =>
     Results.Ok(await metricsStore.ReadAsync(cancellationToken)));
 app.MapPost("/api/v1/risk/signal-intake/project", (

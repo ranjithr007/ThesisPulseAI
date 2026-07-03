@@ -1,0 +1,28 @@
+name: Phase 5.4 UI CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [phase54-pnl-ui]
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend-react
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend-react/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build

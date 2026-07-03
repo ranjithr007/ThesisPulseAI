@@ -1,0 +1,36 @@
+name: Phase 4.15 Database Scheduler Leases CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [phase415-db-scheduler-leases]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore ThesisPulseAI.sln
+      - run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore
+      - name: Verify multi-instance lease and run history safety
+        shell: bash
+        run: |
+          grep -F 'WITH (HOLDLOCK)' src/ThesisPulse.Signal.Service/SqlServerOptionChainSchedulerStore.cs
+          grep -F 'expires_at_utc <= @observed_at_utc' src/ThesisPulse.Signal.Service/SqlServerOptionChainSchedulerStore.cs
+          grep -F 'SKIPPED_LEASE_HELD' src/ThesisPulse.Signal.Service/OptionChainSqlOperationsHosting.cs
+          grep -F 'LastSuccessfulRunUtc' src/ThesisPulse.Signal.Service/OptionChainSqlOperationsHosting.cs
+          grep -F 'option_chain_scheduler_runs' database/migrations/phase414_option_chain_rollout_operations.sql
+          grep -F 'selection_authority = 0 AND execution_authority = 0' database/migrations/phase414_option_chain_rollout_operations.sql
+      - name: Phase 4.14 regression
+        shell: bash
+        run: |
+          grep -F 'IsolationLevel.Serializable' src/ThesisPulse.Signal.Service/SqlServerOptionChainRolloutAuditStore.cs
+          grep -F 'RestoreAsync' src/ThesisPulse.Signal.Service/OptionChainSqlOperationsHosting.cs

@@ -1,0 +1,37 @@
+name: Phase 4.16 Fail-Closed Readiness CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [phase416-fail-closed-readiness]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore ThesisPulseAI.sln
+      - run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore
+      - name: Verify fail-closed readiness
+        shell: bash
+        run: |
+          grep -F "OBJECT_ID('intelligence.option_chain_rollout_audit', 'U')" src/ThesisPulse.Signal.Service/OptionChainSqlReadiness.cs
+          grep -F "OBJECT_ID('intelligence.option_chain_scheduler_leases', 'U')" src/ThesisPulse.Signal.Service/OptionChainSqlReadiness.cs
+          grep -F "OBJECT_ID('intelligence.option_chain_scheduler_runs', 'U')" src/ThesisPulse.Signal.Service/OptionChainSqlReadiness.cs
+          grep -F 'StatusCodes.Status503ServiceUnavailable' src/ThesisPulse.Signal.Service/OptionChainSqlReadiness.cs
+          grep -F 'schedulerHeartbeatFresh' src/ThesisPulse.Signal.Service/OptionChainSqlReadiness.cs
+          grep -F 'selectionAuthority' src/ThesisPulse.Signal.Service/OptionChainSqlReadiness.cs
+          grep -F 'executionAuthority' src/ThesisPulse.Signal.Service/OptionChainSqlReadiness.cs
+      - name: Phase 4.15 regression
+        shell: bash
+        run: |
+          grep -F 'WITH (HOLDLOCK)' src/ThesisPulse.Signal.Service/SqlServerOptionChainSchedulerStore.cs
+          grep -F 'SKIPPED_LEASE_HELD' src/ThesisPulse.Signal.Service/OptionChainSqlOperationsHosting.cs

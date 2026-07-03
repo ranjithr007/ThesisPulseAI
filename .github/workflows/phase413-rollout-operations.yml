@@ -1,0 +1,26 @@
+name: Phase 4.13 Rollout Operations CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feature/phase413-durable-rollout-audit]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore ThesisPulseAI.sln
+      - run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore
+      - run: grep -F 'STALE_ROLLOUT_VERSION' src/ThesisPulse.Signal.Service/OptionChainRolloutOperations.cs
+      - run: grep -F 'TryAcquireGuardrail' src/ThesisPulse.Signal.Service/OptionChainRolloutOperations.cs
+      - run: grep -F 'TryAcquireReconciliation' src/ThesisPulse.Signal.Service/OptionChainRolloutOperations.cs
+      - run: grep -F 'SelectionAuthority' src/ThesisPulse.Signal.Service/OptionChainRolloutOperations.cs
+      - run: grep -F 'ExecutionAuthority' src/ThesisPulse.Signal.Service/OptionChainRolloutOperations.cs

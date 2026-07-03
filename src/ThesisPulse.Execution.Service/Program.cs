@@ -3,6 +3,8 @@ using ThesisPulse.Shared.Contracts.Execution.V1;
 using ThesisPulse.Shared.Infrastructure.Execution;
 using ThesisPulse.Shared.Observability.Hosting;
 
+const string frontendCorsPolicy = "Frontend";
+
 var builder = WebApplication.CreateBuilder(args);
 var requestedEnvironment = builder.Configuration["Platform:Environment"] ?? "PAPER";
 var liveExecutionEnabled = builder.Configuration.GetValue<bool>("Platform:LiveExecutionEnabled");
@@ -13,8 +15,28 @@ if (!string.Equals(requestedEnvironment, "PAPER", StringComparison.OrdinalIgnore
         "Phase 1 Execution Service must run in PAPER mode with live execution disabled.");
 }
 
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .GetChildren()
+    .Select(item => item.Value)
+    .Where(value => !string.IsNullOrWhiteSpace(value))
+    .Cast<string>()
+    .ToArray();
+if (allowedOrigins.Length == 0)
+    allowedOrigins = ["http://localhost:5173"];
+
 builder.Configuration["Platform:ConfigurationVersion"] ??= "platform-foundation-v1.0.0";
 builder.Services.AddThesisPulsePlatformFoundation();
+builder.Services.AddProblemDetails();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(frontendCorsPolicy, policy =>
+    {
+        policy.WithOrigins(allowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 builder.Services.Configure<DeterministicPaperExecutionOptions>(
     builder.Configuration.GetSection(DeterministicPaperExecutionOptions.SectionName));
 builder.Services.AddSingleton<DeterministicPaperExecutionService>();
@@ -163,7 +185,9 @@ if (fillOptions.Enabled)
 }
 
 var app = builder.Build();
+app.UseExceptionHandler();
 app.UseThesisPulsePlatformFoundation();
+app.UseCors(frontendCorsPolicy);
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Execution.Service");
 app.MapPaperTradeLifecycleEndpoints();
 app.MapGet("/api/v1/status", (

@@ -23,6 +23,7 @@ export function classifyLifecycleDetail(
 export function lifecycleTone(status: string): LifecycleTone {
   const normalized = status.toUpperCase();
   if (
+    normalized === "PASS" ||
     normalized === "COMPLETE" ||
     normalized === "VALUED" ||
     normalized === "FILLED" ||
@@ -36,6 +37,7 @@ export function lifecycleTone(status: string): LifecycleTone {
     return "positive";
   }
   if (
+    normalized === "FAIL" ||
     normalized === "REJECTED" ||
     normalized === "FAILED" ||
     normalized === "EXPIRED" ||
@@ -45,6 +47,7 @@ export function lifecycleTone(status: string): LifecycleTone {
     return "negative";
   }
   if (
+    normalized === "INCOMPLETE" ||
     normalized === "PARTIAL_LINEAGE" ||
     normalized === "STALE" ||
     normalized === "RETRY_PENDING" ||

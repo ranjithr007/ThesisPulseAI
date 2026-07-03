@@ -5,23 +5,17 @@ export type AppRoute =
   | { page: "signals" }
   | { page: "signal-detail"; signalUid: string }
   | { page: "theses" }
+  | { page: "risk" }
   | { page: "operations" };
 
 function parseHash(hash: string): AppRoute {
   const normalized = hash.replace(/^#/, "");
   const segments = normalized.split("/").filter(Boolean);
 
-  if (segments[0] === "market") {
-    return { page: "market" };
-  }
-
-  if (segments[0] === "theses") {
-    return { page: "theses" };
-  }
-
-  if (segments[0] === "operations") {
-    return { page: "operations" };
-  }
+  if (segments[0] === "market") return { page: "market" };
+  if (segments[0] === "theses") return { page: "theses" };
+  if (segments[0] === "risk") return { page: "risk" };
+  if (segments[0] === "operations") return { page: "operations" };
 
   if (segments[0] === "signals" && segments[1]) {
     return {
@@ -30,10 +24,7 @@ function parseHash(hash: string): AppRoute {
     };
   }
 
-  if (segments[0] === "signals") {
-    return { page: "signals" };
-  }
-
+  if (segments[0] === "signals") return { page: "signals" };
   return { page: "market" };
 }
 
@@ -43,6 +34,8 @@ function routeToHash(route: AppRoute): string {
       return "#/market";
     case "theses":
       return "#/theses";
+    case "risk":
+      return "#/risk";
     case "operations":
       return "#/operations";
     case "signal-detail":

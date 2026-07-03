@@ -66,3 +66,8 @@
 /.vs/VSWorkspaceState.json
 /src/ThesisPulse.Infrastructure.Brokers.Upstox/bin/Debug/net8.0
 /.vs/ProjectEvaluation
+
+# Local Phase 5 development runtime and user-specific frontend overrides.
+/.thesispulse-dev/
+/frontend-react/.env.local
+/frontend-react/.env.*.local

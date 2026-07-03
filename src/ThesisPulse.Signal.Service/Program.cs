@@ -53,6 +53,7 @@ app.MapSignalMaintenance();
 app.MapMarketDataConsumerEndpoints();
 app.MapOptionChainFusionAuditEndpoints();
 app.MapOptionChainWorkerEndpoints();
+app.MapOptionChainProductionReadiness();
 app.MapHealthChecks("/health/ready");
 
 app.MapGet("/api/v1/status", (
@@ -89,6 +90,8 @@ app.MapGet("/api/v1/status", (
     optionChainPythonServiceBaseUrl = optionChainRuntime.PythonServiceBaseUrl,
     optionChainPythonRequestTimeoutSeconds = optionChainRuntime.PythonRequestTimeoutSeconds,
     optionChainPythonBrokerCode = optionChainRuntime.PythonBrokerCode,
+    optionChainActivationMode = configuration["ProductionActivation:Mode"] ?? "DISABLED",
+    optionChainOperationalSmokeEnabled = configuration.GetValue("ProductionActivation:OperationalSmokeEnabled", false),
     optionChainSelectionAuthority = false,
     optionChainExecutionAuthority = false,
     signalPersistence = configuration["SignalPersistence:Provider"] ?? "InMemory",

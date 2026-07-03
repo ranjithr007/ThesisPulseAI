@@ -31,6 +31,10 @@ Assert-Configuration -Condition (@($services | Group-Object Port | Where-Object 
 Assert-Configuration -Condition (-not ($services.Port -contains $frontend.Port)) `
     -Message "The frontend port must not collide with a backend service port."
 
+$proxiedServices = @($services | Where-Object { $null -ne $_.FrontendVariable })
+Assert-Configuration -Condition (@($proxiedServices | Group-Object FrontendPath | Where-Object Count -gt 1).Count -eq 0) `
+    -Message "Frontend proxy paths must be unique."
+
 foreach ($service in $services) {
     Assert-Configuration -Condition (Test-Path -LiteralPath (Join-Path $repositoryRoot $service.Project) -PathType Leaf) `
         -Message "Missing project file: $($service.Project)"
@@ -38,6 +42,10 @@ foreach ($service in $services) {
         -Message "Invalid port for $($service.Name): $($service.Port)"
     Assert-Configuration -Condition ($service.HealthPath -eq "/health/ready") `
         -Message "$($service.Name) must use the standard /health/ready endpoint."
+    if ($null -ne $service.FrontendVariable) {
+        Assert-Configuration -Condition ($service.FrontendPath.StartsWith("/local/")) `
+            -Message "$($service.Name) must use a /local/* same-origin proxy path."
+    }
 }
 
 $environmentPath = Join-Path $repositoryRoot "frontend-react/.env.development"
@@ -58,14 +66,28 @@ if (Test-Path -LiteralPath $environmentPath -PathType Leaf) {
     }
 }
 
-foreach ($service in $services | Where-Object { $null -ne $_.FrontendVariable }) {
-    $expected = Get-ThesisPulseServiceUrl -Service $service
+$viteConfigurationPath = Join-Path $repositoryRoot "frontend-react/vite.config.ts"
+$viteConfiguration = if (Test-Path -LiteralPath $viteConfigurationPath -PathType Leaf) {
+    Get-Content -LiteralPath $viteConfigurationPath -Raw
+} else {
+    ""
+}
+Assert-Configuration -Condition (-not [string]::IsNullOrWhiteSpace($viteConfiguration)) `
+    -Message "frontend-react/vite.config.ts is missing or empty."
+
+foreach ($service in $proxiedServices) {
+    $expectedPath = $service.FrontendPath
+    $expectedTarget = Get-ThesisPulseServiceUrl -Service $service
     Assert-Configuration -Condition ($environmentValues.ContainsKey($service.FrontendVariable)) `
         -Message "Missing frontend variable $($service.FrontendVariable)."
     if ($environmentValues.ContainsKey($service.FrontendVariable)) {
-        Assert-Configuration -Condition ($environmentValues[$service.FrontendVariable] -eq $expected) `
-            -Message "$($service.FrontendVariable) must equal $expected."
+        Assert-Configuration -Condition ($environmentValues[$service.FrontendVariable] -eq $expectedPath) `
+            -Message "$($service.FrontendVariable) must equal $expectedPath."
     }
+    Assert-Configuration -Condition ($viteConfiguration.Contains("`"$expectedPath`"")) `
+        -Message "Vite proxy configuration is missing path $expectedPath."
+    Assert-Configuration -Condition ($viteConfiguration.Contains("`"$expectedTarget`"")) `
+        -Message "Vite proxy configuration is missing target $expectedTarget."
 }
 
 $requiredFrontendValues = @{
@@ -109,5 +131,5 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host "Phase 5.6 development configuration validation passed."
-Write-Host "Validated $($services.Count) backend services, one frontend, unique ports, typed endpoints, and PowerShell syntax."
+Write-Host "Validated $($services.Count) backend services, one frontend, unique ports, proxy paths, canonical targets, and PowerShell syntax."
 exit 0

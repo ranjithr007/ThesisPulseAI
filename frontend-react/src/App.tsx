@@ -1,5 +1,6 @@
 import { MarketCommandCenter } from "./market/MarketCommandCenter";
 import { OperationsDashboard } from "./operations/OperationsDashboard";
+import { RiskReadinessWorkspace } from "./risk/RiskReadinessWorkspace";
 import { useAppRoute } from "./routing/useAppRoute";
 import { SignalDetail } from "./signals/SignalDetail";
 import { SignalScanner } from "./signals/SignalScanner";
@@ -22,9 +23,11 @@ export function App() {
       ? "Market"
       : route.page === "theses"
         ? "Theses"
-        : route.page === "operations"
-          ? "Operations"
-          : "Signals";
+        : route.page === "risk"
+          ? "Risk"
+          : route.page === "operations"
+            ? "Operations"
+            : "Signals";
 
   return (
     <div className="app-shell">
@@ -51,6 +54,7 @@ export function App() {
                 item === "Market" ||
                 item === "Signals" ||
                 item === "Theses" ||
+                item === "Risk" ||
                 item === "Operations";
 
               return (
@@ -62,15 +66,11 @@ export function App() {
                   aria-disabled={!supported}
                   title={supported ? undefined : "Planned for a later Phase 5 slice"}
                   onClick={() => {
-                    if (item === "Market") {
-                      navigate({ page: "market" });
-                    } else if (item === "Signals") {
-                      navigate({ page: "signals" });
-                    } else if (item === "Theses") {
-                      navigate({ page: "theses" });
-                    } else if (item === "Operations") {
-                      navigate({ page: "operations" });
-                    }
+                    if (item === "Market") navigate({ page: "market" });
+                    else if (item === "Signals") navigate({ page: "signals" });
+                    else if (item === "Theses") navigate({ page: "theses" });
+                    else if (item === "Risk") navigate({ page: "risk" });
+                    else if (item === "Operations") navigate({ page: "operations" });
                   }}
                 >
                   {item}
@@ -94,6 +94,7 @@ export function App() {
             />
           ) : null}
           {route.page === "theses" ? <ThesisReadinessWorkspace /> : null}
+          {route.page === "risk" ? <RiskReadinessWorkspace /> : null}
           {route.page === "operations" ? <OperationsDashboard /> : null}
         </main>
       </div>

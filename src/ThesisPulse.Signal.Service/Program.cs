@@ -32,6 +32,7 @@ builder.Services.AddSignalMaintenance(builder.Configuration);
 builder.Services.AddOptionChainFusionRuntime(builder.Configuration);
 builder.Services.AddOptionChainCanaryRollout(builder.Configuration);
 builder.Services.AddOptionChainRollbackReconciliation(builder.Configuration);
+builder.Services.AddOptionChainOperations(builder.Configuration);
 builder.Services.AddSingleton<SignalIntakeCoordinator>();
 builder.Services.AddProblemDetails();
 builder.Services.AddCors(options =>
@@ -58,13 +59,16 @@ app.MapOptionChainWorkerEndpoints();
 app.MapOptionChainProductionReadiness();
 app.MapOptionChainCanaryRollout();
 app.MapOptionChainRollbackReconciliation();
+app.MapOptionChainOperations();
 app.MapHealthChecks("/health/ready");
 
 app.MapGet("/api/v1/status", (
     IConfiguration configuration,
     OptionChainRuntimeOptions optionChainRuntime,
     OptionChainCanaryOptions canaryOptions,
-    OptionChainRolloutState rolloutState) => Results.Ok(new
+    OptionChainRolloutState rolloutState,
+    OptionChainDurableRolloutCoordinator durableCoordinator,
+    OptionChainOperationsOptions operationsOptions) => Results.Ok(new
 {
     mode = "AUTHORITATIVE_SIGNAL_LIFECYCLE",
     environment = "PAPER",
@@ -100,6 +104,8 @@ app.MapGet("/api/v1/status", (
     optionChainOperationalSmokeEnabled = configuration.GetValue("ProductionActivation:OperationalSmokeEnabled", false),
     optionChainConfiguredRolloutMode = canaryOptions.ParsedMode.ToString().ToUpperInvariant(),
     optionChainRuntimeRolloutState = rolloutState.Snapshot(),
+    optionChainDurableRolloutState = durableCoordinator.Snapshot(),
+    optionChainSchedulerEnabled = operationsOptions.SchedulerEnabled,
     optionChainCanaryPercentage = canaryOptions.Percentage,
     optionChainSelectionAuthority = false,
     optionChainExecutionAuthority = false,

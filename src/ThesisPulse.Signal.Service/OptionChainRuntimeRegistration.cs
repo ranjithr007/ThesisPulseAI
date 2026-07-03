@@ -35,12 +35,26 @@ public sealed record OptionChainRuntimeOptions
 
     public int WorkerSnapshotMaximumAgeSeconds { get; init; } = 420;
 
+    public bool WorkerExecutionEnabled { get; init; }
+
+    public int WorkerExecutionPollIntervalSeconds { get; init; } = 5;
+
+    public int WorkerExecutionBatchSize { get; init; } = 25;
+
+    public string PythonServiceBaseUrl { get; init; } = "http://localhost:8000";
+
+    public string PythonInternalApiKey { get; init; } = string.Empty;
+
+    public int PythonRequestTimeoutSeconds { get; init; } = 30;
+
+    public string PythonBrokerCode { get; init; } = "UPSTOX";
+
     public void Validate()
     {
         if (!Enabled)
         {
-            if (WorkerDiscoveryEnabled)
-                throw new InvalidOperationException("Option-chain discovery cannot be enabled while the runtime is disabled.");
+            if (WorkerDiscoveryEnabled || WorkerExecutionEnabled)
+                throw new InvalidOperationException("Option-chain workers cannot be enabled while the runtime is disabled.");
             return;
         }
 
@@ -65,6 +79,19 @@ public sealed record OptionChainRuntimeOptions
             throw new InvalidOperationException("Option-chain worker batch size must be between 1 and 250.");
         if (WorkerSnapshotMaximumAgeSeconds is < 1 or > 86400)
             throw new InvalidOperationException("Option-chain worker snapshot maximum age must be between 1 and 86400 seconds.");
+        if (WorkerExecutionPollIntervalSeconds is < 1 or > 900)
+            throw new InvalidOperationException("Option-chain execution poll interval must be between 1 and 900 seconds.");
+        if (WorkerExecutionBatchSize is < 1 or > 250)
+            throw new InvalidOperationException("Option-chain execution batch size must be between 1 and 250.");
+        if (PythonRequestTimeoutSeconds is < 1 or > 300)
+            throw new InvalidOperationException("Option-chain Python request timeout must be between 1 and 300 seconds.");
+        ArgumentException.ThrowIfNullOrWhiteSpace(PythonBrokerCode);
+        if (WorkerExecutionEnabled)
+        {
+            if (!Uri.TryCreate(PythonServiceBaseUrl, UriKind.Absolute, out _))
+                throw new InvalidOperationException("Option-chain Python service base URL must be absolute.");
+            ArgumentException.ThrowIfNullOrWhiteSpace(PythonInternalApiKey);
+        }
     }
 }
 
@@ -87,8 +114,20 @@ public static class OptionChainRuntimeRegistration
         };
         intakeOptions.Validate();
 
+        var pythonOptions = new OptionChainPythonWorkerOptions
+        {
+            Enabled = runtime.Enabled && runtime.WorkerExecutionEnabled,
+            ServiceBaseUrl = runtime.PythonServiceBaseUrl,
+            InternalApiKey = runtime.PythonInternalApiKey,
+            RequestTimeoutSeconds = runtime.PythonRequestTimeoutSeconds,
+            PollIntervalSeconds = runtime.WorkerExecutionPollIntervalSeconds,
+            BatchSize = runtime.WorkerExecutionBatchSize,
+        };
+        pythonOptions.Validate();
+
         services.AddSingleton(runtime);
         services.AddSingleton(intakeOptions);
+        services.AddSingleton(pythonOptions);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(new OptionChainFusionEvidenceOptions
         {
@@ -102,12 +141,18 @@ public static class OptionChainRuntimeRegistration
             InitialRetryDelay = TimeSpan.FromSeconds(runtime.WorkerInitialRetrySeconds),
             MaximumRetryDelay = TimeSpan.FromSeconds(runtime.WorkerMaximumRetrySeconds),
         });
+        services.AddHttpClient(OptionChainPythonWorkHandler.HttpClientName, client =>
+        {
+            client.BaseAddress = new Uri(pythonOptions.ServiceBaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(pythonOptions.RequestTimeoutSeconds);
+        });
 
         if (!runtime.Enabled)
         {
             services.AddSingleton<IOptionChainIntelligenceOutputStore, DisabledOptionChainOutputStore>();
             services.AddSingleton<IOptionChainWorkQueue, InMemoryOptionChainWorkQueue>();
             services.AddSingleton<IOptionChainWorkCandidateSource, EmptyOptionChainWorkCandidateSource>();
+            services.AddSingleton<IOptionChainSnapshotDispatchSource, DisabledOptionChainSnapshotDispatchSource>();
         }
         else
         {
@@ -137,11 +182,30 @@ public static class OptionChainRuntimeRegistration
             {
                 services.AddSingleton<IOptionChainWorkCandidateSource, EmptyOptionChainWorkCandidateSource>();
             }
+
+            if (runtime.WorkerExecutionEnabled)
+            {
+                services.AddSingleton(new SqlServerOptionChainSnapshotDispatchSourceOptions
+                {
+                    ConnectionString = runtime.ConnectionString,
+                    BrokerCode = runtime.PythonBrokerCode,
+                    CommandTimeoutSeconds = runtime.CommandTimeoutSeconds,
+                });
+                services.AddSingleton<IOptionChainSnapshotDispatchSource, SqlServerOptionChainSnapshotDispatchSource>();
+            }
+            else
+            {
+                services.AddSingleton<IOptionChainSnapshotDispatchSource, DisabledOptionChainSnapshotDispatchSource>();
+            }
         }
 
         services.AddSingleton<OptionChainWorkIntakeState>();
         services.AddSingleton<OptionChainWorkIntake>();
         services.AddHostedService<OptionChainWorkIntakeWorker>();
+        services.AddSingleton<OptionChainExecutionState>();
+        services.AddSingleton<IOptionChainWorkHandler, OptionChainPythonWorkHandler>();
+        services.AddSingleton<OptionChainWorkerOrchestrator>();
+        services.AddHostedService<OptionChainExecutionWorker>();
         services.AddSingleton<IOptionChainFusionEvidenceProvider, OptionChainFusionEvidenceProvider>();
         services.AddSingleton<OptionChainFusionRequestComposer>();
         services.AddSingleton<OptionChainFusionRuntimeDiagnostics>();
@@ -175,7 +239,9 @@ public sealed class OptionChainRuntimeHealthCheck(
     OptionChainRuntimeOptions options,
     IOptionChainIntelligenceOutputStore store,
     IOptionChainWorkQueue queue,
-    IOptionChainWorkCandidateSource candidateSource) : IHealthCheck
+    IOptionChainWorkCandidateSource candidateSource,
+    IOptionChainSnapshotDispatchSource snapshotSource,
+    IOptionChainWorkHandler workHandler) : IHealthCheck
 {
     public Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
@@ -192,6 +258,10 @@ public sealed class OptionChainRuntimeHealthCheck(
                 return Task.FromResult(HealthCheckResult.Unhealthy("Configured SQL Server option-chain queue is not active."));
             if (options.WorkerDiscoveryEnabled && candidateSource is not SqlServerOptionChainWorkCandidateSource)
                 return Task.FromResult(HealthCheckResult.Unhealthy("Configured SQL Server option-chain discovery source is not active."));
+            if (options.WorkerExecutionEnabled && snapshotSource is not SqlServerOptionChainSnapshotDispatchSource)
+                return Task.FromResult(HealthCheckResult.Unhealthy("Configured SQL Server option-chain snapshot source is not active."));
+            if (options.WorkerExecutionEnabled && workHandler is not OptionChainPythonWorkHandler)
+                return Task.FromResult(HealthCheckResult.Unhealthy("Configured Python option-chain work handler is not active."));
             return Task.FromResult(HealthCheckResult.Healthy("Option-chain runtime configuration and DI wiring are valid."));
         }
         catch (Exception exception)

@@ -13,6 +13,11 @@ public static class OptionChainWorkerEndpoints
             return Results.Ok(metrics);
         });
 
+        endpoints.MapGet("/api/v1/internal/option-chain/intake/metrics", (
+            OptionChainWorkIntakeState state,
+            TimeProvider timeProvider) =>
+            Results.Ok(state.Snapshot(timeProvider.GetUtcNow())));
+
         endpoints.MapGet("/api/v1/internal/option-chain/evidence/latest/{instrumentKey}", async (
             string instrumentKey,
             DateTimeOffset? cutoffUtc,

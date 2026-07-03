@@ -51,6 +51,7 @@ app.MapSignalEndpoints();
 app.MapSignalDecisionProjectionEndpoints();
 app.MapSignalMaintenance();
 app.MapMarketDataConsumerEndpoints();
+app.MapOptionChainFusionAuditEndpoints();
 app.MapHealthChecks("/health/ready");
 
 app.MapGet("/api/v1/status", (

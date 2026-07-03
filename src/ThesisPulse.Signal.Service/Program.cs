@@ -52,6 +52,7 @@ app.MapSignalDecisionProjectionEndpoints();
 app.MapSignalMaintenance();
 app.MapMarketDataConsumerEndpoints();
 app.MapOptionChainFusionAuditEndpoints();
+app.MapOptionChainWorkerEndpoints();
 app.MapHealthChecks("/health/ready");
 
 app.MapGet("/api/v1/status", (
@@ -74,6 +75,10 @@ app.MapGet("/api/v1/status", (
     optionChainPersistence = optionChainRuntime.PersistenceProvider,
     optionChainMaximumAgeSeconds = optionChainRuntime.MaximumAgeSeconds,
     optionChainMinimumConfidence = optionChainRuntime.MinimumConfidence,
+    optionChainWorkerMaximumAttempts = optionChainRuntime.WorkerMaximumAttempts,
+    optionChainWorkerLeaseSeconds = optionChainRuntime.WorkerLeaseSeconds,
+    optionChainWorkerInitialRetrySeconds = optionChainRuntime.WorkerInitialRetrySeconds,
+    optionChainWorkerMaximumRetrySeconds = optionChainRuntime.WorkerMaximumRetrySeconds,
     optionChainSelectionAuthority = false,
     optionChainExecutionAuthority = false,
     signalPersistence = configuration["SignalPersistence:Provider"] ?? "InMemory",

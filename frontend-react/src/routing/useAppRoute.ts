@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 export type AppRoute =
+  | { page: "market" }
   | { page: "signals" }
   | { page: "signal-detail"; signalUid: string }
   | { page: "operations" };
@@ -8,6 +9,10 @@ export type AppRoute =
 function parseHash(hash: string): AppRoute {
   const normalized = hash.replace(/^#/, "");
   const segments = normalized.split("/").filter(Boolean);
+
+  if (segments[0] === "market") {
+    return { page: "market" };
+  }
 
   if (segments[0] === "operations") {
     return { page: "operations" };
@@ -20,11 +25,17 @@ function parseHash(hash: string): AppRoute {
     };
   }
 
-  return { page: "signals" };
+  if (segments[0] === "signals") {
+    return { page: "signals" };
+  }
+
+  return { page: "market" };
 }
 
 function routeToHash(route: AppRoute): string {
   switch (route.page) {
+    case "market":
+      return "#/market";
     case "operations":
       return "#/operations";
     case "signal-detail":
@@ -44,9 +55,9 @@ export function useAppRoute() {
     window.addEventListener("hashchange", handleHashChange);
 
     if (!window.location.hash) {
-      const defaultHash = routeToHash({ page: "signals" });
+      const defaultHash = routeToHash({ page: "market" });
       window.history.replaceState(null, "", defaultHash);
-      setRoute({ page: "signals" });
+      setRoute({ page: "market" });
     }
 
     return () => window.removeEventListener("hashchange", handleHashChange);

@@ -196,7 +196,7 @@ try {
 
     $frontend = Get-ThesisPulseFrontendDefinition
     foreach ($service in $services | Where-Object { -not [string]::IsNullOrWhiteSpace($_.FrontendVariable) }) {
-        [Environment]::SetEnvironmentVariable($service.FrontendVariable, (Get-ThesisPulseServiceUrl -Service $service), "Process")
+        [Environment]::SetEnvironmentVariable($service.FrontendVariable, $service.FrontendPath, "Process")
     }
     $env:VITE_PORTFOLIO_CODE = "PAPER-DEFAULT"
     $env:VITE_PORTFOLIO_CURRENCY = "INR"

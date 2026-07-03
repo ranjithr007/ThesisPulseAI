@@ -39,8 +39,8 @@ public static class OptionChainWorkerEndpoints
                 envelope.Output.Direction,
                 envelope.Output.Score,
                 envelope.Output.Confidence,
-                envelope.Output.QualityStatus,
-                envelope.Output.FusionEligible,
+                envelope.Output.DataQualityStatus,
+                envelope.Output.IsEligibleForFusion,
                 selectionAuthority = false,
                 executionAuthority = false,
             });

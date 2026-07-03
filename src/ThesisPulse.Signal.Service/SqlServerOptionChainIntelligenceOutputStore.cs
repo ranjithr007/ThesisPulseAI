@@ -10,6 +10,15 @@ namespace ThesisPulse.Signal.Service;
 public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIntelligenceOutputStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly HashSet<string> AllowedDirections = new(StringComparer.Ordinal)
+    {
+        "STRONG_LONG", "LONG", "NEUTRAL", "SHORT", "STRONG_SHORT", "NO_SIGNAL",
+    };
+    private static readonly HashSet<string> AllowedQualityStatuses = new(StringComparer.Ordinal)
+    {
+        "VALID", "DEGRADED", "INVALID",
+    };
+
     private readonly SqlServerOptionChainIntelligenceOutputStoreOptions _options;
 
     public SqlServerOptionChainIntelligenceOutputStore(
@@ -30,11 +39,7 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
         var rejection = ValidateEnvelope(envelope);
         if (rejection is not null)
         {
-            return new OptionChainAppendResult(
-                OptionChainAppendOutcome.Rejected,
-                envelope.Output.OutputUid,
-                envelope.Output.Revision,
-                rejection);
+            return Rejected(envelope.Output, rejection);
         }
 
         var rawJson = JsonSerializer.Serialize(envelope.Output, JsonOptions);
@@ -56,15 +61,9 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
             if (existing is not null)
             {
                 await transaction.CommitAsync(cancellationToken);
-                return new OptionChainAppendResult(
-                    string.Equals(existing.ContractHash, contractHash, StringComparison.Ordinal)
-                        ? OptionChainAppendOutcome.Duplicate
-                        : OptionChainAppendOutcome.Rejected,
-                    envelope.Output.OutputUid,
-                    envelope.Output.Revision,
-                    string.Equals(existing.ContractHash, contractHash, StringComparison.Ordinal)
-                        ? "OUTPUT_ALREADY_PERSISTED"
-                        : "OUTPUT_UID_PAYLOAD_CONFLICT");
+                return string.Equals(existing.ContractHash, contractHash, StringComparison.Ordinal)
+                    ? Duplicate(envelope.Output)
+                    : Rejected(envelope.Output, "OUTPUT_UID_PAYLOAD_CONFLICT");
             }
 
             var engineId = await ResolveEngineIdAsync(connection, transaction, cancellationToken);
@@ -76,11 +75,7 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
             if (instrumentId is null)
             {
                 await transaction.CommitAsync(cancellationToken);
-                return new OptionChainAppendResult(
-                    OptionChainAppendOutcome.Rejected,
-                    envelope.Output.OutputUid,
-                    envelope.Output.Revision,
-                    "UNDERLYING_INSTRUMENT_NOT_FOUND");
+                return Rejected(envelope.Output, "UNDERLYING_INSTRUMENT_NOT_FOUND");
             }
 
             var current = await FindCurrentRevisionAsync(
@@ -90,14 +85,15 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
                 instrumentId.Value,
                 envelope.Output.AsOfUtc,
                 cancellationToken);
+            if (current is null && envelope.Output.Revision != 0)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return Rejected(envelope.Output, "INITIAL_REVISION_MUST_BE_ZERO");
+            }
             if (current is not null && envelope.Output.Revision <= current.Revision)
             {
                 await transaction.CommitAsync(cancellationToken);
-                return new OptionChainAppendResult(
-                    OptionChainAppendOutcome.Rejected,
-                    envelope.Output.OutputUid,
-                    envelope.Output.Revision,
-                    "REVISION_NOT_NEWER");
+                return Rejected(envelope.Output, "REVISION_NOT_NEWER");
             }
 
             var snapshotIds = await ResolveSnapshotIdsAsync(
@@ -105,14 +101,10 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
                 transaction,
                 envelope.Output.SourceSnapshotUids,
                 cancellationToken);
-            if (snapshotIds.Count != envelope.Output.SourceSnapshotUids.Distinct().Count())
+            if (snapshotIds.Count != envelope.Output.SourceSnapshotUids.Count)
             {
                 await transaction.CommitAsync(cancellationToken);
-                return new OptionChainAppendResult(
-                    OptionChainAppendOutcome.Rejected,
-                    envelope.Output.OutputUid,
-                    envelope.Output.Revision,
-                    "SOURCE_SNAPSHOT_NOT_FOUND");
+                return Rejected(envelope.Output, "SOURCE_SNAPSHOT_NOT_FOUND");
             }
 
             var runId = await InsertEngineRunAsync(
@@ -166,17 +158,10 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
                 null,
                 envelope.Output.OutputUid,
                 cancellationToken);
-            return replay is not null && string.Equals(replay.ContractHash, contractHash, StringComparison.Ordinal)
-                ? new OptionChainAppendResult(
-                    OptionChainAppendOutcome.Duplicate,
-                    envelope.Output.OutputUid,
-                    envelope.Output.Revision,
-                    "OUTPUT_ALREADY_PERSISTED")
-                : new OptionChainAppendResult(
-                    OptionChainAppendOutcome.Rejected,
-                    envelope.Output.OutputUid,
-                    envelope.Output.Revision,
-                    "SQL_UNIQUENESS_CONFLICT");
+            return replay is not null &&
+                   string.Equals(replay.ContractHash, contractHash, StringComparison.Ordinal)
+                ? Duplicate(envelope.Output)
+                : Rejected(envelope.Output, "SQL_UNIQUENESS_CONFLICT");
         }
         catch
         {
@@ -198,7 +183,7 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
         const string sql = """
             SELECT TOP (1)
                 output.[raw_contract_json],
-                MAX(snapshot.[received_at_utc]) AS [source_received_at_utc],
+                receipt.[source_received_at_utc],
                 output.[created_at_utc]
             FROM [intelligence].[engine_outputs] output
             INNER JOIN [intelligence].[engines] engine
@@ -207,20 +192,22 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
                 ON instrument.[instrument_id] = output.[instrument_id]
             INNER JOIN [reference].[exchanges] exchange
                 ON exchange.[exchange_id] = instrument.[exchange_id]
-            INNER JOIN [intelligence].[option_chain_output_snapshot_inputs] input
-                ON input.[engine_output_id] = output.[engine_output_id]
-            INNER JOIN [market].[option_chain_snapshots] snapshot
-                ON snapshot.[option_chain_snapshot_id] = input.[option_chain_snapshot_id]
+            CROSS APPLY
+            (
+                SELECT MAX(snapshot.[received_at_utc]) AS [source_received_at_utc]
+                FROM [intelligence].[option_chain_output_snapshot_inputs] input
+                INNER JOIN [market].[option_chain_snapshots] snapshot
+                    ON snapshot.[option_chain_snapshot_id] = input.[option_chain_snapshot_id]
+                WHERE input.[engine_output_id] = output.[engine_output_id]
+            ) receipt
             WHERE engine.[engine_code] = @engine_code
               AND output.[timeframe] = 'OPTION_CHAIN'
               AND CONCAT(exchange.[exchange_code], ':', instrument.[canonical_symbol]) = @instrument_key
               AND output.[as_of_utc] <= @cutoff_utc
               AND output.[generated_at_utc] <= @cutoff_utc
-            GROUP BY output.[engine_output_id], output.[raw_contract_json],
-                     output.[as_of_utc], output.[revision], output.[created_at_utc]
-            HAVING MAX(snapshot.[received_at_utc]) <= @cutoff_utc
+              AND receipt.[source_received_at_utc] <= @cutoff_utc
             ORDER BY output.[as_of_utc] DESC, output.[revision] DESC,
-                     MAX(snapshot.[received_at_utc]) DESC;
+                     receipt.[source_received_at_utc] DESC;
             """;
 
         await using var command = CreateCommand(connection, null, sql);
@@ -230,11 +217,14 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
+        {
             return null;
+        }
 
         var output = JsonSerializer.Deserialize<OptionChainIntelligenceOutputV1>(
             reader.GetString(0),
-            JsonOptions) ?? throw new InvalidOperationException("Stored option-chain contract could not be deserialized.");
+            JsonOptions) ?? throw new InvalidOperationException(
+                "Stored option-chain contract could not be deserialized.");
 
         return new OptionChainPersistenceEnvelope(
             output,
@@ -259,7 +249,8 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
         command.Parameters.AddWithValue("@engine_code", _options.EngineCode);
         var value = await command.ExecuteScalarAsync(cancellationToken);
         return value is null or DBNull
-            ? throw new InvalidOperationException("Active non-authoritative option-chain engine was not found.")
+            ? throw new InvalidOperationException(
+                "Active non-authoritative option-chain engine was not found.")
             : Convert.ToInt64(value);
     }
 
@@ -271,7 +262,9 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
     {
         var separator = instrumentKey.IndexOf(':');
         if (separator <= 0 || separator == instrumentKey.Length - 1)
+        {
             return null;
+        }
 
         const string sql = """
             SELECT instrument.[instrument_id]
@@ -346,13 +339,15 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
             FROM [market].[option_chain_snapshots] WITH (UPDLOCK, HOLDLOCK)
             WHERE [option_chain_snapshot_uid] = @snapshot_uid;
             """;
-        foreach (var uid in snapshotUids.Distinct())
+        foreach (var uid in snapshotUids)
         {
             await using var command = CreateCommand(connection, transaction, sql);
             command.Parameters.AddWithValue("@snapshot_uid", uid);
             var value = await command.ExecuteScalarAsync(cancellationToken);
             if (value is not null and not DBNull)
+            {
                 result[uid] = Convert.ToInt64(value);
+            }
         }
         return result;
     }
@@ -390,7 +385,10 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
         command.Parameters.AddWithValue("@input_count", envelope.Output.SourceSnapshotUids.Count);
         command.Parameters.AddWithValue("@warning_count", envelope.Output.Warnings.Count);
         command.Parameters.AddWithValue("@actor", _options.Actor);
-        return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken));
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value is null or DBNull
+            ? throw new InvalidOperationException("Engine run insert did not return an identifier.")
+            : Convert.ToInt64(value);
     }
 
     private async Task<long> InsertEngineOutputAsync(
@@ -432,41 +430,59 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
         command.Parameters.AddWithValue("@run_id", runId);
         command.Parameters.AddWithValue("@engine_id", engineId);
         command.Parameters.AddWithValue("@instrument_id", instrumentId);
-        command.Parameters.AddWithValue("@contract_version", OptionChainIntelligenceContractV1.ContractVersion);
+        command.Parameters.AddWithValue(
+            "@contract_version",
+            OptionChainIntelligenceContractV1.ContractVersion);
         command.Parameters.AddWithValue("@environment", _options.Environment);
         command.Parameters.AddWithValue("@source_service", _options.SourceService);
         command.Parameters.AddWithValue("@source_version", _options.SourceVersion);
         command.Parameters.AddWithValue("@engine_name", envelope.Output.EngineCode);
         command.Parameters.AddWithValue("@engine_version", envelope.Output.EngineVersion);
         command.Parameters.AddWithValue("@as_of_utc", envelope.Output.AsOfUtc.UtcDateTime);
-        command.Parameters.AddWithValue("@generated_at_utc", envelope.Output.GeneratedAtUtc.UtcDateTime);
-        command.Parameters.AddWithValue("@expires_at_utc", envelope.Output.GeneratedAtUtc.Add(_options.OutputTimeToLive).UtcDateTime);
+        command.Parameters.AddWithValue(
+            "@generated_at_utc",
+            envelope.Output.GeneratedAtUtc.UtcDateTime);
+        command.Parameters.AddWithValue(
+            "@expires_at_utc",
+            envelope.Output.GeneratedAtUtc.Add(_options.OutputTimeToLive).UtcDateTime);
         command.Parameters.AddWithValue("@direction", envelope.Output.Direction);
         command.Parameters.AddWithValue("@score", envelope.Output.Score);
         command.Parameters.AddWithValue("@confidence", envelope.Output.Confidence);
         command.Parameters.AddWithValue("@quality", envelope.Output.DataQualityStatus);
         command.Parameters.AddWithValue("@completeness", envelope.Output.ComponentCoverage);
-        command.Parameters.AddWithValue("@freshness_ms", Math.Max(0L, (long)(envelope.Output.GeneratedAtUtc - envelope.Output.AsOfUtc).TotalMilliseconds));
+        command.Parameters.AddWithValue(
+            "@freshness_ms",
+            Math.Max(
+                0L,
+                (long)(envelope.Output.GeneratedAtUtc - envelope.Output.AsOfUtc)
+                    .TotalMilliseconds));
         command.Parameters.AddWithValue("@is_stale", envelope.Output.IsStale);
         command.Parameters.AddWithValue("@eligible", envelope.Output.IsEligibleForFusion);
         command.Parameters.AddWithValue("@revision", envelope.Output.Revision);
         command.Parameters.AddWithValue("@supersedes_uid", (object?)supersedesUid ?? DBNull.Value);
         command.Parameters.AddWithValue("@correlation_id", envelope.Output.MessageUid);
         command.Parameters.AddWithValue("@causation_id", envelope.Output.SourceSnapshotUids.First());
-        command.Parameters.AddWithValue("@metadata_json", JsonSerializer.Serialize(new
-        {
-            envelope.Output.SelectionAuthority,
-            envelope.Output.ExecutionAuthority,
-            sourceReceivedAtUtc = envelope.SourceReceivedAtUtc,
-        }, JsonOptions));
+        command.Parameters.AddWithValue(
+            "@metadata_json",
+            JsonSerializer.Serialize(
+                new
+                {
+                    envelope.Output.SelectionAuthority,
+                    envelope.Output.ExecutionAuthority,
+                    sourceReceivedAtUtc = envelope.SourceReceivedAtUtc,
+                },
+                JsonOptions));
         command.Parameters.AddWithValue("@raw_json", rawJson);
         command.Parameters.AddWithValue("@contract_hash", contractHash);
         command.Parameters.AddWithValue("@created_at_utc", envelope.PersistedAtUtc.UtcDateTime);
         command.Parameters.AddWithValue("@actor", _options.Actor);
-        return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken));
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value is null or DBNull
+            ? throw new InvalidOperationException("Engine output insert did not return an identifier.")
+            : Convert.ToInt64(value);
     }
 
-    private static async Task InsertSnapshotLineageAsync(
+    private async Task InsertSnapshotLineageAsync(
         SqlConnection connection,
         SqlTransaction transaction,
         long outputId,
@@ -489,11 +505,17 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
             await using var command = CreateCommand(connection, transaction, sql);
             command.Parameters.AddWithValue("@output_id", outputId);
             command.Parameters.AddWithValue("@snapshot_id", snapshotIds[uid]);
-            command.Parameters.AddWithValue("@input_role", sequence == 1 ? "PRIMARY" : "TERM_STRUCTURE");
+            command.Parameters.AddWithValue(
+                "@input_role",
+                sequence == 1 ? "PRIMARY" : "TERM_STRUCTURE");
             command.Parameters.AddWithValue("@input_sequence", sequence);
-            command.Parameters.AddWithValue("@consumed_at_utc", envelope.Output.GeneratedAtUtc.UtcDateTime);
-            command.Parameters.AddWithValue("@created_at_utc", envelope.PersistedAtUtc.UtcDateTime);
-            command.Parameters.AddWithValue("@created_by", "ThesisPulse.Signal.OptionChainPersistence");
+            command.Parameters.AddWithValue(
+                "@consumed_at_utc",
+                envelope.Output.GeneratedAtUtc.UtcDateTime);
+            command.Parameters.AddWithValue(
+                "@created_at_utc",
+                envelope.PersistedAtUtc.UtcDateTime);
+            command.Parameters.AddWithValue("@created_by", _options.Actor);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
     }
@@ -531,16 +553,54 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
         var output = envelope.Output;
         if (output.OutputUid == Guid.Empty) return "OUTPUT_UID_REQUIRED";
         if (output.MessageUid == Guid.Empty) return "MESSAGE_UID_REQUIRED";
-        if (output.SourceSnapshotUids.Count == 0 || output.SourceSnapshotUids.Any(uid => uid == Guid.Empty)) return "SOURCE_SNAPSHOT_REQUIRED";
-        if (string.IsNullOrWhiteSpace(output.UnderlyingInstrumentKey)) return "UNDERLYING_INSTRUMENT_REQUIRED";
-        if (!string.Equals(output.EngineCode, OptionChainIntelligenceContractV1.EngineCode, StringComparison.Ordinal)) return "ENGINE_CODE_MISMATCH";
+        if (output.SourceSnapshotUids.Count == 0 ||
+            output.SourceSnapshotUids.Any(uid => uid == Guid.Empty))
+            return "SOURCE_SNAPSHOT_REQUIRED";
+        if (output.SourceSnapshotUids.Distinct().Count() != output.SourceSnapshotUids.Count)
+            return "SOURCE_SNAPSHOT_DUPLICATE";
+        if (string.IsNullOrWhiteSpace(output.UnderlyingInstrumentKey))
+            return "UNDERLYING_INSTRUMENT_REQUIRED";
+        if (!string.Equals(
+                output.EngineCode,
+                OptionChainIntelligenceContractV1.EngineCode,
+                StringComparison.Ordinal))
+            return "ENGINE_CODE_MISMATCH";
+        if (string.IsNullOrWhiteSpace(output.EngineVersion)) return "ENGINE_VERSION_REQUIRED";
+        if (string.IsNullOrWhiteSpace(output.PolicyVersion)) return "POLICY_VERSION_REQUIRED";
+        if (!AllowedDirections.Contains(output.Direction)) return "DIRECTION_INVALID";
+        if (output.Score is < -1m or > 1m) return "SCORE_INVALID";
+        if (output.Confidence is < 0m or > 1m) return "CONFIDENCE_INVALID";
+        if (output.ComponentCoverage is < 0m or > 1m) return "COMPONENT_COVERAGE_INVALID";
+        if (!AllowedQualityStatuses.Contains(output.DataQualityStatus))
+            return "DATA_QUALITY_INVALID";
+        if (output.IsEligibleForFusion &&
+            (output.IsStale || output.DataQualityStatus == "INVALID"))
+            return "FUSION_ELIGIBILITY_INVALID";
         if (output.Revision < 0) return "REVISION_INVALID";
         if (output.GeneratedAtUtc < output.AsOfUtc) return "GENERATED_BEFORE_OBSERVATION";
-        if (envelope.SourceReceivedAtUtc < output.AsOfUtc) return "SOURCE_RECEIVED_BEFORE_OBSERVATION";
-        if (envelope.PersistedAtUtc < output.GeneratedAtUtc) return "PERSISTED_BEFORE_GENERATION";
+        if (envelope.SourceReceivedAtUtc < output.AsOfUtc)
+            return "SOURCE_RECEIVED_BEFORE_OBSERVATION";
+        if (envelope.PersistedAtUtc < output.GeneratedAtUtc)
+            return "PERSISTED_BEFORE_GENERATION";
         if (output.SelectionAuthority || output.ExecutionAuthority) return "AUTHORITY_DRIFT";
         return null;
     }
+
+    private static OptionChainAppendResult Duplicate(OptionChainIntelligenceOutputV1 output) =>
+        new(
+            OptionChainAppendOutcome.Duplicate,
+            output.OutputUid,
+            output.Revision,
+            "OUTPUT_ALREADY_PERSISTED");
+
+    private static OptionChainAppendResult Rejected(
+        OptionChainIntelligenceOutputV1 output,
+        string reason) =>
+        new(
+            OptionChainAppendOutcome.Rejected,
+            output.OutputUid,
+            output.Revision,
+            reason);
 
     private static string ComputeSha256(string value) => Convert.ToHexString(
         SHA256.HashData(Encoding.UTF8.GetBytes(value)));

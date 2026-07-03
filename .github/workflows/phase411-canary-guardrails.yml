@@ -1,0 +1,64 @@
+name: Phase 4.11 Canary Guardrails CI
+
+on:
+  push:
+    branches:
+      - feature/phase411-canary-guardrails
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase411-canary-guardrails-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  acceptance:
+    name: Canary admission and rollback guardrails
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore solution
+        run: dotnet restore ThesisPulseAI.sln
+
+      - name: Build solution
+        run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore
+
+      - name: Verify deterministic canary and authority boundaries
+        shell: bash
+        run: |
+          grep -F 'SHA256.HashData' src/ThesisPulse.Signal.Service/OptionChainCanaryRollout.cs
+          grep -F 'CANARY_BUCKET_ADMITTED' src/ThesisPulse.Signal.Service/OptionChainCanaryRollout.cs
+          grep -F 'ROLLOUT_ROLLED_BACK' src/ThesisPulse.Signal.Service/OptionChainCanaryRollout.cs
+          grep -F 'RollbackRequired: breaches.Count > 0' src/ThesisPulse.Signal.Service/OptionChainCanaryRollout.cs
+          grep -F 'SelectionAuthority: false' src/ThesisPulse.Signal.Service/OptionChainCanaryRollout.cs
+          grep -F 'ExecutionAuthority: false' src/ThesisPulse.Signal.Service/OptionChainCanaryRollout.cs
+          grep -F '"Mode": "DISABLED"' src/ThesisPulse.Signal.Service/appsettings.json
+          grep -F '"Percentage": 0' src/ThesisPulse.Signal.Service/appsettings.json
+          grep -F '"LiveExecutionEnabled": false' src/ThesisPulse.Signal.Service/appsettings.json
+
+      - name: Run Phase 4.10 regression
+        shell: bash
+        run: |
+          grep -F '/api/v1/internal/option-chain/production-readiness' src/ThesisPulse.Signal.Service/OptionChainProductionReadiness.cs
+          grep -F '/api/v1/internal/option-chain/operational-smoke' src/ThesisPulse.Signal.Service/OptionChainProductionReadiness.cs
+
+      - name: Run Phase 4.9 execution regression
+        run: dotnet run --project tests/phase49-option-chain-execution/dotnet/ThesisPulse.Phase49OptionChainExecution.Tests.csproj --configuration Release
+
+      - name: Run Phase 4.7 queue regression
+        run: dotnet run --project tests/phase47-option-chain-worker/dotnet/ThesisPulse.Phase47OptionChainWorker.Tests.csproj --configuration Release

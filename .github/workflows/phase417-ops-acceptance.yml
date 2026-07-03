@@ -26,5 +26,5 @@ jobs:
         run: |
           grep -F 'OptionChainSqlOperations__DatabaseConnection' docs/operations/option-chain-rollout-runbook.md
           grep -F 'StatusCodes.Status503ServiceUnavailable' src/ThesisPulse.Signal.Service/OptionChainSqlReadiness.cs
-          grep -F 'selection authority is false' docs/operations/option-chain-rollout-runbook.md
-          grep -F 'execution authority is false' docs/operations/option-chain-rollout-runbook.md
+          grep -F 'Selection authority is false' docs/operations/option-chain-rollout-runbook.md
+          grep -F 'Execution authority is false' docs/operations/option-chain-rollout-runbook.md

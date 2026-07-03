@@ -19,10 +19,18 @@ builder.Services.Configure<DeterministicPaperExecutionOptions>(
     builder.Configuration.GetSection(DeterministicPaperExecutionOptions.SectionName));
 builder.Services.AddSingleton<DeterministicPaperExecutionService>();
 
+var lifecycleReadOptions = builder.Configuration
+    .GetSection(PaperTradeLifecycleReadOptions.SectionName)
+    .Get<PaperTradeLifecycleReadOptions>() ?? new PaperTradeLifecycleReadOptions();
+lifecycleReadOptions.Validate();
+builder.Services.AddSingleton(lifecycleReadOptions);
+
 var persistenceProvider = builder.Configuration["PaperExecutionPersistence:Provider"] ?? "InMemory";
 if (persistenceProvider.Equals("InMemory", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddSingleton<IPaperExecutionLedgerStore, InMemoryPaperExecutionLedgerStore>();
+    builder.Services.AddSingleton<IPaperTradeLifecycleReadStore,
+        UnavailablePaperTradeLifecycleReadStore>();
 }
 else if (persistenceProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
 {
@@ -52,6 +60,8 @@ else if (persistenceProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreC
     builder.Services.AddSingleton(storeOptions);
     builder.Services.AddSingleton<IPaperExecutionLedgerStore,
         SqlServerPaperExecutionLedgerDecorator>();
+    builder.Services.AddSingleton<IPaperTradeLifecycleReadStore,
+        SqlServerPaperTradeLifecycleReadStore>();
 }
 else
 {
@@ -155,6 +165,7 @@ if (fillOptions.Enabled)
 var app = builder.Build();
 app.UseThesisPulsePlatformFoundation();
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Execution.Service");
+app.MapPaperTradeLifecycleEndpoints();
 app.MapGet("/api/v1/status", (
     AutomaticPaperExecutionWorkerState automaticState,
     AutomaticPaperSubmissionWorkerState submissionState,
@@ -164,6 +175,9 @@ app.MapGet("/api/v1/status", (
     environment = ExecutionCommandContractV1.PaperEnvironment,
     persistenceProvider,
     sqlServerSourceOfTruth = persistenceProvider.Equals(
+        "SqlServer",
+        StringComparison.OrdinalIgnoreCase),
+    lifecycleReadModelAvailable = persistenceProvider.Equals(
         "SqlServer",
         StringComparison.OrdinalIgnoreCase),
     acceptsReadyTradePlans = true,

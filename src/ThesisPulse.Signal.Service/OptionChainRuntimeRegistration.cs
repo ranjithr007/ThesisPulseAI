@@ -70,6 +70,7 @@ public static class OptionChainRuntimeRegistration
         services.AddSingleton<IOptionChainFusionEvidenceProvider, OptionChainFusionEvidenceProvider>();
         services.AddSingleton<OptionChainFusionRequestComposer>();
         services.AddSingleton<OptionChainFusionRuntimeDiagnostics>();
+        services.AddSingleton<OptionChainFusionRuntimeOrchestrator>();
         services.AddHealthChecks().AddCheck<OptionChainRuntimeHealthCheck>(
             "option-chain-runtime",
             failureStatus: HealthStatus.Unhealthy,

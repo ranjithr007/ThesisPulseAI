@@ -18,6 +18,11 @@ public static class OptionChainWorkerEndpoints
             TimeProvider timeProvider) =>
             Results.Ok(state.Snapshot(timeProvider.GetUtcNow())));
 
+        endpoints.MapGet("/api/v1/internal/option-chain/execution/metrics", (
+            OptionChainExecutionState state,
+            TimeProvider timeProvider) =>
+            Results.Ok(state.Snapshot(timeProvider.GetUtcNow())));
+
         endpoints.MapGet("/api/v1/internal/option-chain/evidence/latest/{instrumentKey}", async (
             string instrumentKey,
             DateTimeOffset? cutoffUtc,

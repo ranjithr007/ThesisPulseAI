@@ -1,0 +1,73 @@
+name: Phase 4.9 Option-Chain Execution CI
+
+on:
+  push:
+    branches:
+      - feature/phase49-option-chain-execution
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase49-option-chain-execution-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  acceptance:
+    name: Option-chain Python execution acceptance and regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore solution
+        run: dotnet restore ThesisPulseAI.sln
+
+      - name: Build solution
+        run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore
+
+      - name: Run Phase 4.9 execution acceptance
+        run: dotnet run --project tests/phase49-option-chain-execution/dotnet/ThesisPulse.Phase49OptionChainExecution.Tests.csproj --configuration Release
+
+      - name: Verify Python boundary, lineage, and authority contracts
+        shell: bash
+        run: |
+          grep -F '/internal/v1/market-data/option-chain' src/ThesisPulse.Signal.Service/OptionChainPythonWorker.cs
+          grep -F 'X-ThesisPulse-Internal-Key' src/ThesisPulse.Signal.Service/OptionChainPythonWorker.cs
+          grep -F 'snapshot.SourceMessageUid != workItem.WorkUid' src/ThesisPulse.Signal.Service/OptionChainPythonWorker.cs
+          grep -F 'output.SourceSnapshotUids.Contains(workItem.SnapshotUid)' src/ThesisPulse.Signal.Service/OptionChainPythonWorker.cs
+          grep -F 'output.SelectionAuthority || output.ExecutionAuthority' src/ThesisPulse.Signal.Service/OptionChainPythonWorker.cs
+          grep -F "snapshot.[option_chain_snapshot_uid] = @snapshot_uid" src/ThesisPulse.Signal.Service/SqlServerOptionChainSnapshotDispatchSource.cs
+          grep -F "snapshot.[received_at_utc] <= @workflow_cutoff_utc" src/ThesisPulse.Signal.Service/SqlServerOptionChainSnapshotDispatchSource.cs
+          grep -F 'contract.[contract_multiplier]' src/ThesisPulse.Signal.Service/SqlServerOptionChainSnapshotDispatchSource.cs
+          grep -F '/api/v1/internal/option-chain/execution/metrics' src/ThesisPulse.Signal.Service/OptionChainWorkerEndpoints.cs
+          grep -F '"WorkerExecutionEnabled": false' src/ThesisPulse.Signal.Service/appsettings.json
+          grep -F 'optionChainSelectionAuthority = false' src/ThesisPulse.Signal.Service/Program.cs
+          grep -F 'optionChainExecutionAuthority = false' src/ThesisPulse.Signal.Service/Program.cs
+
+      - name: Run Phase 4.8 intake regression
+        run: dotnet run --project tests/phase48-option-chain-intake/dotnet/ThesisPulse.Phase48OptionChainIntake.Tests.csproj --configuration Release
+
+      - name: Run Phase 4.7 worker regression
+        run: dotnet run --project tests/phase47-option-chain-worker/dotnet/ThesisPulse.Phase47OptionChainWorker.Tests.csproj --configuration Release
+
+      - name: Run Phase 4.5 orchestration regression
+        run: dotnet run --project tests/phase45-option-chain-orchestration/dotnet/ThesisPulse.Phase45OptionChainOrchestration.Tests.csproj --configuration Release
+
+      - name: Run Phase 4.4 runtime regression
+        run: dotnet run --project tests/phase44-option-chain-runtime/dotnet/ThesisPulse.Phase44OptionChainRuntime.Tests.csproj --configuration Release
+
+      - name: Run Fusion lifecycle regression
+        run: dotnet run --project tests/fusion-signal/dotnet/ThesisPulse.FusionSignal.Tests.csproj --configuration Release

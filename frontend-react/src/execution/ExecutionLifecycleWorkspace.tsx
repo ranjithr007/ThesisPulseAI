@@ -9,6 +9,7 @@ import {
 } from "./lifecycleState";
 import type {
   LifecycleLoadState,
+  PaperTradeLifecycleAcceptanceReport,
   PaperTradeLifecycleDetail,
   PaperTradeLifecycleList,
   PaperTradeLifecycleSummary,
@@ -77,9 +78,12 @@ export function ExecutionLifecycleWorkspace() {
   const [items, setItems] = useState<PaperTradeLifecycleSummary[]>([]);
   const [selectedCorrelationUid, setSelectedCorrelationUid] = useState<string | null>(null);
   const [detail, setDetail] = useState<PaperTradeLifecycleDetail | null>(null);
+  const [acceptance, setAcceptance] = useState<PaperTradeLifecycleAcceptanceReport | null>(null);
   const [listState, setListState] = useState<LifecycleLoadState>("loading");
   const [detailState, setDetailState] = useState<LifecycleLoadState>("loading");
+  const [acceptanceState, setAcceptanceState] = useState<LifecycleLoadState>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [acceptanceError, setAcceptanceError] = useState<string | null>(null);
   const [lastRefreshAtUtc, setLastRefreshAtUtc] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -119,6 +123,20 @@ export function ExecutionLifecycleWorkspace() {
     setError(null);
   }, []);
 
+  const loadAcceptance = useCallback(async (
+    correlationUid: string,
+    signal?: AbortSignal,
+  ) => {
+    const parameters = new URLSearchParams({ portfolioCode });
+    const payload = await readJson<PaperTradeLifecycleAcceptanceReport>(
+      `${executionApiBaseUrl}/api/v1/execution/lifecycles/${encodeURIComponent(correlationUid)}/acceptance?${parameters.toString()}`,
+      signal,
+    );
+    setAcceptance(payload);
+    setAcceptanceState(payload.outcome === "PASS" ? "ready" : payload.outcome === "INCOMPLETE" ? "stale" : "unavailable");
+    setAcceptanceError(null);
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
     setListState("loading");
@@ -144,12 +162,16 @@ export function ExecutionLifecycleWorkspace() {
   useEffect(() => {
     if (!selectedCorrelationUid) {
       setDetail(null);
+      setAcceptance(null);
       setDetailState(items.length === 0 ? "empty" : "loading");
+      setAcceptanceState(items.length === 0 ? "empty" : "loading");
       return;
     }
 
     const controller = new AbortController();
     setDetailState("loading");
+    setAcceptanceState("loading");
+
     void loadDetail(selectedCorrelationUid, controller.signal).catch((requestError: unknown) => {
       if (controller.signal.aborted) return;
       const status = (requestError as { status?: number }).status;
@@ -157,20 +179,38 @@ export function ExecutionLifecycleWorkspace() {
       setDetailState(status === 404 ? "empty" : "unavailable");
       setError(requestError instanceof Error ? requestError.message : "Lifecycle detail is unavailable.");
     });
+
+    void loadAcceptance(selectedCorrelationUid, controller.signal).catch((requestError: unknown) => {
+      if (controller.signal.aborted) return;
+      const status = (requestError as { status?: number }).status;
+      setAcceptance(null);
+      setAcceptanceState(status === 404 ? "empty" : "unavailable");
+      setAcceptanceError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Lifecycle acceptance evidence is unavailable.",
+      );
+    });
+
     return () => controller.abort();
-  }, [items.length, loadDetail, selectedCorrelationUid]);
+  }, [items.length, loadAcceptance, loadDetail, selectedCorrelationUid]);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
       await loadList();
-      if (selectedCorrelationUid) await loadDetail(selectedCorrelationUid);
+      if (selectedCorrelationUid) {
+        await Promise.all([
+          loadDetail(selectedCorrelationUid),
+          loadAcceptance(selectedCorrelationUid),
+        ]);
+      }
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Lifecycle refresh failed.");
     } finally {
       setRefreshing(false);
     }
-  }, [loadDetail, loadList, selectedCorrelationUid]);
+  }, [loadAcceptance, loadDetail, loadList, selectedCorrelationUid]);
 
   const metrics = useMemo(() => ({
     total: items.length,
@@ -182,16 +222,17 @@ export function ExecutionLifecycleWorkspace() {
   }), [items]);
 
   const completion = detail ? lifecycleCompletion(detail.stages) : { complete: 0, total: 0 };
+  const effectiveState = acceptance?.operationalStates[0] ?? null;
 
   return (
     <section className="execution-workspace" aria-labelledby="execution-title">
       <div className="execution-hero">
         <div>
           <p className="eyebrow">PAPER EXECUTION OBSERVABILITY</p>
-          <h2 id="execution-title">Trade lifecycle and decision lineage</h2>
+          <h2 id="execution-title">Trade lifecycle and acceptance proof</h2>
           <p>
-            Read-only trace from canonical signal through the latest authoritative execution,
-            position, and P&amp;L evidence for <strong>{portfolioCode}</strong>.
+            Read-only trace and deterministic acceptance checks from canonical signal through
+            execution, position, P&amp;L, and applicable operating controls for <strong>{portfolioCode}</strong>.
           </p>
         </div>
         <div className="execution-hero-actions">
@@ -319,11 +360,82 @@ export function ExecutionLifecycleWorkspace() {
         </article>
       </div>
 
+      <article className="execution-panel execution-acceptance-panel">
+        <div className="execution-section-heading">
+          <div><p className="eyebrow">ARCHITECTURE EXIT GATE</p><h3>PAPER lifecycle acceptance</h3></div>
+          {acceptance ? <StatusBadge value={acceptance.outcome} /> : <span>{stateLabel(acceptanceState)}</span>}
+        </div>
+
+        {acceptanceError ? <div className="execution-alert"><strong>Acceptance unavailable</strong><span>{acceptanceError}</span></div> : null}
+        {acceptanceState === "loading" ? <div className="execution-empty">Evaluating authoritative lineage and controls…</div> : null}
+        {acceptanceState === "empty" ? <div className="execution-empty">No acceptance report exists for the selected correlation.</div> : null}
+
+        {acceptance ? (
+          <>
+            <div className="execution-acceptance-summary">
+              <div><span>Outcome</span><StatusBadge value={acceptance.outcome} /></div>
+              <div><span>Environment</span><strong>{acceptance.environment}</strong></div>
+              <div><span>Evaluated</span><strong>{formatDate(acceptance.evaluatedAtUtc)}</strong></div>
+              <div><span>Effective mode</span><strong>{effectiveState?.effectiveOperatingMode ?? "Not available"}</strong></div>
+            </div>
+
+            <div className="execution-acceptance-checks">
+              {acceptance.checks.map((check) => (
+                <article key={check.code} className={`execution-acceptance-check execution-acceptance-check-${lifecycleTone(check.outcome)}`}>
+                  <div><strong>{humanizeLifecycleCode(check.code)}</strong><StatusBadge value={check.outcome} /></div>
+                  <p>{check.message}</p>
+                  {check.evidenceReferences.length > 0 ? (
+                    <details>
+                      <summary>{check.evidenceReferences.length} evidence reference{check.evidenceReferences.length === 1 ? "" : "s"}</summary>
+                      {check.evidenceReferences.map((reference) => <code key={reference}>{reference}</code>)}
+                    </details>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+
+            <div className="execution-evidence-columns">
+              <section>
+                <div className="execution-section-heading"><h4>Correlation and causation</h4><span>{acceptance.lineage.length} stages</span></div>
+                <div className="execution-lineage-audit">
+                  {acceptance.lineage.map((evidence) => (
+                    <article key={`${evidence.stage}-${evidence.entityUid}`}>
+                      <div><strong>{humanizeLifecycleCode(evidence.stage)}</strong><span>{formatDate(evidence.occurredAtUtc)}</span></div>
+                      <small>{evidence.sourceTable}</small>
+                      <code>entity: {evidence.entityUid}</code>
+                      <code>correlation: {evidence.correlationUid}</code>
+                      <code>causation: {evidence.causationUid ?? "Not available"}</code>
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <div className="execution-section-heading"><h4>Applicable operating states</h4><span>{acceptance.operationalStates.length} scopes</span></div>
+                <div className="execution-control-audit">
+                  {acceptance.operationalStates.length === 0 ? <div className="execution-empty">No authoritative operating-state evidence is available.</div> : null}
+                  {acceptance.operationalStates.map((state) => (
+                    <article key={`${state.scopeType}-${state.scopeId}`}>
+                      <div><strong>{state.scopeType}: {state.scopeId}</strong><StatusBadge value={state.effectiveOperatingMode} /></div>
+                      <span>New exposure: {state.allowsNewExposure ? "Allowed" : "Blocked"}</span>
+                      <span>Risk-reducing exits: {state.allowsRiskReducingExits ? "Allowed" : "Blocked"}</span>
+                      <span>Operator review: {state.requiresOperatorReview ? "Required" : "Not required"}</span>
+                      <code>control: {state.sourceControlUid ?? "NORMAL projection"}</code>
+                      <small>{formatDate(state.evaluatedAtUtc)} · {state.evaluationVersion}</small>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            </div>
+          </>
+        ) : null}
+      </article>
+
       <aside className="safety-note">
-        <strong>Read-only PAPER view</strong>
+        <strong>Read-only PAPER proof</strong>
         <span>
-          This workspace cannot submit, modify, cancel, retry, or approve orders. Use the Portfolio,
-          P&amp;L, and Operations pages for additional read-only evidence.
+          This workspace cannot submit, modify, cancel, retry, approve, or override orders, risk decisions,
+          or operational controls. Missing evidence remains incomplete rather than being inferred.
           {" "}<a href="#/portfolio">Portfolio</a> · <a href="#/pnl">P&amp;L</a> · <a href="#/operations">Operations</a>
         </span>
       </aside>

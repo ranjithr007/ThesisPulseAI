@@ -179,6 +179,7 @@ try {
     $services = Get-ThesisPulseDevelopmentServices
     foreach ($service in $services) {
         $projectDirectory = Split-Path $service.Project -Parent
+        $projectWorkingDirectory = Join-Path $repositoryRoot $projectDirectory
         $assemblyName = [System.IO.Path]::GetFileNameWithoutExtension($service.Project)
         $assemblyPath = Join-Path $projectDirectory "bin/Debug/net8.0/$assemblyName.dll"
         $assemblyFullPath = Join-Path $repositoryRoot $assemblyPath
@@ -190,8 +191,8 @@ try {
         $healthUrl = "$url$($service.HealthPath)"
         Write-Host "Starting $($service.Name) at $url..."
         Start-ManagedProcess -Name $service.Name -Key $service.Key -Executable $dotnetCommand `
-            -Arguments @($assemblyPath, "--urls", $url) `
-            -WorkingDirectory $repositoryRoot -Url $url -HealthUrl $healthUrl | Out-Null
+            -Arguments @($assemblyFullPath, "--urls", $url) `
+            -WorkingDirectory $projectWorkingDirectory -Url $url -HealthUrl $healthUrl | Out-Null
     }
 
     $frontend = Get-ThesisPulseFrontendDefinition

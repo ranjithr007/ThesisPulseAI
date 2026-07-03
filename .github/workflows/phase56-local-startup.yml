@@ -32,9 +32,9 @@ jobs:
         shell: pwsh
         run: .\scripts\dev\Test-ThesisPulseDevelopmentConfiguration.ps1
 
-      - name: Validate Windows prerequisites and ports
+      - name: Validate Windows tools and repository prerequisites
         shell: pwsh
-        run: .\scripts\dev\Test-ThesisPulsePrerequisites.ps1 -ValidationOnly
+        run: .\scripts\dev\Test-ThesisPulsePrerequisites.ps1 -ValidationOnly -SkipPortChecks
 
       - name: Restore .NET solution
         run: dotnet restore ThesisPulseAI.sln

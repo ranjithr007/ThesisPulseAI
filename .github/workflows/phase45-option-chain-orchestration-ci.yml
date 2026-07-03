@@ -1,0 +1,47 @@
+name: Phase 4.5 Option-Chain Orchestration CI
+
+on:
+  push:
+    branches:
+      - feature/phase45-option-chain-orchestration
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase45-option-chain-orchestration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  acceptance:
+    name: Option-chain orchestration acceptance and regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore solution
+        run: dotnet restore ThesisPulseAI.sln
+      - name: Build solution
+        run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore
+      - name: Run Phase 4.5 acceptance project
+        run: dotnet run --project tests/phase45-option-chain-orchestration/dotnet/ThesisPulse.Phase45OptionChainOrchestration.Tests.csproj --configuration Release
+      - name: Verify fail-closed orchestration contract
+        shell: bash
+        run: |
+          grep -F 'hardFailure ? null : composition.Request' src/ThesisPulse.Signal.Service/OptionChainFusionRuntimeOrchestrator.cs
+          grep -F 'services.AddSingleton<OptionChainFusionRuntimeOrchestrator>();' src/ThesisPulse.Signal.Service/OptionChainRuntimeRegistration.cs
+          grep -F 'diagnostic.GateFailures.Count' src/ThesisPulse.Signal.Service/OptionChainFusionRuntimeOrchestrator.cs
+      - name: Run Phase 4.4 runtime regression
+        run: dotnet run --project tests/phase44-option-chain-runtime/dotnet/ThesisPulse.Phase44OptionChainRuntime.Tests.csproj --configuration Release
+      - name: Run Phase 4.3 Fusion regression
+        run: dotnet run --project tests/phase43-option-chain-fusion/dotnet/ThesisPulse.Phase43OptionChainFusion.Tests.csproj --configuration Release
+      - name: Run Fusion lifecycle regression
+        run: dotnet run --project tests/fusion-signal/dotnet/ThesisPulse.FusionSignal.Tests.csproj --configuration Release

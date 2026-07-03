@@ -26,7 +26,8 @@ jobs:
           grep -F 'IsolationLevel.Serializable' src/ThesisPulse.Signal.Service/SqlServerOptionChainRolloutAuditStore.cs
           grep -F 'ROLLOUT_COMMAND_OR_VERSION_CONFLICT' src/ThesisPulse.Signal.Service/SqlServerOptionChainRolloutAuditStore.cs
           grep -F 'RestoreAsync' src/ThesisPulse.Signal.Service/OptionChainSqlOperationsHosting.cs
-          grep -F 'TryAcquireGuardrail' src/ThesisPulse.Signal.Service/OptionChainSqlOperationsHosting.cs
+          grep -F 'TryAcquireAsync' src/ThesisPulse.Signal.Service/OptionChainSqlOperationsHosting.cs
+          grep -F 'WITH (HOLDLOCK)' src/ThesisPulse.Signal.Service/SqlServerOptionChainSchedulerStore.cs
           grep -F 'selection_authority = 0 AND execution_authority = 0' database/migrations/phase414_option_chain_rollout_operations.sql
           grep -F '"Enabled": false' src/ThesisPulse.Signal.Service/appsettings.json
           grep -F '"LiveExecutionEnabled": false' src/ThesisPulse.Signal.Service/appsettings.json

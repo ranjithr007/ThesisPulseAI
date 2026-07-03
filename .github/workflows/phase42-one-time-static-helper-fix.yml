@@ -1,0 +1,49 @@
+name: Phase 4.2 One-Time Static Helper Fix
+
+on:
+  push:
+    branches:
+      - feature/phase42-option-chain-sql-adapter
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/phase42-option-chain-sql-adapter
+          fetch-depth: 0
+
+      - name: Patch static helpers
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("src/ThesisPulse.Signal.Service/SqlServerOptionChainIntelligenceOutputStore.cs")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              "private static async Task<long?> ResolveInstrumentIdAsync(": "private async Task<long?> ResolveInstrumentIdAsync(",
+              "private static async Task<StoredRow?> FindByOutputUidAsync(": "private async Task<StoredRow?> FindByOutputUidAsync(",
+              "private static async Task<CurrentRevision?> FindCurrentRevisionAsync(": "private async Task<CurrentRevision?> FindCurrentRevisionAsync(",
+              "private static async Task<IReadOnlyDictionary<Guid, long>> ResolveSnapshotIdsAsync(": "private async Task<IReadOnlyDictionary<Guid, long>> ResolveSnapshotIdsAsync(",
+              "private static async Task MarkSupersededAsync(": "private async Task MarkSupersededAsync(",
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f"Expected declaration not found: {old}")
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/ThesisPulse.Signal.Service/SqlServerOptionChainIntelligenceOutputStore.cs
+          git commit -m "Fix Phase 4.2 SQL adapter helper binding"
+          git push origin HEAD:feature/phase42-option-chain-sql-adapter

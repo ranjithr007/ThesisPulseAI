@@ -3,6 +3,7 @@ import { OperationsDashboard } from "./operations/OperationsDashboard";
 import { useAppRoute } from "./routing/useAppRoute";
 import { SignalDetail } from "./signals/SignalDetail";
 import { SignalScanner } from "./signals/SignalScanner";
+import { ThesisReadinessWorkspace } from "./theses/ThesisReadinessWorkspace";
 
 const navigation = [
   "Market",
@@ -19,9 +20,11 @@ export function App() {
   const activeNavigation =
     route.page === "market"
       ? "Market"
-      : route.page === "operations"
-        ? "Operations"
-        : "Signals";
+      : route.page === "theses"
+        ? "Theses"
+        : route.page === "operations"
+          ? "Operations"
+          : "Signals";
 
   return (
     <div className="app-shell">
@@ -45,7 +48,10 @@ export function App() {
           <nav>
             {navigation.map((item) => {
               const supported =
-                item === "Market" || item === "Signals" || item === "Operations";
+                item === "Market" ||
+                item === "Signals" ||
+                item === "Theses" ||
+                item === "Operations";
 
               return (
                 <button
@@ -60,6 +66,8 @@ export function App() {
                       navigate({ page: "market" });
                     } else if (item === "Signals") {
                       navigate({ page: "signals" });
+                    } else if (item === "Theses") {
+                      navigate({ page: "theses" });
                     } else if (item === "Operations") {
                       navigate({ page: "operations" });
                     }
@@ -85,6 +93,7 @@ export function App() {
               onBack={() => navigate({ page: "signals" })}
             />
           ) : null}
+          {route.page === "theses" ? <ThesisReadinessWorkspace /> : null}
           {route.page === "operations" ? <OperationsDashboard /> : null}
         </main>
       </div>

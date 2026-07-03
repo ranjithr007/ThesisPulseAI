@@ -1,0 +1,94 @@
+name: Phase 4.2 Option-Chain SQL Adapter CI
+
+on:
+  push:
+    branches:
+      - feature/phase42-option-chain-sql-adapter
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase42-option-chain-sql-adapter-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-verification:
+    name: SQL adapter acceptance and deterministic regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Display .NET environment
+        run: dotnet --info
+
+      - name: Restore solution
+        run: dotnet restore ThesisPulseAI.sln
+
+      - name: Build solution with diagnostics
+        shell: bash
+        run: |
+          set +e
+          dotnet build ThesisPulseAI.sln \
+            --configuration Release \
+            --no-restore \
+            --verbosity minimal \
+            2>&1 | tee phase42-build.log
+          status=${PIPESTATUS[0]}
+          echo "$status" > phase42-build.status
+          exit 0
+
+      - name: Upload Phase 4.2 build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase42-option-chain-sql-adapter-build-log
+          path: |
+            phase42-build.log
+            phase42-build.status
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Enforce build result
+        shell: bash
+        run: exit "$(cat phase42-build.status)"
+
+      - name: Run Phase 4.2 SQL adapter acceptance
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet run --project tests/phase42-option-chain-sql-adapter/dotnet/ThesisPulse.Phase42OptionChainSqlAdapter.Tests.csproj --configuration Release 2>&1 | tee phase42-tests.log
+
+      - name: Run Phase 4.1 persistence regression
+        run: dotnet run --project tests/phase41-option-chain-persistence/dotnet/ThesisPulse.Phase41OptionChainPersistence.Tests.csproj --configuration Release
+
+      - name: Run Phase 4.0 option-chain regression
+        run: dotnet run --project tests/phase40-option-chain/dotnet/ThesisPulse.Phase40OptionChain.Tests.csproj --configuration Release
+
+      - name: Run database migrator regression
+        run: dotnet run --project tests/database/dotnet/ThesisPulse.DatabaseMigrator.Tests.csproj --configuration Release
+
+      - name: Run deterministic risk regression
+        run: dotnet run --project tests/risk/dotnet/ThesisPulse.Risk.Tests.csproj --configuration Release
+
+      - name: Upload Phase 4.2 acceptance diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase42-option-chain-sql-adapter-acceptance-log
+          path: phase42-tests.log
+          if-no-files-found: warn
+          retention-days: 7

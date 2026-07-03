@@ -1,0 +1,30 @@
+name: Phase 4.17 Rollout Operations Acceptance CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [phase417-ops-acceptance]
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore ThesisPulseAI.sln
+      - run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore
+      - run: bash tests/option-chain/phase417_acceptance.sh
+      - name: Verify deployment runbook
+        shell: bash
+        run: |
+          grep -F 'OptionChainSqlOperations__DatabaseConnection' docs/operations/option-chain-rollout-runbook.md
+          grep -F 'StatusCodes.Status503ServiceUnavailable' src/ThesisPulse.Signal.Service/OptionChainSqlReadiness.cs
+          grep -F 'selection authority is false' docs/operations/option-chain-rollout-runbook.md
+          grep -F 'execution authority is false' docs/operations/option-chain-rollout-runbook.md

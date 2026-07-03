@@ -30,6 +30,7 @@ builder.Services.AddThesisPulseSignalStore(builder.Configuration, serviceName);
 builder.Services.AddSignalStreamPublisher(builder.Configuration);
 builder.Services.AddSignalMaintenance(builder.Configuration);
 builder.Services.AddOptionChainFusionRuntime(builder.Configuration);
+builder.Services.AddOptionChainCanaryRollout(builder.Configuration);
 builder.Services.AddSingleton<SignalIntakeCoordinator>();
 builder.Services.AddProblemDetails();
 builder.Services.AddCors(options =>
@@ -54,11 +55,13 @@ app.MapMarketDataConsumerEndpoints();
 app.MapOptionChainFusionAuditEndpoints();
 app.MapOptionChainWorkerEndpoints();
 app.MapOptionChainProductionReadiness();
+app.MapOptionChainCanaryRollout();
 app.MapHealthChecks("/health/ready");
 
 app.MapGet("/api/v1/status", (
     IConfiguration configuration,
-    OptionChainRuntimeOptions optionChainRuntime) => Results.Ok(new
+    OptionChainRuntimeOptions optionChainRuntime,
+    OptionChainCanaryOptions canaryOptions) => Results.Ok(new
 {
     mode = "AUTHORITATIVE_SIGNAL_LIFECYCLE",
     environment = "PAPER",
@@ -92,6 +95,8 @@ app.MapGet("/api/v1/status", (
     optionChainPythonBrokerCode = optionChainRuntime.PythonBrokerCode,
     optionChainActivationMode = configuration["ProductionActivation:Mode"] ?? "DISABLED",
     optionChainOperationalSmokeEnabled = configuration.GetValue("ProductionActivation:OperationalSmokeEnabled", false),
+    optionChainRolloutMode = canaryOptions.ParsedMode.ToString().ToUpperInvariant(),
+    optionChainCanaryPercentage = canaryOptions.Percentage,
     optionChainSelectionAuthority = false,
     optionChainExecutionAuthority = false,
     signalPersistence = configuration["SignalPersistence:Provider"] ?? "InMemory",

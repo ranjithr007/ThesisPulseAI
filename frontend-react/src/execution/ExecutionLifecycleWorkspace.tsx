@@ -102,6 +102,7 @@ export function ExecutionLifecycleWorkspace() {
       return payload.items[0]?.correlationUid ?? null;
     });
     setLastRefreshAtUtc(new Date().toISOString());
+    setError(null);
   }, [listUrl]);
 
   const loadDetail = useCallback(async (
@@ -115,6 +116,7 @@ export function ExecutionLifecycleWorkspace() {
     );
     setDetail(payload);
     setDetailState(classifyLifecycleDetail(payload));
+    setError(null);
   }, []);
 
   useEffect(() => {
@@ -163,7 +165,6 @@ export function ExecutionLifecycleWorkspace() {
     try {
       await loadList();
       if (selectedCorrelationUid) await loadDetail(selectedCorrelationUid);
-      setError(null);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Lifecycle refresh failed.");
     } finally {
@@ -237,7 +238,7 @@ export function ExecutionLifecycleWorkspace() {
                 </thead>
                 <tbody>
                   {items.map((item) => (
-                    <tr className={item.correlationUid === selectedCorrelationUid ? "selected" : ""} key={item.correlationUid}>
+                    <tr className={item.correlationUid === selectedCorrelationUid ? "selected" : ""} key={`${item.correlationUid}-${item.tradePlanUid}`}>
                       <td>
                         <button className="execution-row-button" type="button" onClick={() => setSelectedCorrelationUid(item.correlationUid)}>
                           <strong>{item.instrumentKey}</strong>

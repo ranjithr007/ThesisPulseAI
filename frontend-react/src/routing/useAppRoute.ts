@@ -6,6 +6,7 @@ export type AppRoute =
   | { page: "signal-detail"; signalUid: string }
   | { page: "theses" }
   | { page: "risk" }
+  | { page: "portfolio" }
   | { page: "operations" };
 
 function parseHash(hash: string): AppRoute {
@@ -15,6 +16,7 @@ function parseHash(hash: string): AppRoute {
   if (segments[0] === "market") return { page: "market" };
   if (segments[0] === "theses") return { page: "theses" };
   if (segments[0] === "risk") return { page: "risk" };
+  if (segments[0] === "portfolio") return { page: "portfolio" };
   if (segments[0] === "operations") return { page: "operations" };
 
   if (segments[0] === "signals" && segments[1]) {
@@ -36,6 +38,8 @@ function routeToHash(route: AppRoute): string {
       return "#/theses";
     case "risk":
       return "#/risk";
+    case "portfolio":
+      return "#/portfolio";
     case "operations":
       return "#/operations";
     case "signal-detail":

@@ -1,5 +1,6 @@
 import { MarketCommandCenter } from "./market/MarketCommandCenter";
 import { OperationsDashboard } from "./operations/OperationsDashboard";
+import { PortfolioWorkspace } from "./portfolio/PortfolioWorkspace";
 import { RiskReadinessWorkspace } from "./risk/RiskReadinessWorkspace";
 import { useAppRoute } from "./routing/useAppRoute";
 import { SignalDetail } from "./signals/SignalDetail";
@@ -25,9 +26,11 @@ export function App() {
         ? "Theses"
         : route.page === "risk"
           ? "Risk"
-          : route.page === "operations"
-            ? "Operations"
-            : "Signals";
+          : route.page === "portfolio"
+            ? "Portfolio"
+            : route.page === "operations"
+              ? "Operations"
+              : "Signals";
 
   return (
     <div className="app-shell">
@@ -55,6 +58,7 @@ export function App() {
                 item === "Signals" ||
                 item === "Theses" ||
                 item === "Risk" ||
+                item === "Portfolio" ||
                 item === "Operations";
 
               return (
@@ -70,6 +74,7 @@ export function App() {
                     else if (item === "Signals") navigate({ page: "signals" });
                     else if (item === "Theses") navigate({ page: "theses" });
                     else if (item === "Risk") navigate({ page: "risk" });
+                    else if (item === "Portfolio") navigate({ page: "portfolio" });
                     else if (item === "Operations") navigate({ page: "operations" });
                   }}
                 >
@@ -95,6 +100,7 @@ export function App() {
           ) : null}
           {route.page === "theses" ? <ThesisReadinessWorkspace /> : null}
           {route.page === "risk" ? <RiskReadinessWorkspace /> : null}
+          {route.page === "portfolio" ? <PortfolioWorkspace /> : null}
           {route.page === "operations" ? <OperationsDashboard /> : null}
         </main>
       </div>

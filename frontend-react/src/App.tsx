@@ -1,3 +1,4 @@
+import { MarketCommandCenter } from "./market/MarketCommandCenter";
 import { OperationsDashboard } from "./operations/OperationsDashboard";
 import { useAppRoute } from "./routing/useAppRoute";
 import { SignalDetail } from "./signals/SignalDetail";
@@ -15,7 +16,12 @@ const navigation = [
 
 export function App() {
   const { route, navigate } = useAppRoute();
-  const activeNavigation = route.page === "operations" ? "Operations" : "Signals";
+  const activeNavigation =
+    route.page === "market"
+      ? "Market"
+      : route.page === "operations"
+        ? "Operations"
+        : "Signals";
 
   return (
     <div className="app-shell">
@@ -38,7 +44,8 @@ export function App() {
         <aside className="sidebar" aria-label="Primary navigation">
           <nav>
             {navigation.map((item) => {
-              const supported = item === "Signals" || item === "Operations";
+              const supported =
+                item === "Market" || item === "Signals" || item === "Operations";
 
               return (
                 <button
@@ -47,9 +54,11 @@ export function App() {
                   type="button"
                   disabled={!supported}
                   aria-disabled={!supported}
-                  title={supported ? undefined : "Planned for a later Phase 1 slice"}
+                  title={supported ? undefined : "Planned for a later Phase 5 slice"}
                   onClick={() => {
-                    if (item === "Signals") {
+                    if (item === "Market") {
+                      navigate({ page: "market" });
+                    } else if (item === "Signals") {
                       navigate({ page: "signals" });
                     } else if (item === "Operations") {
                       navigate({ page: "operations" });
@@ -63,11 +72,12 @@ export function App() {
           </nav>
           <div className="connection-status">
             <span className="status-dot" aria-hidden="true" />
-            Phase 1 · PAPER only
+            Phase 5 · PAPER only
           </div>
         </aside>
 
         <main className="content">
+          {route.page === "market" ? <MarketCommandCenter /> : null}
           {route.page === "signals" ? <SignalScanner /> : null}
           {route.page === "signal-detail" ? (
             <SignalDetail

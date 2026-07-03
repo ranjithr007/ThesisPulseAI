@@ -34,6 +34,7 @@ builder.Services.AddOptionChainCanaryRollout(builder.Configuration);
 builder.Services.AddOptionChainRollbackReconciliation(builder.Configuration);
 builder.Services.AddOptionChainOperations(builder.Configuration);
 builder.Services.AddOptionChainSqlOperations(builder.Configuration);
+builder.Services.AddOptionChainFailClosedReadiness();
 builder.Services.AddSingleton<SignalIntakeCoordinator>();
 builder.Services.AddProblemDetails();
 builder.Services.AddCors(options =>
@@ -61,6 +62,7 @@ app.MapOptionChainProductionReadiness();
 app.MapOptionChainCanaryRollout();
 app.MapOptionChainRollbackReconciliation();
 app.MapOptionChainOperations();
+app.MapOptionChainFailClosedReadiness();
 app.MapHealthChecks("/health/ready");
 
 app.MapGet("/api/v1/status", (

@@ -1,0 +1,48 @@
+name: Phase 5.5 PAPER Lifecycle CI
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [phase55-execution-lifecycle-ui]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Lifecycle contracts and backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore solution
+        run: dotnet restore ThesisPulseAI.sln
+      - name: Build solution
+        run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore --verbosity minimal
+      - name: Run Phase 5.5 acceptance
+        run: dotnet run --project tests/phase55-paper-lifecycle/dotnet/ThesisPulse.Phase55PaperLifecycle.Tests.csproj --configuration Release
+
+  frontend-regression:
+    name: Frontend lifecycle and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend-react
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend-react/package-lock.json
+      - run: npm ci
+      - name: Run execution lifecycle acceptance
+        run: npm run test:execution
+      - run: npm run typecheck
+      - run: npm run build

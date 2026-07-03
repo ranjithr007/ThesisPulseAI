@@ -1,3 +1,4 @@
+import { ExecutionLifecycleWorkspace } from "./execution/ExecutionLifecycleWorkspace";
 import { MarketCommandCenter } from "./market/MarketCommandCenter";
 import { OperationsDashboard } from "./operations/OperationsDashboard";
 import { PnlWorkspace } from "./pnl/PnlWorkspace";
@@ -15,6 +16,7 @@ const navigation = [
   "Risk",
   "Portfolio",
   "P&L",
+  "Execution",
   "Operations",
 ];
 
@@ -31,9 +33,11 @@ export function App() {
             ? "Portfolio"
             : route.page === "pnl"
               ? "P&L"
-              : route.page === "operations"
-                ? "Operations"
-                : "Signals";
+              : route.page === "execution"
+                ? "Execution"
+                : route.page === "operations"
+                  ? "Operations"
+                  : "Signals";
 
   return (
     <div className="app-shell">
@@ -63,6 +67,7 @@ export function App() {
                   else if (item === "Risk") navigate({ page: "risk" });
                   else if (item === "Portfolio") navigate({ page: "portfolio" });
                   else if (item === "P&L") navigate({ page: "pnl" });
+                  else if (item === "Execution") navigate({ page: "execution" });
                   else if (item === "Operations") navigate({ page: "operations" });
                 }}
               >
@@ -86,6 +91,7 @@ export function App() {
           {route.page === "risk" ? <RiskReadinessWorkspace /> : null}
           {route.page === "portfolio" ? <PortfolioWorkspace /> : null}
           {route.page === "pnl" ? <PnlWorkspace /> : null}
+          {route.page === "execution" ? <ExecutionLifecycleWorkspace /> : null}
           {route.page === "operations" ? <OperationsDashboard /> : null}
         </main>
       </div>

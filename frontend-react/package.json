@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit --pretty false",
+    "test:execution": "node --experimental-strip-types tests/execution-lifecycle.acceptance.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

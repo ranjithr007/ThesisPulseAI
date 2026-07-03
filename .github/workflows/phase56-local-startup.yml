@@ -1,0 +1,55 @@
+name: Phase 5.6 Windows Local Startup CI
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [phase56-windows-local-startup]
+
+permissions:
+  contents: read
+
+jobs:
+  windows-readiness:
+    name: Windows configuration and build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend-react/package-lock.json
+
+      - name: Validate development manifest and PowerShell syntax
+        shell: pwsh
+        run: .\scripts\dev\Test-ThesisPulseDevelopmentConfiguration.ps1
+
+      - name: Validate Windows prerequisites and ports
+        shell: pwsh
+        run: .\scripts\dev\Test-ThesisPulsePrerequisites.ps1 -ValidationOnly
+
+      - name: Restore .NET solution
+        run: dotnet restore ThesisPulseAI.sln
+
+      - name: Build .NET solution
+        run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore --verbosity minimal
+
+      - name: Install frontend dependencies
+        working-directory: frontend-react
+        run: npm ci
+
+      - name: Typecheck frontend
+        working-directory: frontend-react
+        run: npm run typecheck
+
+      - name: Build frontend
+        working-directory: frontend-react
+        run: npm run build

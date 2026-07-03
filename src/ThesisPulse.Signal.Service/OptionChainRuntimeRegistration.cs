@@ -19,6 +19,14 @@ public sealed record OptionChainRuntimeOptions
 
     public int CommandTimeoutSeconds { get; init; } = 30;
 
+    public int WorkerMaximumAttempts { get; init; } = 5;
+
+    public int WorkerLeaseSeconds { get; init; } = 120;
+
+    public int WorkerInitialRetrySeconds { get; init; } = 10;
+
+    public int WorkerMaximumRetrySeconds { get; init; } = 300;
+
     public void Validate()
     {
         if (!Enabled)
@@ -33,6 +41,12 @@ public sealed record OptionChainRuntimeOptions
             throw new InvalidOperationException("Option-chain minimum confidence must be between 0 and 1.");
         if (CommandTimeoutSeconds is < 1 or > 300)
             throw new InvalidOperationException("Option-chain command timeout must be between 1 and 300 seconds.");
+        if (WorkerMaximumAttempts is < 1 or > 20)
+            throw new InvalidOperationException("Option-chain worker maximum attempts must be between 1 and 20.");
+        if (WorkerLeaseSeconds is < 5 or > 3600)
+            throw new InvalidOperationException("Option-chain worker lease must be between 5 and 3600 seconds.");
+        if (WorkerInitialRetrySeconds is < 1 or > 3600 || WorkerMaximumRetrySeconds < WorkerInitialRetrySeconds)
+            throw new InvalidOperationException("Option-chain worker retry settings are invalid.");
     }
 }
 
@@ -47,15 +61,24 @@ public static class OptionChainRuntimeRegistration
         runtime.Validate();
 
         services.AddSingleton(runtime);
+        services.AddSingleton(TimeProvider.System);
         services.AddSingleton(new OptionChainFusionEvidenceOptions
         {
             MaximumAge = TimeSpan.FromSeconds(runtime.MaximumAgeSeconds),
             MinimumConfidence = runtime.MinimumConfidence,
         });
+        services.AddSingleton(new OptionChainWorkerPolicy
+        {
+            MaximumAttempts = runtime.WorkerMaximumAttempts,
+            LeaseDuration = TimeSpan.FromSeconds(runtime.WorkerLeaseSeconds),
+            InitialRetryDelay = TimeSpan.FromSeconds(runtime.WorkerInitialRetrySeconds),
+            MaximumRetryDelay = TimeSpan.FromSeconds(runtime.WorkerMaximumRetrySeconds),
+        });
 
         if (!runtime.Enabled)
         {
             services.AddSingleton<IOptionChainIntelligenceOutputStore, DisabledOptionChainOutputStore>();
+            services.AddSingleton<IOptionChainWorkQueue, InMemoryOptionChainWorkQueue>();
         }
         else
         {
@@ -64,7 +87,13 @@ public static class OptionChainRuntimeRegistration
                 ConnectionString = runtime.ConnectionString,
                 CommandTimeoutSeconds = runtime.CommandTimeoutSeconds,
             });
+            services.AddSingleton(new SqlServerOptionChainWorkQueueOptions
+            {
+                ConnectionString = runtime.ConnectionString,
+                CommandTimeoutSeconds = runtime.CommandTimeoutSeconds,
+            });
             services.AddSingleton<IOptionChainIntelligenceOutputStore, SqlServerOptionChainIntelligenceOutputStore>();
+            services.AddSingleton<IOptionChainWorkQueue, SqlServerOptionChainWorkQueue>();
         }
 
         services.AddSingleton<IOptionChainFusionEvidenceProvider, OptionChainFusionEvidenceProvider>();
@@ -98,7 +127,8 @@ internal sealed class DisabledOptionChainOutputStore : IOptionChainIntelligenceO
 
 public sealed class OptionChainRuntimeHealthCheck(
     OptionChainRuntimeOptions options,
-    IOptionChainIntelligenceOutputStore store) : IHealthCheck
+    IOptionChainIntelligenceOutputStore store,
+    IOptionChainWorkQueue queue) : IHealthCheck
 {
     public Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
@@ -111,6 +141,8 @@ public sealed class OptionChainRuntimeHealthCheck(
                 return Task.FromResult(HealthCheckResult.Healthy("Option-chain runtime is disabled by configuration."));
             if (store is not SqlServerOptionChainIntelligenceOutputStore)
                 return Task.FromResult(HealthCheckResult.Unhealthy("Configured SQL Server option-chain store is not active."));
+            if (queue is not SqlServerOptionChainWorkQueue)
+                return Task.FromResult(HealthCheckResult.Unhealthy("Configured SQL Server option-chain queue is not active."));
             return Task.FromResult(HealthCheckResult.Healthy("Option-chain runtime configuration and DI wiring are valid."));
         }
         catch (Exception exception)

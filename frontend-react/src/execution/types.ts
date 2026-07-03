@@ -51,6 +51,47 @@ export type PaperTradeLifecycleList = {
   items: PaperTradeLifecycleSummary[];
 };
 
+export type PaperTradeLifecycleLineageEvidence = {
+  stage: string;
+  entityUid: string;
+  correlationUid: string;
+  causationUid: string | null;
+  occurredAtUtc: string;
+  sourceTable: string;
+};
+
+export type PaperTradeLifecycleOperationalState = {
+  scopeType: string;
+  scopeId: string;
+  effectiveOperatingMode: string;
+  sourceControlUid: string | null;
+  allowsNewExposure: boolean;
+  allowsRiskReducingExits: boolean;
+  requiresOperatorReview: boolean;
+  evaluatedAtUtc: string;
+  evaluationVersion: string;
+};
+
+export type PaperTradeLifecycleAcceptanceCheck = {
+  code: string;
+  outcome: "PASS" | "FAIL" | "INCOMPLETE" | string;
+  message: string;
+  evidenceReferences: string[];
+};
+
+export type PaperTradeLifecycleAcceptanceReport = {
+  contractVersion: string;
+  environment: string;
+  correlationUid: string;
+  portfolioCode: string | null;
+  outcome: "PASS" | "FAIL" | "INCOMPLETE" | string;
+  evaluatedAtUtc: string;
+  summary: PaperTradeLifecycleSummary;
+  lineage: PaperTradeLifecycleLineageEvidence[];
+  operationalStates: PaperTradeLifecycleOperationalState[];
+  checks: PaperTradeLifecycleAcceptanceCheck[];
+};
+
 export type LifecycleLoadState =
   | "loading"
   | "ready"

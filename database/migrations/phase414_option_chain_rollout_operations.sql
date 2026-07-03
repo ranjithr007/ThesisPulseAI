@@ -37,3 +37,24 @@ BEGIN
     );
 END;
 GO
+
+IF OBJECT_ID('intelligence.option_chain_scheduler_runs', 'U') IS NULL
+BEGIN
+    CREATE TABLE intelligence.option_chain_scheduler_runs
+    (
+        run_uid UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+        job_name NVARCHAR(64) NOT NULL,
+        owner_instance NVARCHAR(128) NOT NULL,
+        outcome NVARCHAR(32) NOT NULL,
+        started_at_utc DATETIME2(7) NOT NULL,
+        completed_at_utc DATETIME2(7) NULL,
+        detail NVARCHAR(1024) NULL,
+        selection_authority BIT NOT NULL CONSTRAINT DF_scheduler_runs_selection DEFAULT (0),
+        execution_authority BIT NOT NULL CONSTRAINT DF_scheduler_runs_execution DEFAULT (0),
+        CONSTRAINT CK_scheduler_runs_authority CHECK (selection_authority = 0 AND execution_authority = 0)
+    );
+
+    CREATE INDEX IX_option_chain_scheduler_runs_job_started
+        ON intelligence.option_chain_scheduler_runs(job_name, started_at_utc DESC);
+END;
+GO

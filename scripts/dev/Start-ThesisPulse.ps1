@@ -95,6 +95,16 @@ function Start-ManagedProcess {
         -PassThru `
         -WindowStyle Hidden
 
+    Start-Sleep -Milliseconds 250
+    if ($process.HasExited) {
+        $errorText = if (Test-Path -LiteralPath $stderr) {
+            (Get-Content -LiteralPath $stderr -Raw -ErrorAction SilentlyContinue)
+        } else {
+            "No error log was produced."
+        }
+        throw "$Name exited during startup. $errorText"
+    }
+
     $entry = [pscustomobject]@{
         Name = $Name
         Key = $Key
@@ -123,6 +133,7 @@ Get-ChildItem -LiteralPath $logDirectory -File -ErrorAction SilentlyContinue | R
 
 $dotnetCommand = (Get-Command dotnet -ErrorAction Stop).Source
 $npmCommand = (Get-Command npm -ErrorAction Stop).Source
+$nodeCommand = (Get-Command node -ErrorAction Stop).Source
 
 try {
     if (-not $SkipRestore) {
@@ -167,14 +178,19 @@ try {
 
     $services = Get-ThesisPulseDevelopmentServices
     foreach ($service in $services) {
+        $projectDirectory = Split-Path $service.Project -Parent
+        $assemblyName = [System.IO.Path]::GetFileNameWithoutExtension($service.Project)
+        $assemblyPath = Join-Path $projectDirectory "bin/Debug/net8.0/$assemblyName.dll"
+        $assemblyFullPath = Join-Path $repositoryRoot $assemblyPath
+        if (-not (Test-Path -LiteralPath $assemblyFullPath -PathType Leaf)) {
+            throw "Build output '$assemblyPath' is missing. Run without -SkipBuild."
+        }
+
         $url = Get-ThesisPulseServiceUrl -Service $service
         $healthUrl = "$url$($service.HealthPath)"
         Write-Host "Starting $($service.Name) at $url..."
         Start-ManagedProcess -Name $service.Name -Key $service.Key -Executable $dotnetCommand `
-            -Arguments @(
-                "run", "--project", $service.Project,
-                "--no-build", "--no-launch-profile", "--", "--urls", $url
-            ) `
+            -Arguments @($assemblyPath, "--urls", $url) `
             -WorkingDirectory $repositoryRoot -Url $url -HealthUrl $healthUrl | Out-Null
     }
 
@@ -187,10 +203,16 @@ try {
     $env:VITE_EXECUTION_LIFECYCLE_LIMIT = "50"
     $env:VITE_PNL_MAXIMUM_AGE_MINUTES = "10"
 
+    $frontendDirectory = Join-Path $repositoryRoot $frontend.WorkingDirectory
+    $viteScript = Join-Path $frontendDirectory "node_modules/vite/bin/vite.js"
+    if (-not (Test-Path -LiteralPath $viteScript -PathType Leaf)) {
+        throw "Vite is not installed at '$viteScript'. Run without -SkipFrontendInstall."
+    }
+
     Write-Host "Starting React frontend at $($frontend.Url)..."
-    Start-ManagedProcess -Name $frontend.Name -Key $frontend.Key -Executable $npmCommand `
-        -Arguments @("run", "dev", "--", "--host", "127.0.0.1", "--port", "$($frontend.Port)", "--strictPort") `
-        -WorkingDirectory (Join-Path $repositoryRoot $frontend.WorkingDirectory) `
+    Start-ManagedProcess -Name $frontend.Name -Key $frontend.Key -Executable $nodeCommand `
+        -Arguments @("node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", "$($frontend.Port)", "--strictPort") `
+        -WorkingDirectory $frontendDirectory `
         -Url $frontend.Url -HealthUrl "$($frontend.Url)$($frontend.HealthPath)" | Out-Null
 
     foreach ($entry in $startedProcesses) {
@@ -213,8 +235,9 @@ try {
     }
 }
 catch {
-    Write-Error $_
+    $failureMessage = $_.Exception.Message
     Stop-StartedProcesses
+    [Console]::Error.WriteLine("ThesisPulse AI startup failed: $failureMessage")
     exit 1
 }
 

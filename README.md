@@ -23,9 +23,9 @@ ThesisPulse AI is an AI-assisted Indian stock-market intelligence and trading pl
 
 ## Current phase
 
-**Phase 5.6 — Windows local startup, environment configuration, and operator readiness.**
+**Phase 5.7 — PAPER lifecycle acceptance proof and lineage audit.**
 
-The operator-facing React application now includes read-only Market, Signals, Theses, Risk, Portfolio, P&L, Execution, and Operations workspaces. The execution workspace traces the authoritative PAPER lifecycle from Signal through Thesis, Risk, Trade Plan, Order, Fill, Position, and P&L.
+The operator-facing React application includes read-only Market, Signals, Theses, Risk, Portfolio, P&L, Execution, and Operations workspaces. The Execution workspace now traces the authoritative PAPER lifecycle and evaluates correlation, causation, stage completion, quantities, position/P&L evidence, freshness, and applicable operational controls as `PASS`, `FAIL`, or `INCOMPLETE`.
 
 ## Windows quick start
 
@@ -39,6 +39,15 @@ From the repository root:
 ```
 
 Open `http://localhost:5173` when the launcher reports that the stack is ready.
+
+Validate one authoritative lifecycle using its correlation UID:
+
+```powershell
+.\scripts\dev\Test-ThesisPulsePaperLifecycle.ps1 `
+  -CorrelationUid <correlation-guid>
+```
+
+The lifecycle command exits successfully only when the authoritative acceptance outcome is `PASS`. Missing or unfinished evidence returns `INCOMPLETE`; violated safety invariants return `FAIL`.
 
 Stop only launcher-owned processes with:
 
@@ -63,4 +72,4 @@ See `docs/phase-5/windows-local-development.md` for first-run setup, optional mi
 
 ## Safety boundary
 
-The current local launcher and UI are PAPER-only. They do not grant browser order controls, risk overrides, broker submission authority, automatic LIVE enablement, or destructive database operations.
+The current local launcher, acceptance proof, and UI are PAPER-only and read-only. They do not grant browser order controls, risk overrides, operational-control resets, broker submission authority, automatic LIVE enablement, or destructive database operations.

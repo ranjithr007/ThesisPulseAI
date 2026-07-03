@@ -33,6 +33,7 @@ builder.Services.AddOptionChainFusionRuntime(builder.Configuration);
 builder.Services.AddOptionChainCanaryRollout(builder.Configuration);
 builder.Services.AddOptionChainRollbackReconciliation(builder.Configuration);
 builder.Services.AddOptionChainOperations(builder.Configuration);
+builder.Services.AddOptionChainSqlOperations(builder.Configuration);
 builder.Services.AddSingleton<SignalIntakeCoordinator>();
 builder.Services.AddProblemDetails();
 builder.Services.AddCors(options =>
@@ -68,7 +69,8 @@ app.MapGet("/api/v1/status", (
     OptionChainCanaryOptions canaryOptions,
     OptionChainRolloutState rolloutState,
     OptionChainDurableRolloutCoordinator durableCoordinator,
-    OptionChainOperationsOptions operationsOptions) => Results.Ok(new
+    OptionChainOperationsOptions operationsOptions,
+    OptionChainSqlRuntimeOptions sqlOperations) => Results.Ok(new
 {
     mode = "AUTHORITATIVE_SIGNAL_LIFECYCLE",
     environment = "PAPER",
@@ -106,6 +108,7 @@ app.MapGet("/api/v1/status", (
     optionChainRuntimeRolloutState = rolloutState.Snapshot(),
     optionChainDurableRolloutState = durableCoordinator.Snapshot(),
     optionChainSchedulerEnabled = operationsOptions.SchedulerEnabled,
+    optionChainSqlOperationsEnabled = sqlOperations.Enabled,
     optionChainCanaryPercentage = canaryOptions.Percentage,
     optionChainSelectionAuthority = false,
     optionChainExecutionAuthority = false,

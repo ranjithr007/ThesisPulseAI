@@ -3,6 +3,7 @@ import type {
   PaperTradeLifecycleDetail,
   PaperTradeLifecycleSummary,
 } from "./types";
+import "./execution-acceptance.css";
 
 export type LifecycleTone = "positive" | "warning" | "negative" | "neutral";
 

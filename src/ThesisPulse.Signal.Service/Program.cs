@@ -29,6 +29,7 @@ builder.Services.AddEventConsumerState();
 builder.Services.AddThesisPulseSignalStore(builder.Configuration, serviceName);
 builder.Services.AddSignalStreamPublisher(builder.Configuration);
 builder.Services.AddSignalMaintenance(builder.Configuration);
+builder.Services.AddOptionChainFusionRuntime(builder.Configuration);
 builder.Services.AddSingleton<SignalIntakeCoordinator>();
 builder.Services.AddProblemDetails();
 builder.Services.AddCors(options =>
@@ -50,8 +51,11 @@ app.MapSignalEndpoints();
 app.MapSignalDecisionProjectionEndpoints();
 app.MapSignalMaintenance();
 app.MapMarketDataConsumerEndpoints();
+app.MapHealthChecks("/health/ready");
 
-app.MapGet("/api/v1/status", (IConfiguration configuration) => Results.Ok(new
+app.MapGet("/api/v1/status", (
+    IConfiguration configuration,
+    OptionChainRuntimeOptions optionChainRuntime) => Results.Ok(new
 {
     mode = "AUTHORITATIVE_SIGNAL_LIFECYCLE",
     environment = "PAPER",
@@ -65,6 +69,12 @@ app.MapGet("/api/v1/status", (IConfiguration configuration) => Results.Ok(new
     signalMaintenanceEnabled = configuration.GetValue("SignalMaintenance:Enabled", false),
     signalPublishingEnabled = configuration.GetValue("SignalRealtime:Enabled", false),
     marketDataConsumerEnabled = configuration.GetValue("MarketDataConsumer:Enabled", false),
+    optionChainFusionEnabled = optionChainRuntime.Enabled,
+    optionChainPersistence = optionChainRuntime.PersistenceProvider,
+    optionChainMaximumAgeSeconds = optionChainRuntime.MaximumAgeSeconds,
+    optionChainMinimumConfidence = optionChainRuntime.MinimumConfidence,
+    optionChainSelectionAuthority = false,
+    optionChainExecutionAuthority = false,
     signalPersistence = configuration["SignalPersistence:Provider"] ?? "InMemory",
     messagingProvider = configuration["Messaging:Provider"] ?? "InMemory",
     creatorEngineCode = configuration["SignalPersistence:CreatorEngineCode"]

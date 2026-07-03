@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import "./market-command-center.css";
 
 type PlatformStatus = {
   environment?: string;

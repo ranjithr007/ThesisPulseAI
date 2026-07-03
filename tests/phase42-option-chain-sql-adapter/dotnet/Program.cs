@@ -47,20 +47,20 @@ static void InvalidOptionsFailClosed()
         ConnectionString = " ",
     }.Validate(), "blank connection string");
 
-    Throws<ArgumentOutOfRangeException>(() => ValidOptions() with
+    Throws<ArgumentOutOfRangeException>(() => (ValidOptions() with
     {
         Environment = "PRODUCTION",
-    }.Validate(), "invalid environment");
+    }).Validate(), "invalid environment");
 
-    Throws<ArgumentOutOfRangeException>(() => ValidOptions() with
+    Throws<ArgumentOutOfRangeException>(() => (ValidOptions() with
     {
         OutputTimeToLive = TimeSpan.Zero,
-    }.Validate(), "invalid TTL");
+    }).Validate(), "invalid TTL");
 
-    Throws<ArgumentOutOfRangeException>(() => ValidOptions() with
+    Throws<ArgumentOutOfRangeException>(() => (ValidOptions() with
     {
         CommandTimeoutSeconds = 301,
-    }.Validate(), "invalid timeout");
+    }).Validate(), "invalid timeout");
 }
 
 static void AdapterImplementsPersistenceBoundary()

@@ -22,14 +22,25 @@ export function classifyLifecycleDetail(
 
 export function lifecycleTone(status: string): LifecycleTone {
   const normalized = status.toUpperCase();
-  if (normalized === "COMPLETE" || normalized === "VALUED" || normalized === "FILLED") {
+  if (
+    normalized === "COMPLETE" ||
+    normalized === "VALUED" ||
+    normalized === "FILLED" ||
+    normalized === "VALIDATED" ||
+    normalized === "RISK_APPROVED" ||
+    normalized === "READY" ||
+    normalized === "AUTHORIZED" ||
+    normalized === "ACKNOWLEDGED" ||
+    normalized === "PROJECTED"
+  ) {
     return "positive";
   }
   if (
     normalized === "REJECTED" ||
     normalized === "FAILED" ||
     normalized === "EXPIRED" ||
-    normalized === "UNAVAILABLE"
+    normalized === "UNAVAILABLE" ||
+    normalized === "RISK_REJECTED"
   ) {
     return "negative";
   }
@@ -37,6 +48,7 @@ export function lifecycleTone(status: string): LifecycleTone {
     normalized === "PARTIAL_LINEAGE" ||
     normalized === "STALE" ||
     normalized === "RETRY_PENDING" ||
+    normalized === "RISK_RESTRICTED" ||
     normalized === "RECONCILIATION_REQUIRED"
   ) {
     return "warning";

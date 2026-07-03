@@ -1,0 +1,37 @@
+name: Phase 4.14 SQL Rollout Operations CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [phase414-sql-ops]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore ThesisPulseAI.sln
+      - run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore
+      - name: Verify SQL persistence and safety boundaries
+        shell: bash
+        run: |
+          grep -F 'IsolationLevel.Serializable' src/ThesisPulse.Signal.Service/SqlServerOptionChainRolloutAuditStore.cs
+          grep -F 'ROLLOUT_COMMAND_OR_VERSION_CONFLICT' src/ThesisPulse.Signal.Service/SqlServerOptionChainRolloutAuditStore.cs
+          grep -F 'RestoreAsync' src/ThesisPulse.Signal.Service/OptionChainSqlOperationsHosting.cs
+          grep -F 'TryAcquireGuardrail' src/ThesisPulse.Signal.Service/OptionChainSqlOperationsHosting.cs
+          grep -F 'selection_authority = 0 AND execution_authority = 0' database/migrations/phase414_option_chain_rollout_operations.sql
+          grep -F '"Enabled": false' src/ThesisPulse.Signal.Service/appsettings.json
+          grep -F '"LiveExecutionEnabled": false' src/ThesisPulse.Signal.Service/appsettings.json
+      - name: Phase 4.13 regression
+        shell: bash
+        run: |
+          grep -F 'STALE_ROLLOUT_VERSION' src/ThesisPulse.Signal.Service/OptionChainRolloutOperations.cs
+          grep -F 'FixedTimeEquals' src/ThesisPulse.Signal.Service/OptionChainRolloutOperations.cs

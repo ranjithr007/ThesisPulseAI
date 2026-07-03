@@ -15,6 +15,7 @@ function Get-ThesisPulseDevelopmentServices {
             Port = 60515
             HealthPath = "/health/ready"
             FrontendVariable = "VITE_TRADING_API_BASE_URL"
+            FrontendPath = "/local/trading"
         },
         [pscustomobject]@{
             Name = "Market Data Service"
@@ -23,6 +24,7 @@ function Get-ThesisPulseDevelopmentServices {
             Port = 5101
             HealthPath = "/health/ready"
             FrontendVariable = $null
+            FrontendPath = $null
         },
         [pscustomobject]@{
             Name = "Signal Service"
@@ -31,6 +33,7 @@ function Get-ThesisPulseDevelopmentServices {
             Port = 59479
             HealthPath = "/health/ready"
             FrontendVariable = "VITE_SIGNAL_API_BASE_URL"
+            FrontendPath = "/local/signal"
         },
         [pscustomobject]@{
             Name = "Thesis Service"
@@ -39,6 +42,7 @@ function Get-ThesisPulseDevelopmentServices {
             Port = 59475
             HealthPath = "/health/ready"
             FrontendVariable = "VITE_THESIS_API_BASE_URL"
+            FrontendPath = "/local/thesis"
         },
         [pscustomobject]@{
             Name = "Risk Service"
@@ -47,6 +51,7 @@ function Get-ThesisPulseDevelopmentServices {
             Port = 59477
             HealthPath = "/health/ready"
             FrontendVariable = "VITE_RISK_API_BASE_URL"
+            FrontendPath = "/local/risk"
         },
         [pscustomobject]@{
             Name = "Execution Service"
@@ -55,6 +60,7 @@ function Get-ThesisPulseDevelopmentServices {
             Port = 59482
             HealthPath = "/health/ready"
             FrontendVariable = "VITE_EXECUTION_API_BASE_URL"
+            FrontendPath = "/local/execution"
         },
         [pscustomobject]@{
             Name = "Portfolio Service"
@@ -63,6 +69,7 @@ function Get-ThesisPulseDevelopmentServices {
             Port = 59483
             HealthPath = "/health/ready"
             FrontendVariable = "VITE_PORTFOLIO_API_BASE_URL"
+            FrontendPath = "/local/portfolio"
         },
         [pscustomobject]@{
             Name = "Operations Service"
@@ -71,6 +78,7 @@ function Get-ThesisPulseDevelopmentServices {
             Port = 59485
             HealthPath = "/health/ready"
             FrontendVariable = "VITE_OPERATIONS_API_BASE_URL"
+            FrontendPath = "/local/operations"
         }
     )
 }

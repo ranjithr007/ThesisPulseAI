@@ -1,0 +1,50 @@
+name: Phase 4.4 Option-Chain Runtime CI
+
+on:
+  push:
+    branches:
+      - feature/phase44-option-chain-runtime
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase44-option-chain-runtime-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  acceptance:
+    name: Option-chain runtime acceptance and regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore solution
+        run: dotnet restore ThesisPulseAI.sln
+
+      - name: Build solution
+        run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore
+
+      - name: Run Phase 4.4 runtime acceptance
+        run: dotnet run --project tests/phase44-option-chain-runtime/dotnet/ThesisPulse.Phase44OptionChainRuntime.Tests.csproj --configuration Release
+
+      - name: Run Phase 4.3 Fusion regression
+        run: dotnet run --project tests/phase43-option-chain-fusion/dotnet/ThesisPulse.Phase43OptionChainFusion.Tests.csproj --configuration Release
+
+      - name: Run Phase 4.2 SQL adapter regression
+        run: dotnet run --project tests/phase42-option-chain-sql-adapter/dotnet/ThesisPulse.Phase42OptionChainSqlAdapter.Tests.csproj --configuration Release
+
+      - name: Run Fusion signal lifecycle regression
+        run: dotnet run --project tests/fusion-signal/dotnet/ThesisPulse.FusionSignal.Tests.csproj --configuration Release

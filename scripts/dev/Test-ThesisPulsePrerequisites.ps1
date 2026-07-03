@@ -28,7 +28,7 @@ function Add-Check {
         Remediation = $Remediation
     })
     if (-not $Passed) {
-        $failures.Add("$Name: $Details")
+        $failures.Add("${Name}: $Details")
     }
 }
 

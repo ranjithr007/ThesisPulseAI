@@ -15,6 +15,7 @@ var configuration = new ConfigurationBuilder()
     })
     .Build();
 
+services.AddLogging();
 services.AddOptionChainFusionRuntime(configuration);
 await using var provider = services.BuildServiceProvider();
 

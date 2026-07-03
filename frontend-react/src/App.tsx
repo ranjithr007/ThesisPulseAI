@@ -1,5 +1,6 @@
 import { MarketCommandCenter } from "./market/MarketCommandCenter";
 import { OperationsDashboard } from "./operations/OperationsDashboard";
+import { PnlWorkspace } from "./pnl/PnlWorkspace";
 import { PortfolioWorkspace } from "./portfolio/PortfolioWorkspace";
 import { RiskReadinessWorkspace } from "./risk/RiskReadinessWorkspace";
 import { useAppRoute } from "./routing/useAppRoute";
@@ -28,9 +29,11 @@ export function App() {
           ? "Risk"
           : route.page === "portfolio"
             ? "Portfolio"
-            : route.page === "operations"
-              ? "Operations"
-              : "Signals";
+            : route.page === "pnl"
+              ? "P&L"
+              : route.page === "operations"
+                ? "Operations"
+                : "Signals";
 
   return (
     <div className="app-shell">
@@ -39,11 +42,7 @@ export function App() {
           <p className="eyebrow">THESISPULSE AI</p>
           <h1>Intelligent signals. Validated theses. Adaptive decisions.</h1>
         </div>
-        <div
-          className="environment-badge"
-          role="status"
-          aria-label="Paper trading environment"
-        >
+        <div className="environment-badge" role="status" aria-label="Paper trading environment">
           <strong>PAPER TRADING</strong>
           <span>No real orders will be submitted</span>
         </div>
@@ -59,6 +58,7 @@ export function App() {
                 item === "Theses" ||
                 item === "Risk" ||
                 item === "Portfolio" ||
+                item === "P&L" ||
                 item === "Operations";
 
               return (
@@ -75,6 +75,7 @@ export function App() {
                     else if (item === "Theses") navigate({ page: "theses" });
                     else if (item === "Risk") navigate({ page: "risk" });
                     else if (item === "Portfolio") navigate({ page: "portfolio" });
+                    else if (item === "P&L") navigate({ page: "pnl" });
                     else if (item === "Operations") navigate({ page: "operations" });
                   }}
                 >
@@ -93,14 +94,12 @@ export function App() {
           {route.page === "market" ? <MarketCommandCenter /> : null}
           {route.page === "signals" ? <SignalScanner /> : null}
           {route.page === "signal-detail" ? (
-            <SignalDetail
-              signalUid={route.signalUid}
-              onBack={() => navigate({ page: "signals" })}
-            />
+            <SignalDetail signalUid={route.signalUid} onBack={() => navigate({ page: "signals" })} />
           ) : null}
           {route.page === "theses" ? <ThesisReadinessWorkspace /> : null}
           {route.page === "risk" ? <RiskReadinessWorkspace /> : null}
           {route.page === "portfolio" ? <PortfolioWorkspace /> : null}
+          {route.page === "pnl" ? <PnlWorkspace /> : null}
           {route.page === "operations" ? <OperationsDashboard /> : null}
         </main>
       </div>

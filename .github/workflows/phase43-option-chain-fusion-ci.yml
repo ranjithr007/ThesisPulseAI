@@ -40,8 +40,8 @@ jobs:
       - name: Run Phase 4.3 option-chain Fusion acceptance
         run: dotnet run --project tests/phase43-option-chain-fusion/dotnet/ThesisPulse.Phase43OptionChainFusion.Tests.csproj --configuration Release
 
-      - name: Run Thesis Fusion regression
-        run: dotnet run --project tests/thesis-fusion/dotnet/ThesisPulse.ThesisFusion.Tests.csproj --configuration Release
+      - name: Run Fusion signal lifecycle regression
+        run: dotnet run --project tests/fusion-signal/dotnet/ThesisPulse.FusionSignal.Tests.csproj --configuration Release
 
       - name: Run Phase 4.2 SQL adapter regression
         run: dotnet run --project tests/phase42-option-chain-sql-adapter/dotnet/ThesisPulse.Phase42OptionChainSqlAdapter.Tests.csproj --configuration Release

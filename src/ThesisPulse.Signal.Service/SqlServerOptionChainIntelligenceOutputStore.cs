@@ -254,7 +254,7 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
             : Convert.ToInt64(value);
     }
 
-    private static async Task<long?> ResolveInstrumentIdAsync(
+    private async Task<long?> ResolveInstrumentIdAsync(
         SqlConnection connection,
         SqlTransaction transaction,
         string instrumentKey,
@@ -282,7 +282,7 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
         return value is null or DBNull ? null : Convert.ToInt64(value);
     }
 
-    private static async Task<StoredRow?> FindByOutputUidAsync(
+    private async Task<StoredRow?> FindByOutputUidAsync(
         SqlConnection connection,
         SqlTransaction? transaction,
         Guid outputUid,
@@ -299,7 +299,7 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
         return value is null or DBNull ? null : new StoredRow(Convert.ToString(value)!);
     }
 
-    private static async Task<CurrentRevision?> FindCurrentRevisionAsync(
+    private async Task<CurrentRevision?> FindCurrentRevisionAsync(
         SqlConnection connection,
         SqlTransaction transaction,
         long engineId,
@@ -327,7 +327,7 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
             : null;
     }
 
-    private static async Task<IReadOnlyDictionary<Guid, long>> ResolveSnapshotIdsAsync(
+    private async Task<IReadOnlyDictionary<Guid, long>> ResolveSnapshotIdsAsync(
         SqlConnection connection,
         SqlTransaction transaction,
         IReadOnlyCollection<Guid> snapshotUids,
@@ -520,7 +520,7 @@ public sealed class SqlServerOptionChainIntelligenceOutputStore : IOptionChainIn
         }
     }
 
-    private static async Task MarkSupersededAsync(
+    private async Task MarkSupersededAsync(
         SqlConnection connection,
         SqlTransaction transaction,
         long outputId,

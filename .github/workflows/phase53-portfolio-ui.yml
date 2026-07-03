@@ -1,0 +1,36 @@
+name: Phase 5.3 Portfolio UI CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [phase53-portfolio-ui]
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend-react
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend-react/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Verify read-only portfolio UI
+        working-directory: .
+        shell: bash
+        run: |
+          grep -F 'page: "portfolio"' frontend-react/src/routing/useAppRoute.ts
+          grep -F 'livePortfolioAuthority' frontend-react/src/portfolio/PortfolioWorkspace.tsx
+          grep -F 'executionAuthority' frontend-react/src/portfolio/PortfolioWorkspace.tsx
+          grep -F 'brokerAuthority' frontend-react/src/portfolio/PortfolioWorkspace.tsx

@@ -1,0 +1,56 @@
+name: Phase 5.8 Candidate-Thesis Lineage CI
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [phase58-candidate-thesis-lineage]
+
+permissions:
+  contents: read
+
+jobs:
+  lineage:
+    name: Migration, automatic path, lifecycle, and UI regressions
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend-react/package-lock.json
+
+      - name: Restore .NET solution
+        run: dotnet restore ThesisPulseAI.sln
+
+      - name: Build .NET solution
+        run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore --verbosity minimal
+
+      - name: Run Phase 5.8 lineage checks
+        run: dotnet run --project tests/phase58-candidate-thesis-lineage/dotnet/ThesisPulse.Phase58CandidateThesisLineage.Tests.csproj --configuration Release
+
+      - name: Run Phase 5.5 lifecycle regression
+        run: dotnet run --project tests/phase55-paper-lifecycle/dotnet/ThesisPulse.Phase55PaperLifecycle.Tests.csproj --configuration Release
+
+      - name: Run Phase 5.7 acceptance regression
+        run: dotnet run --project tests/phase57-paper-lifecycle-acceptance/dotnet/ThesisPulse.Phase57PaperLifecycleAcceptance.Tests.csproj --configuration Release
+
+      - name: Install frontend dependencies
+        working-directory: frontend-react
+        run: npm ci
+
+      - name: Typecheck frontend
+        working-directory: frontend-react
+        run: npm run typecheck
+
+      - name: Build frontend
+        working-directory: frontend-react
+        run: npm run build

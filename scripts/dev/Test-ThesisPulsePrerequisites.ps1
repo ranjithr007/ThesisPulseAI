@@ -18,18 +18,25 @@ function Add-Check {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
         [Parameter(Mandatory = $true)][bool]$Passed,
-        [Parameter(Mandatory = $true)][string]$Details,
+        [Parameter(Mandatory = $true)][AllowNull()][AllowEmptyString()][string]$Details,
         [string]$Remediation = ""
     )
+
+    $normalizedDetails = if ([string]::IsNullOrWhiteSpace($Details)) {
+        "No additional details were returned."
+    }
+    else {
+        $Details.Trim()
+    }
 
     $checks.Add([pscustomobject]@{
         Name = $Name
         Passed = $Passed
-        Details = $Details
+        Details = $normalizedDetails
         Remediation = $Remediation
     })
     if (-not $Passed) {
-        $failures.Add("${Name}: $Details")
+        $failures.Add("${Name}: $normalizedDetails")
     }
 }
 

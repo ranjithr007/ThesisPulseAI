@@ -105,6 +105,15 @@ foreach ($key in $requiredFrontendValues.Keys) {
     }
 }
 
+$prerequisiteScriptPath = Join-Path $repositoryRoot "scripts/dev/Test-ThesisPulsePrerequisites.ps1"
+$prerequisiteScriptContent = Get-Content -LiteralPath $prerequisiteScriptPath -Raw
+Assert-Configuration `
+    -Condition ($prerequisiteScriptContent.Contains('[AllowNull()][AllowEmptyString()][string]$Details')) `
+    -Message "Prerequisite Add-Check must accept empty detail output."
+Assert-Configuration `
+    -Condition ($prerequisiteScriptContent.Contains('No additional details were returned.')) `
+    -Message "Prerequisite Add-Check must normalize empty detail output."
+
 $scriptPaths = @(
     "scripts/dev/ThesisPulse.Development.ps1",
     "scripts/dev/Test-ThesisPulsePrerequisites.ps1",

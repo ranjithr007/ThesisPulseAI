@@ -23,9 +23,11 @@ ThesisPulse AI is an AI-assisted Indian stock-market intelligence and trading pl
 
 ## Current phase
 
-**Phase 5.7 — PAPER lifecycle acceptance proof and lineage audit.**
+**Phase 5.8 — candidate-thesis lineage bridge for automatic PAPER execution.**
 
-The operator-facing React application includes read-only Market, Signals, Theses, Risk, Portfolio, P&L, Execution, and Operations workspaces. The Execution workspace now traces the authoritative PAPER lifecycle and evaluates correlation, causation, stage completion, quantities, position/P&L evidence, freshness, and applicable operational controls as `PASS`, `FAIL`, or `INCOMPLETE`.
+The modern automatic path now preserves the candidate-thesis UID from `intelligence.signal_fusion_lineage` and the risk-decision UID from `risk.signal_risk_evaluations` without fabricating legacy thesis or risk rows. Trade-plan persistence, execution authorization, lifecycle views, and acceptance evidence support both the modern lineage and existing legacy records.
+
+The operator-facing React application includes read-only Market, Signals, Theses, Risk, Portfolio, P&L, Execution, and Operations workspaces. The Execution workspace traces the authoritative PAPER lifecycle and evaluates correlation, causation, stage completion, quantities, position/P&L evidence, freshness, and applicable operational controls as `PASS`, `FAIL`, or `INCOMPLETE`.
 
 ## Windows quick start
 
@@ -72,4 +74,4 @@ See `docs/phase-5/windows-local-development.md` for first-run setup, optional mi
 
 ## Safety boundary
 
-The current local launcher, acceptance proof, and UI are PAPER-only and read-only. They do not grant browser order controls, risk overrides, operational-control resets, broker submission authority, automatic LIVE enablement, or destructive database operations.
+The current local launcher, automatic candidate-thesis bridge, acceptance proof, and UI are PAPER-only. They do not grant browser order controls, risk overrides, operational-control resets, broker submission authority, automatic LIVE enablement, or destructive database operations.

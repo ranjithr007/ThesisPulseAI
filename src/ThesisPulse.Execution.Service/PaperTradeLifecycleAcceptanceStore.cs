@@ -41,10 +41,10 @@ public sealed class SqlServerPaperTradeLifecycleAcceptanceStore(
                 tp.trade_plan_id,
                 tp.signal_id,
                 tp.thesis_id,
-                COALESCE(tp.risk_decision_id, sre.risk_decision_id) AS risk_decision_id
+                tp.candidate_thesis_uid,
+                tp.risk_decision_id,
+                tp.signal_risk_evaluation_id
             FROM [risk].[trade_plans] tp WITH (READPAST)
-            LEFT JOIN [risk].[signal_risk_evaluations] sre
-                ON sre.signal_risk_evaluation_id = tp.signal_risk_evaluation_id
             WHERE tp.environment = 'PAPER'
               AND tp.is_current = 1
               AND tp.correlation_id = @correlation_uid
@@ -112,10 +112,31 @@ public sealed class SqlServerPaperTradeLifecycleAcceptanceStore(
 
             UNION ALL
 
+            SELECT 2, 'THESIS', lineage.thesis_uid, s.correlation_id,
+                   lineage.thesis_request_uid, lineage.created_at_utc,
+                   'intelligence.signal_fusion_lineage'
+            FROM [intelligence].[signal_fusion_lineage] lineage
+            INNER JOIN root r
+                ON r.signal_id = lineage.signal_id
+               AND r.candidate_thesis_uid = lineage.thesis_uid
+            INNER JOIN [intelligence].[signals] s
+                ON s.signal_id = lineage.signal_id
+
+            UNION ALL
+
             SELECT 3, 'RISK', rd.risk_decision_uid, rd.correlation_id, rd.causation_id,
                    rd.evaluated_at_utc, 'risk.risk_decisions'
             FROM [risk].[risk_decisions] rd
             INNER JOIN root r ON r.risk_decision_id = rd.risk_decision_id
+
+            UNION ALL
+
+            SELECT 3, 'RISK', sre.risk_decision_uid, sre.correlation_id, sre.causation_id,
+                   sre.updated_at_utc, 'risk.signal_risk_evaluations'
+            FROM [risk].[signal_risk_evaluations] sre
+            INNER JOIN root r
+                ON r.signal_risk_evaluation_id = sre.signal_risk_evaluation_id
+            WHERE sre.risk_decision_uid IS NOT NULL
 
             UNION ALL
 

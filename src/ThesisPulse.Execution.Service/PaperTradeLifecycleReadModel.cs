@@ -73,9 +73,12 @@ public sealed class SqlServerPaperTradeLifecycleReadStore(
             s.[signal_uid],
             s.[initial_status] AS [signal_status],
             s.[generated_at_utc] AS [signal_at_utc],
-            t.[thesis_uid],
-            t.[initial_status] AS [thesis_status],
-            t.[generated_at_utc] AS [thesis_at_utc],
+            COALESCE(t.[thesis_uid], candidate_lineage.[thesis_uid]) AS [thesis_uid],
+            COALESCE(
+                t.[initial_status],
+                CASE WHEN candidate_lineage.[thesis_uid] IS NOT NULL THEN 'CANDIDATE' END
+            ) AS [thesis_status],
+            COALESCE(t.[generated_at_utc], candidate_lineage.[created_at_utc]) AS [thesis_at_utc],
             COALESCE(sre.[risk_decision_uid], rd.[risk_decision_uid]) AS [risk_decision_uid],
             COALESCE(sre.[current_status], rd.[decision]) AS [risk_status],
             COALESCE(sre.[updated_at_utc], rd.[evaluated_at_utc]) AS [risk_at_utc],
@@ -117,6 +120,9 @@ public sealed class SqlServerPaperTradeLifecycleReadStore(
             ON ex.[exchange_id] = i.[exchange_id]
         LEFT JOIN [thesis].[theses] t
             ON t.[thesis_id] = tp.[thesis_id]
+        LEFT JOIN [intelligence].[signal_fusion_lineage] candidate_lineage
+            ON candidate_lineage.[signal_id] = tp.[signal_id]
+           AND candidate_lineage.[thesis_uid] = tp.[candidate_thesis_uid]
         LEFT JOIN [risk].[signal_risk_evaluations] sre
             ON sre.[signal_risk_evaluation_id] = tp.[signal_risk_evaluation_id]
         LEFT JOIN [risk].[risk_decisions] rd

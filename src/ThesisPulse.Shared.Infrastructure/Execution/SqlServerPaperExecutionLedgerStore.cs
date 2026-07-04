@@ -8,8 +8,8 @@ using ThesisPulse.Shared.Infrastructure.Messaging;
 namespace ThesisPulse.Shared.Infrastructure.Execution;
 
 /// <summary>
-/// SQL Server execution ledger that accepts both the authoritative signal-risk lineage introduced
-/// in Phase 3.2 and the legacy risk_decisions lineage. New automatic execution uses the former.
+/// SQL Server execution ledger that accepts the authoritative signal-risk and candidate-thesis
+/// lineage used by automatic PAPER execution while retaining legacy risk_decisions/theses support.
 /// </summary>
 public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerStore
 {
@@ -91,8 +91,11 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
                     ON rd.[risk_decision_id] = tp.[risk_decision_id]
                 LEFT JOIN [risk].[signal_risk_evaluations] sre
                     ON sre.[signal_risk_evaluation_id] = tp.[signal_risk_evaluation_id]
-                INNER JOIN [thesis].[theses] th
+                LEFT JOIN [thesis].[theses] th
                     ON th.[thesis_id] = tp.[thesis_id]
+                LEFT JOIN [intelligence].[signal_fusion_lineage] candidate_lineage
+                    ON candidate_lineage.[signal_id] = tp.[signal_id]
+                   AND candidate_lineage.[thesis_uid] = tp.[candidate_thesis_uid]
                 INNER JOIN [intelligence].[signals] s
                     ON s.[signal_id] = tp.[signal_id]
                 INNER JOIN [reference].[instruments] i
@@ -109,8 +112,17 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
                           AND sre.[risk_decision_uid] = @risk_decision_uid
                           AND sre.[current_status] = 'RISK_APPROVED')
                   )
-                  AND th.[thesis_uid] = @thesis_uid
+                  AND
+                  (
+                      (tp.[thesis_id] IS NOT NULL
+                          AND th.[thesis_uid] = @thesis_uid)
+                      OR
+                      (tp.[candidate_thesis_uid] IS NOT NULL
+                          AND candidate_lineage.[thesis_uid] = @thesis_uid)
+                  )
                   AND s.[signal_uid] = @signal_uid
+                  AND tp.[correlation_id] = @correlation_id
+                  AND s.[correlation_id] = @correlation_id
                   AND tp.[initial_status] = 'READY'
                   AND tp.[environment] = 'PAPER'
                   AND tp.[is_current] = 1
@@ -543,7 +555,7 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
                 o.[broker_account_id], o.[instrument_id], o.[order_uid],
                 ec.[execution_command_uid], tp.[trade_plan_uid],
                 COALESCE(rd.[risk_decision_uid], sre.[risk_decision_uid]),
-                th.[thesis_uid], s.[signal_uid],
+                COALESCE(th.[thesis_uid], candidate_lineage.[thesis_uid]), s.[signal_uid],
                 tp.[correlation_id], ec.[idempotency_key], o.[environment],
                 e.[exchange_code], i.[canonical_symbol], o.[side], o.[current_status],
                 o.[requested_quantity], o.[filled_quantity], o.[remaining_quantity],
@@ -559,12 +571,17 @@ public sealed class SqlServerPaperExecutionLedgerStore : IPaperExecutionLedgerSt
                 ON rd.[risk_decision_id] = tp.[risk_decision_id]
             LEFT JOIN [risk].[signal_risk_evaluations] sre
                 ON sre.[signal_risk_evaluation_id] = tp.[signal_risk_evaluation_id]
-            INNER JOIN [thesis].[theses] th ON th.[thesis_id] = tp.[thesis_id]
+            LEFT JOIN [thesis].[theses] th
+                ON th.[thesis_id] = tp.[thesis_id]
+            LEFT JOIN [intelligence].[signal_fusion_lineage] candidate_lineage
+                ON candidate_lineage.[signal_id] = tp.[signal_id]
+               AND candidate_lineage.[thesis_uid] = tp.[candidate_thesis_uid]
             INNER JOIN [intelligence].[signals] s ON s.[signal_id] = tp.[signal_id]
             INNER JOIN [reference].[instruments] i ON i.[instrument_id] = o.[instrument_id]
             INNER JOIN [reference].[exchanges] e ON e.[exchange_id] = i.[exchange_id]
             WHERE o.[order_uid] = @order_uid
-              AND COALESCE(rd.[risk_decision_uid], sre.[risk_decision_uid]) IS NOT NULL;
+              AND COALESCE(rd.[risk_decision_uid], sre.[risk_decision_uid]) IS NOT NULL
+              AND COALESCE(th.[thesis_uid], candidate_lineage.[thesis_uid]) IS NOT NULL;
             """;
         await using var command = CreateCommand(connection, transaction, sql);
         command.Parameters.Add("@order_uid", SqlDbType.UniqueIdentifier).Value = orderUid;

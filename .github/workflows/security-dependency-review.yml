@@ -101,12 +101,59 @@ jobs:
           with open("dependency-review-diagnostics.json", "w", encoding="utf-8") as handle:
               json.dump(report, handle, indent=2, sort_keys=True)
 
+      - name: Diagnose dependency graph endpoint
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const pullRequest = context.payload.pull_request;
+            const report = {
+              httpStatus: null,
+              message: null,
+              documentationUrl: null,
+              changeCount: null,
+            };
+            try {
+              const response = await github.request(
+                'GET /repos/{owner}/{repo}/dependency-graph/compare/{basehead}',
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  basehead: `${pullRequest.base.sha}...${pullRequest.head.sha}`,
+                  headers: { 'X-GitHub-Api-Version': '2022-11-28' },
+                },
+              );
+              report.httpStatus = response.status;
+              if (Array.isArray(response.data)) {
+                report.changeCount = response.data.length;
+              } else if (Array.isArray(response.data?.changes)) {
+                report.changeCount = response.data.changes.length;
+              } else {
+                report.changeCount = 0;
+              }
+            } catch (error) {
+              report.httpStatus = error.status ?? null;
+              report.message = error.response?.data?.message ?? error.message ?? error.name;
+              report.documentationUrl = error.response?.data?.documentation_url ?? null;
+            }
+            core.info(`Dependency graph API status: ${report.httpStatus}`);
+            core.info(`Dependency graph API message: ${report.message ?? 'none'}`);
+            core.info(`Dependency graph change count: ${report.changeCount}`);
+            fs.writeFileSync(
+              'dependency-graph-api.json',
+              JSON.stringify(report, null, 2),
+              { encoding: 'utf8' },
+            );
+
       - name: Upload dependency review diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dependency-review-diagnostics
-          path: dependency-review-diagnostics.json
+          path: |
+            dependency-review-diagnostics.json
+            dependency-graph-api.json
           if-no-files-found: error
           retention-days: 7
 

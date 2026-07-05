@@ -64,6 +64,8 @@ Assert-Contains $dependencyReview "AGPL-3.0-or-later" "Dependency review must de
 Assert-Contains $dependencyReview "SSPL-1.0" "Dependency review must deny SSPL dependencies."
 Assert-Contains $dependencyReview "retry-on-snapshot-warnings: true" "Dependency review must retry bounded snapshot warnings."
 Assert-Contains $dependencyReview "continue-on-error: true" "Dependency review diagnostics must preserve action outputs without ending the job early."
+Assert-Contains $dependencyReview "actions/upload-artifact@v4" "Dependency review must upload sanitized diagnostics."
+Assert-Contains $dependencyReview "dependency-review-diagnostics.json" "Dependency review diagnostics must use the bounded JSON artifact."
 Assert-Contains $dependencyReview "if: steps.review.outcome == 'failure'" "Dependency review must explicitly restore fail-closed enforcement."
 Assert-Contains $dependencyReview "exit 1" "Dependency review enforcement must return a non-zero exit code."
 Assert-Contains $dependencyReview "contents: read" "Dependency review must use read-only contents permission."

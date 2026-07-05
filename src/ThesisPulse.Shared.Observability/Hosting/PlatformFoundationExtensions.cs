@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ThesisPulse.Shared.Contracts.Api.V1;
 using ThesisPulse.Shared.Infrastructure.Time;
+using ThesisPulse.Shared.Observability.Authentication;
 using ThesisPulse.Shared.Observability.Correlation;
 
 namespace ThesisPulse.Shared.Observability.Hosting;
@@ -20,12 +22,17 @@ public static class PlatformFoundationExtensions
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton(new PlatformRuntime(DateTimeOffset.UtcNow));
         services.AddHealthChecks();
+        services.AddThesisPulseOperatorAuthentication();
         return services;
     }
 
     public static IApplicationBuilder UseThesisPulsePlatformFoundation(
-        this IApplicationBuilder app) =>
+        this IApplicationBuilder app)
+    {
         app.UseMiddleware<CorrelationIdMiddleware>();
+        app.UseThesisPulseOperatorAuthentication();
+        return app;
+    }
 
     public static IEndpointRouteBuilder MapThesisPulsePlatformEndpoints(
         this IEndpointRouteBuilder endpoints,
@@ -33,40 +40,44 @@ public static class PlatformFoundationExtensions
         string contractVersion = "v1")
     {
         endpoints.MapHealthChecks(
-            "/health/live",
-            new HealthCheckOptions { Predicate = _ => false });
+                "/health/live",
+                new HealthCheckOptions { Predicate = _ => false })
+            .AllowAnonymous();
 
-        endpoints.MapHealthChecks("/health/ready");
-
-        endpoints.MapGet(
-            "/health/startup",
-            (PlatformRuntime runtime) => Results.Ok(new
-            {
-                status = "Healthy",
-                startedAtUtc = runtime.StartedAtUtc,
-            }));
+        endpoints.MapHealthChecks("/health/ready")
+            .AllowAnonymous();
 
         endpoints.MapGet(
-            "/info",
-            (IHostEnvironment environment,
-             IConfiguration configuration,
-             PlatformRuntime runtime,
-             IClock clock) =>
-            {
-                var version = Assembly.GetEntryAssembly()?
-                    .GetName()
-                    .Version?
-                    .ToString() ?? "0.0.0";
+                "/health/startup",
+                (PlatformRuntime runtime) => Results.Ok(new
+                {
+                    status = "Healthy",
+                    startedAtUtc = runtime.StartedAtUtc,
+                }))
+            .AllowAnonymous();
 
-                return Results.Ok(new ServiceInfoResponse(
-                    ServiceName: serviceName,
-                    ServiceVersion: version,
-                    ContractVersion: contractVersion,
-                    ConfigurationVersion: configuration["Platform:ConfigurationVersion"] ?? "unversioned",
-                    Environment: environment.EnvironmentName,
-                    StartedAtUtc: runtime.StartedAtUtc,
-                    CurrentTimeUtc: clock.UtcNow));
-            });
+        endpoints.MapGet(
+                "/info",
+                (IHostEnvironment environment,
+                 IConfiguration configuration,
+                 PlatformRuntime runtime,
+                 IClock clock) =>
+                {
+                    var version = Assembly.GetEntryAssembly()?
+                        .GetName()
+                        .Version?
+                        .ToString() ?? "0.0.0";
+
+                    return Results.Ok(new ServiceInfoResponse(
+                        ServiceName: serviceName,
+                        ServiceVersion: version,
+                        ContractVersion: contractVersion,
+                        ConfigurationVersion: configuration["Platform:ConfigurationVersion"] ?? "unversioned",
+                        Environment: environment.EnvironmentName,
+                        StartedAtUtc: runtime.StartedAtUtc,
+                        CurrentTimeUtc: clock.UtcNow));
+                })
+            .AllowAnonymous();
 
         return endpoints;
     }

@@ -23,9 +23,11 @@ ThesisPulse AI is an AI-assisted Indian stock-market intelligence and trading pl
 
 ## Current phase
 
-**Phase 5.8 — candidate-thesis lineage bridge for automatic PAPER execution.**
+**Phase 5.9 — repository security and software supply-chain gates.**
 
-The modern automatic path now preserves the candidate-thesis UID from `intelligence.signal_fusion_lineage` and the risk-decision UID from `risk.signal_risk_evaluations` without fabricating legacy thesis or risk rows. Trade-plan persistence, execution authorization, lifecycle views, and acceptance evidence support both the modern lineage and existing legacy records.
+The repository now includes multi-language CodeQL analysis, pull-request dependency review, NuGet/npm/Python vulnerability audits, full-history secret scanning, and weekly Dependabot monitoring for NuGet, npm, pip, and GitHub Actions. These controls are fail-closed, least-privilege, and do not auto-fix or auto-merge dependency changes.
+
+The modern automatic PAPER path preserves the candidate-thesis UID from `intelligence.signal_fusion_lineage` and the risk-decision UID from `risk.signal_risk_evaluations` without fabricating legacy thesis or risk rows. Trade-plan persistence, execution authorization, lifecycle views, and acceptance evidence support both the modern lineage and existing legacy records.
 
 The operator-facing React application includes read-only Market, Signals, Theses, Risk, Portfolio, P&L, Execution, and Operations workspaces. The Execution workspace traces the authoritative PAPER lifecycle and evaluates correlation, causation, stage completion, quantities, position/P&L evidence, freshness, and applicable operational controls as `PASS`, `FAIL`, or `INCOMPLETE`.
 
@@ -49,6 +51,12 @@ Validate one authoritative lifecycle using its correlation UID:
   -CorrelationUid <correlation-guid>
 ```
 
+Validate repository security configuration locally:
+
+```powershell
+.\scripts\security\Test-ThesisPulseSecurityConfiguration.ps1
+```
+
 The lifecycle command exits successfully only when the authoritative acceptance outcome is `PASS`. Missing or unfinished evidence returns `INCOMPLETE`; violated safety invariants return `FAIL`.
 
 Stop only launcher-owned processes with:
@@ -59,19 +67,22 @@ Stop only launcher-owned processes with:
 
 The launcher keeps PAPER mode enforced, leaves LIVE execution disabled, checks service readiness, and stores logs under `.thesispulse-dev/logs`.
 
-See `docs/phase-5/windows-local-development.md` for first-run setup, optional migrations, service addresses, logs, Visual Studio usage, and troubleshooting.
+See `docs/phase-5/windows-local-development.md` for local startup and `docs/security/repository-security.md` for security triage, secret rotation, dependency findings, and branch protection.
 
 ## Repository guide
 
 - `src/` — ASP.NET Core services, shared contracts, infrastructure, and broker adapters;
-- `frontend-react/` — React operator application;
+- `ai-python/` — Python intelligence, analytics, tests, and pinned audit tooling;
+- `frontend-react/` — React operator application and locked npm graph;
 - `database/migrations/` — versioned SQL Server migrations;
 - `scripts/dev/` — supported Windows local-development launcher and validation tools;
+- `scripts/security/` — repository security configuration validation;
 - `docs/adr/` — versioned architecture decisions;
 - `docs/phase-0/PHASE-0-BASELINE.md` — accepted product and architecture baseline;
-- `docs/phase-5/windows-local-development.md` — current local-development runbook;
+- `docs/phase-5/windows-local-development.md` — local-development runbook;
+- `docs/security/repository-security.md` — security and supply-chain runbook;
 - `contracts/` — cross-service schemas.
 
 ## Safety boundary
 
-The current local launcher, automatic candidate-thesis bridge, acceptance proof, and UI are PAPER-only. They do not grant browser order controls, risk overrides, operational-control resets, broker submission authority, automatic LIVE enablement, or destructive database operations.
+The local launcher, automatic candidate-thesis bridge, acceptance proof, UI, and repository security workflows are PAPER-only or build-time controls. They do not grant browser order controls, risk overrides, operational-control resets, broker submission authority, automatic LIVE enablement, automatic dependency merge, or destructive database operations.

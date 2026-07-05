@@ -8,6 +8,8 @@ param(
     [switch]$RunMigrations,
     [string]$DatabaseConnection = $env:THESISPULSE_DATABASE_CONNECTION,
     [ValidateRange(15, 600)][int]$StartupTimeoutSeconds = 90,
+    [ValidateNotNullOrEmpty()][string]$OperatorUsername = "operator",
+    [string]$OperatorPassword,
     [switch]$NoBrowser
 )
 
@@ -40,6 +42,26 @@ function Invoke-CheckedCommand {
     finally {
         Pop-Location
     }
+}
+
+function New-CryptographicBytes {
+    param([ValidateRange(16, 256)][int]$Length)
+
+    $bytes = New-Object byte[] $Length
+    $generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $generator.GetBytes($bytes)
+    }
+    finally {
+        $generator.Dispose()
+    }
+    return $bytes
+}
+
+function ConvertTo-UrlSafeSecret {
+    param([Parameter(Mandatory = $true)][byte[]]$Bytes)
+
+    return [Convert]::ToBase64String($Bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
 }
 
 function Save-StartedProcesses {
@@ -134,6 +156,11 @@ Get-ChildItem -LiteralPath $logDirectory -File -ErrorAction SilentlyContinue | R
 $dotnetCommand = (Get-Command dotnet -ErrorAction Stop).Source
 $npmCommand = (Get-Command npm -ErrorAction Stop).Source
 $nodeCommand = (Get-Command node -ErrorAction Stop).Source
+$generatedOperatorPassword = [string]::IsNullOrWhiteSpace($OperatorPassword)
+if ($generatedOperatorPassword) {
+    $OperatorPassword = ConvertTo-UrlSafeSecret -Bytes (New-CryptographicBytes -Length 24)
+}
+$authenticationSigningKey = [Convert]::ToBase64String((New-CryptographicBytes -Length 64))
 
 try {
     if (-not $SkipRestore) {
@@ -172,6 +199,18 @@ try {
     $env:ASPNETCORE_ENVIRONMENT = "Development"
     $env:Platform__Environment = "PAPER"
     $env:Platform__LiveExecutionEnabled = "false"
+    $env:Authentication__Mode = "LocalDevelopment"
+    $env:Authentication__Issuer = "ThesisPulse.LocalDevelopment"
+    $env:Authentication__Audience = "ThesisPulse.Operator"
+    $env:Authentication__TokenLifetimeMinutes = "30"
+    $env:Authentication__Local__Username = $OperatorUsername
+    $env:Authentication__Local__Password = $OperatorPassword
+    $env:Authentication__Local__DisplayName = "Local PAPER Operator"
+    $env:Authentication__Local__SigningKeyBase64 = $authenticationSigningKey
+    $env:Authentication__Local__Permissions__0 = "thesispulse.read"
+    $env:Authentication__InternalServiceHosts__0 = "localhost"
+    $env:Authentication__InternalServiceHosts__1 = "127.0.0.1"
+    $env:Authentication__InternalServiceHosts__2 = "::1"
     if (-not [string]::IsNullOrWhiteSpace($DatabaseConnection)) {
         $env:ConnectionStrings__OperationalDatabase = $DatabaseConnection
     }
@@ -227,6 +266,13 @@ try {
     Write-Host ""
     Write-Host "ThesisPulse AI PAPER stack is ready."
     Write-Host "Frontend: $($frontend.Url)"
+    Write-Host "Operator username: $OperatorUsername"
+    if ($generatedOperatorPassword) {
+        Write-Host "Operator password for this launch: $OperatorPassword"
+        Write-Host "The generated password is not persisted and will change after restart."
+    } else {
+        Write-Host "Operator password: supplied through -OperatorPassword (not displayed)."
+    }
     Write-Host "Process manifest: $manifestPath"
     Write-Host "Logs: $logDirectory"
     Write-Host "Stop command: .\scripts\dev\Stop-ThesisPulse.ps1"

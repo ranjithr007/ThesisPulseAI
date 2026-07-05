@@ -38,12 +38,19 @@ jobs:
           import json
           import os
 
-          print(f"Dependency review outcome: {os.environ.get('REVIEW_OUTCOME', 'unknown')}")
-          for label, variable in (
+          report = {
+              "reviewOutcome": os.environ.get("REVIEW_OUTCOME", "unknown"),
+              "vulnerable": [],
+              "invalidLicense": [],
+              "denied": [],
+          }
+          mappings = (
               ("vulnerable", "VULNERABLE_CHANGES"),
-              ("invalid-license", "INVALID_LICENSE_CHANGES"),
+              ("invalidLicense", "INVALID_LICENSE_CHANGES"),
               ("denied", "DENIED_CHANGES"),
-          ):
+          )
+          print(f"Dependency review outcome: {report['reviewOutcome']}")
+          for label, variable in mappings:
               raw = os.environ.get(variable, "").strip()
               if not raw:
                   print(f"{label}: 0 reported changes")
@@ -51,6 +58,7 @@ jobs:
               try:
                   items = json.loads(raw)
               except json.JSONDecodeError:
+                  report[label].append({"package": "unknown-package", "identifier": "invalid-json-output"})
                   print(f"{label}: output was not valid JSON")
                   continue
               if not isinstance(items, list):
@@ -66,17 +74,30 @@ jobs:
                       or item.get("dependencyName")
                       or "unknown-package"
                   )
-                  advisory = (
+                  identifier = (
                       item.get("ghsa_id")
                       or item.get("ghsaId")
                       or item.get("advisory_id")
                       or item.get("license")
                       or "no-advisory-or-license-id"
                   )
-                  print(f"  - {package}: {advisory}")
+                  report[label].append({"package": str(package), "identifier": str(identifier)})
+                  print(f"  - {package}: {identifier}")
+
+          with open("dependency-review-diagnostics.json", "w", encoding="utf-8") as handle:
+              json.dump(report, handle, indent=2, sort_keys=True)
+
+      - name: Upload dependency review diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-review-diagnostics
+          path: dependency-review-diagnostics.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Enforce dependency review result
         if: steps.review.outcome == 'failure'
         run: |
-          echo "Dependency review failed. See the action summary and sanitized diagnostic step."
+          echo "Dependency review failed. See the action summary and sanitized diagnostic artifact."
           exit 1

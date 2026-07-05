@@ -49,8 +49,8 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 app.UseExceptionHandler();
-app.UseThesisPulsePlatformFoundation();
 app.UseCors(frontendCorsPolicy);
+app.UseThesisPulsePlatformFoundation();
 app.MapThesisPulsePlatformEndpoints(serviceName);
 app.MapSignalEndpoints();
 app.MapSignalDecisionProjectionEndpoints();
@@ -63,7 +63,6 @@ app.MapOptionChainCanaryRollout();
 app.MapOptionChainRollbackReconciliation();
 app.MapOptionChainOperations();
 app.MapOptionChainFailClosedReadiness();
-app.MapHealthChecks("/health/ready");
 
 app.MapGet("/api/v1/status", (
     IConfiguration configuration,

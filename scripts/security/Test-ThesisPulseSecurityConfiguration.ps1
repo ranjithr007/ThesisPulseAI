@@ -63,7 +63,11 @@ Assert-Contains $dependencyReview "AGPL-3.0-only" "Dependency review must deny A
 Assert-Contains $dependencyReview "AGPL-3.0-or-later" "Dependency review must deny AGPL-3.0-or-later dependencies."
 Assert-Contains $dependencyReview "SSPL-1.0" "Dependency review must deny SSPL dependencies."
 Assert-Contains $dependencyReview "retry-on-snapshot-warnings: true" "Dependency review must retry bounded snapshot warnings."
+Assert-Contains $dependencyReview "continue-on-error: true" "Dependency review diagnostics must preserve action outputs without ending the job early."
+Assert-Contains $dependencyReview "if: steps.review.outcome == 'failure'" "Dependency review must explicitly restore fail-closed enforcement."
+Assert-Contains $dependencyReview "exit 1" "Dependency review enforcement must return a non-zero exit code."
 Assert-Contains $dependencyReview "contents: read" "Dependency review must use read-only contents permission."
+Assert-NotContains $dependencyReview "warn-only: true" "Dependency review must never convert findings into warnings only."
 Assert-NotContains $dependencyReview "security-events: write" "Dependency review does not need security-events write permission."
 
 $ecosystemAudit = Read-RepositoryFile ".github/workflows/security-ecosystem-audit.yml"

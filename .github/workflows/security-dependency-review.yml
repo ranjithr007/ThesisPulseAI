@@ -33,6 +33,8 @@ jobs:
           VULNERABLE_CHANGES: ${{ steps.review.outputs.vulnerable-changes }}
           INVALID_LICENSE_CHANGES: ${{ steps.review.outputs.invalid-license-changes }}
           DENIED_CHANGES: ${{ steps.review.outputs.denied-changes }}
+          DEPENDENCY_CHANGES: ${{ steps.review.outputs.dependency-changes }}
+          COMMENT_CONTENT: ${{ steps.review.outputs.comment-content }}
           REVIEW_OUTCOME: ${{ steps.review.outcome }}
         run: |
           import json
@@ -40,16 +42,28 @@ jobs:
 
           report = {
               "reviewOutcome": os.environ.get("REVIEW_OUTCOME", "unknown"),
+              "dependencyChangeCount": 0,
+              "commentContent": os.environ.get("COMMENT_CONTENT", "")[:4000],
               "vulnerable": [],
               "invalidLicense": [],
               "denied": [],
           }
+
+          raw_changes = os.environ.get("DEPENDENCY_CHANGES", "").strip()
+          if raw_changes:
+              try:
+                  changes = json.loads(raw_changes)
+                  report["dependencyChangeCount"] = len(changes) if isinstance(changes, list) else 1
+              except json.JSONDecodeError:
+                  report["dependencyChangeCount"] = -1
+
           mappings = (
               ("vulnerable", "VULNERABLE_CHANGES"),
               ("invalidLicense", "INVALID_LICENSE_CHANGES"),
               ("denied", "DENIED_CHANGES"),
           )
           print(f"Dependency review outcome: {report['reviewOutcome']}")
+          print(f"Dependency changes reported: {report['dependencyChangeCount']}")
           for label, variable in mappings:
               raw = os.environ.get(variable, "").strip()
               if not raw:

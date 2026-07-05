@@ -1,9 +1,25 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 
 namespace ThesisPulse.Shared.Observability.Authentication;
 
 public static class OperatorAuthorization
 {
+    public static bool CanAccessRequest(AuthorizationHandlerContext context)
+    {
+        if (context.Resource is not HttpContext httpContext)
+        {
+            return HasOperatePermission(context.User);
+        }
+
+        return HttpMethods.IsGet(httpContext.Request.Method) ||
+               HttpMethods.IsHead(httpContext.Request.Method) ||
+               HttpMethods.IsOptions(httpContext.Request.Method)
+            ? HasReadPermission(context.User)
+            : HasOperatePermission(context.User);
+    }
+
     public static bool HasReadPermission(ClaimsPrincipal principal) =>
         HasPermission(principal, OperatorAuthenticationConstants.ReadPermission) ||
         HasPermission(principal, OperatorAuthenticationConstants.OperatePermission) ||

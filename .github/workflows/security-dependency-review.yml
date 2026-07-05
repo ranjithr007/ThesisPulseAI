@@ -16,7 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Review dependency changes
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
-          deny-licenses: AGPL-3.0, AGPL-3.0-only, SSPL-1.0
+          deny-licenses: AGPL-3.0-only, AGPL-3.0-or-later, SSPL-1.0
+          retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 120

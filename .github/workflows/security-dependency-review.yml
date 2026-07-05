@@ -16,8 +16,56 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check dependency graph availability
+        id: graph
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const pullRequest = context.payload.pull_request;
+            const report = {
+              httpStatus: null,
+              message: null,
+              documentationUrl: null,
+              changeCount: null,
+            };
+            try {
+              const response = await github.request(
+                'GET /repos/{owner}/{repo}/dependency-graph/compare/{basehead}',
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  basehead: `${pullRequest.base.sha}...${pullRequest.head.sha}`,
+                  headers: { 'X-GitHub-Api-Version': '2022-11-28' },
+                },
+              );
+              report.httpStatus = response.status;
+              if (Array.isArray(response.data)) {
+                report.changeCount = response.data.length;
+              } else if (Array.isArray(response.data?.changes)) {
+                report.changeCount = response.data.changes.length;
+              } else {
+                report.changeCount = 0;
+              }
+            } catch (error) {
+              report.httpStatus = error.status ?? null;
+              report.message = error.response?.data?.message ?? error.message ?? error.name;
+              report.documentationUrl = error.response?.data?.documentation_url ?? null;
+            }
+            const available = report.httpStatus === 200;
+            core.setOutput('available', available ? 'true' : 'false');
+            core.info(`Dependency graph API status: ${report.httpStatus}`);
+            core.info(`Dependency graph API message: ${report.message ?? 'none'}`);
+            core.info(`Dependency graph change count: ${report.changeCount}`);
+            fs.writeFileSync(
+              'dependency-graph-api.json',
+              JSON.stringify(report, null, 2),
+              { encoding: 'utf8' },
+            );
+
       - name: Review dependency changes
         id: review
+        if: steps.graph.outputs.available == 'true'
         continue-on-error: true
         uses: actions/dependency-review-action@v5
         with:
@@ -36,12 +84,14 @@ jobs:
           DEPENDENCY_CHANGES: ${{ steps.review.outputs.dependency-changes }}
           COMMENT_CONTENT: ${{ steps.review.outputs.comment-content }}
           REVIEW_OUTCOME: ${{ steps.review.outcome }}
+          GRAPH_AVAILABLE: ${{ steps.graph.outputs.available }}
         run: |
           import json
           import os
 
           report = {
-              "reviewOutcome": os.environ.get("REVIEW_OUTCOME", "unknown"),
+              "graphAvailable": os.environ.get("GRAPH_AVAILABLE", "false") == "true",
+              "reviewOutcome": os.environ.get("REVIEW_OUTCOME", "skipped"),
               "dependencyChangeCount": 0,
               "commentContent": os.environ.get("COMMENT_CONTENT", "")[:4000],
               "vulnerable": [],
@@ -62,6 +112,7 @@ jobs:
               ("invalidLicense", "INVALID_LICENSE_CHANGES"),
               ("denied", "DENIED_CHANGES"),
           )
+          print(f"Dependency graph available: {report['graphAvailable']}")
           print(f"Dependency review outcome: {report['reviewOutcome']}")
           print(f"Dependency changes reported: {report['dependencyChangeCount']}")
           for label, variable in mappings:
@@ -101,51 +152,6 @@ jobs:
           with open("dependency-review-diagnostics.json", "w", encoding="utf-8") as handle:
               json.dump(report, handle, indent=2, sort_keys=True)
 
-      - name: Diagnose dependency graph endpoint
-        if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const pullRequest = context.payload.pull_request;
-            const report = {
-              httpStatus: null,
-              message: null,
-              documentationUrl: null,
-              changeCount: null,
-            };
-            try {
-              const response = await github.request(
-                'GET /repos/{owner}/{repo}/dependency-graph/compare/{basehead}',
-                {
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  basehead: `${pullRequest.base.sha}...${pullRequest.head.sha}`,
-                  headers: { 'X-GitHub-Api-Version': '2022-11-28' },
-                },
-              );
-              report.httpStatus = response.status;
-              if (Array.isArray(response.data)) {
-                report.changeCount = response.data.length;
-              } else if (Array.isArray(response.data?.changes)) {
-                report.changeCount = response.data.changes.length;
-              } else {
-                report.changeCount = 0;
-              }
-            } catch (error) {
-              report.httpStatus = error.status ?? null;
-              report.message = error.response?.data?.message ?? error.message ?? error.name;
-              report.documentationUrl = error.response?.data?.documentation_url ?? null;
-            }
-            core.info(`Dependency graph API status: ${report.httpStatus}`);
-            core.info(`Dependency graph API message: ${report.message ?? 'none'}`);
-            core.info(`Dependency graph change count: ${report.changeCount}`);
-            fs.writeFileSync(
-              'dependency-graph-api.json',
-              JSON.stringify(report, null, 2),
-              { encoding: 'utf8' },
-            );
-
       - name: Upload dependency review diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -158,7 +164,12 @@ jobs:
           retention-days: 7
 
       - name: Enforce dependency review result
-        if: steps.review.outcome == 'failure'
+        if: always() && (steps.graph.outputs.available != 'true' || steps.review.outcome == 'failure')
+        shell: bash
         run: |
-          echo "Dependency review failed. See the action summary and sanitized diagnostic artifact."
+          if [[ "${{ steps.graph.outputs.available }}" != "true" ]]; then
+            echo "Dependency graph is unavailable. Enable it under repository Settings > Security > Code security and analysis > Dependency graph, then rerun this workflow."
+          else
+            echo "Dependency review found a vulnerability or disallowed license. See the action summary and sanitized diagnostic artifact."
+          fi
           exit 1

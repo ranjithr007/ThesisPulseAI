@@ -28,7 +28,7 @@ function Assert-Contains {
         [Parameter(Mandatory = $true)][string]$Message
     )
 
-    if (-not $Content.Contains($Expected, [StringComparison]::Ordinal)) {
+    if ($Content.IndexOf($Expected, [StringComparison]::Ordinal) -lt 0) {
         $failures.Add($Message)
     }
 }
@@ -40,7 +40,7 @@ function Assert-NotContains {
         [Parameter(Mandatory = $true)][string]$Message
     )
 
-    if ($Content.Contains($Forbidden, [StringComparison]::OrdinalIgnoreCase)) {
+    if ($Content.IndexOf($Forbidden, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
         $failures.Add($Message)
     }
 }

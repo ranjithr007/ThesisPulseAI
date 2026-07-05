@@ -10,12 +10,22 @@ public static class OperatorAuthorization
     {
         if (context.Resource is not HttpContext httpContext)
         {
-            return HasOperatePermission(context.User);
+            return context.User.Identity?.IsAuthenticated == true &&
+                HasOperatePermission(context.User);
+        }
+
+        if (HttpMethods.IsOptions(httpContext.Request.Method))
+        {
+            return true;
+        }
+
+        if (context.User.Identity?.IsAuthenticated != true)
+        {
+            return false;
         }
 
         return HttpMethods.IsGet(httpContext.Request.Method) ||
-               HttpMethods.IsHead(httpContext.Request.Method) ||
-               HttpMethods.IsOptions(httpContext.Request.Method)
+               HttpMethods.IsHead(httpContext.Request.Method)
             ? HasReadPermission(context.User)
             : HasOperatePermission(context.User);
     }

@@ -40,7 +40,7 @@ public static class OperatorAuthenticationExtensions
 
         services.AddAuthorization(options =>
         {
-            options.FallbackPolicy = BuildPolicy(OperatorAuthorization.HasReadPermission);
+            options.FallbackPolicy = BuildFallbackPolicy();
             options.AddPolicy(
                 OperatorAuthenticationConstants.ReadPolicy,
                 BuildPolicy(OperatorAuthorization.HasReadPermission));
@@ -111,6 +111,12 @@ public static class OperatorAuthenticationExtensions
 
         return endpoints;
     }
+
+    private static AuthorizationPolicy BuildFallbackPolicy() =>
+        new AuthorizationPolicyBuilder(OperatorAuthenticationConstants.Scheme)
+            .RequireAuthenticatedUser()
+            .RequireAssertion(OperatorAuthorization.CanAccessRequest)
+            .Build();
 
     private static AuthorizationPolicy BuildPolicy(
         Func<ClaimsPrincipal, bool> permissionCheck) =>

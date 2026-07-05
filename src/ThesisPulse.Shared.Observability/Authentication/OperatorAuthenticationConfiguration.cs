@@ -14,7 +14,9 @@ public sealed record ResolvedOperatorAuthentication(
     string? LocalPassword,
     string? LocalDisplayName,
     byte[]? LocalSigningKey,
-    IReadOnlyList<string> LocalPermissions);
+    IReadOnlyList<string> LocalPermissions,
+    string? ServiceAccessToken,
+    IReadOnlySet<string> InternalServiceHosts);
 
 public static class OperatorAuthenticationConfiguration
 {
@@ -96,20 +98,20 @@ public static class OperatorAuthenticationConfiguration
                 $"'{OperatorAuthenticationConstants.ReadPermission}'.");
         }
 
-        var lifetime = ResolveLifetime(options.TokenLifetimeMinutes);
-
         return new ResolvedOperatorAuthentication(
             Mode: OperatorAuthenticationConstants.LocalMode,
             Issuer: issuer,
             Audience: audience,
             Authority: null,
             RequireHttpsMetadata: false,
-            TokenLifetime: lifetime,
+            TokenLifetime: ResolveLifetime(options.TokenLifetimeMinutes),
             LocalUsername: username,
             LocalPassword: password,
             LocalDisplayName: displayName,
             LocalSigningKey: signingKey,
-            LocalPermissions: permissions);
+            LocalPermissions: permissions,
+            ServiceAccessToken: null,
+            InternalServiceHosts: NormalizeHosts(options.InternalServiceHosts, includeLoopback: true));
     }
 
     private static ResolvedOperatorAuthentication ResolveExternal(
@@ -142,7 +144,11 @@ public static class OperatorAuthenticationConfiguration
             LocalPassword: null,
             LocalDisplayName: null,
             LocalSigningKey: null,
-            LocalPermissions: Array.Empty<string>());
+            LocalPermissions: Array.Empty<string>(),
+            ServiceAccessToken: string.IsNullOrWhiteSpace(options.ServiceAccessToken)
+                ? null
+                : options.ServiceAccessToken.Trim(),
+            InternalServiceHosts: NormalizeHosts(options.InternalServiceHosts, includeLoopback: false));
     }
 
     private static TimeSpan ResolveLifetime(int minutes)
@@ -174,5 +180,28 @@ public static class OperatorAuthenticationConfiguration
             .Distinct(StringComparer.Ordinal)
             .OrderBy(permission => permission, StringComparer.Ordinal)
             .ToArray();
+    }
+
+    private static IReadOnlySet<string> NormalizeHosts(
+        IEnumerable<string>? hosts,
+        bool includeLoopback)
+    {
+        var normalized = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (includeLoopback)
+        {
+            normalized.Add("localhost");
+            normalized.Add("127.0.0.1");
+            normalized.Add("::1");
+        }
+
+        foreach (var host in hosts ?? Array.Empty<string>())
+        {
+            if (!string.IsNullOrWhiteSpace(host))
+            {
+                normalized.Add(host.Trim());
+            }
+        }
+
+        return normalized;
     }
 }

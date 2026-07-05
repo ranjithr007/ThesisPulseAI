@@ -114,7 +114,6 @@ public static class OperatorAuthenticationExtensions
 
     private static AuthorizationPolicy BuildFallbackPolicy() =>
         new AuthorizationPolicyBuilder(OperatorAuthenticationConstants.Scheme)
-            .RequireAuthenticatedUser()
             .RequireAssertion(OperatorAuthorization.CanAccessRequest)
             .Build();
 

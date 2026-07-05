@@ -1,6 +1,7 @@
 using ThesisPulse.Shared.Infrastructure.DependencyInjection;
 using ThesisPulse.Shared.Infrastructure.MarketData;
 using ThesisPulse.Shared.Infrastructure.Messaging;
+using ThesisPulse.Shared.Observability.Authentication;
 using ThesisPulse.Shared.Observability.Hosting;
 using ThesisPulse.Trading.Api;
 
@@ -40,9 +41,10 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 app.UseExceptionHandler();
-app.UseThesisPulsePlatformFoundation();
 app.UseCors(frontendCorsPolicy);
+app.UseThesisPulsePlatformFoundation();
 app.MapThesisPulsePlatformEndpoints(serviceName, contractVersion: "v1");
+app.MapThesisPulseAuthenticationEndpoints();
 app.MapTradingSignalStream();
 app.MapMarketDataStream();
 app.MapGet("/api/v1/platform", () => Results.Ok(new

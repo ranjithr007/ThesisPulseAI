@@ -16,6 +16,10 @@ public sealed class OperatorAuthenticationOptions
 
     public int TokenLifetimeMinutes { get; set; } = 30;
 
+    public string ServiceAccessToken { get; set; } = string.Empty;
+
+    public string[] InternalServiceHosts { get; set; } = Array.Empty<string>();
+
     public LocalOperatorAuthenticationOptions Local { get; set; } = new();
 }
 

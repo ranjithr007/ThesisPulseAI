@@ -2,6 +2,19 @@
 
 Phase 5.9 establishes repository-level security gates for ThesisPulse AI before runtime authentication, shadow trading, or restricted-live work begins.
 
+## Required repository setting
+
+GitHub dependency review requires the repository Dependency graph to be enabled. Repository owners must configure it before the dependency-review gate can pass:
+
+1. Open the ThesisPulseAI repository on GitHub.
+2. Open **Settings**.
+3. Select **Security** or **Code security and analysis**.
+4. Locate **Dependency graph**.
+5. Choose **Enable**.
+6. Re-run the failed **Security Dependency Review** workflow.
+
+The dependency-review workflow performs an explicit preflight against GitHub's official dependency-diff endpoint. HTTP 403 or any other unavailable response fails closed with an actionable message. It does not treat an unavailable graph as a clean dependency review.
+
 ## Security workflows
 
 ### CodeQL
@@ -17,6 +30,8 @@ It runs for pull requests to `main`, pushes to `main`, manual dispatch, and a we
 ### Dependency review
 
 `.github/workflows/security-dependency-review.yml` evaluates dependency changes in pull requests. It fails for high or critical known vulnerabilities and rejects AGPL or SSPL package licenses.
+
+The workflow first confirms that GitHub's dependency graph comparison endpoint is available. It then runs the dependency policy review and uploads bounded diagnostics containing only HTTP status, API message, dependency counts, package identifiers, advisory identifiers, and license identifiers. Tokens and dependency contents are not written to artifacts.
 
 The workflow does not approve, merge, or update dependencies automatically.
 
@@ -55,7 +70,7 @@ From the repository root:
 .\scripts\security\Test-ThesisPulseSecurityConfiguration.ps1
 ```
 
-The command validates security workflow presence, CodeQL language coverage, least-privilege permissions, audit thresholds, Gitleaks configuration, Dependabot ecosystems, and the pinned Python audit tool.
+The command validates security workflow presence, CodeQL language coverage, least-privilege permissions, dependency-graph preflight behavior, audit thresholds, Gitleaks configuration, Dependabot ecosystems, and the pinned Python audit tool.
 
 Manual ecosystem checks can also be run independently:
 
@@ -84,6 +99,17 @@ These commands inspect dependencies only. They do not update or fix packages aut
 6. Document temporary risk acceptance only when no fixed version exists and the exposure is demonstrably unreachable.
 
 Vulnerability suppressions must identify the advisory, owner, reason, compensating control, and expiration date. Permanent blanket suppressions are not allowed.
+
+## Handling an unavailable dependency graph
+
+An unavailable dependency graph is a repository configuration failure, not a dependency pass.
+
+- HTTP 403 means the workflow cannot access the dependency comparison required for pull-request review.
+- Enable the repository Dependency graph using the owner steps above.
+- Re-run the failed dependency-review workflow after the setting is enabled.
+- Do not add `warn-only`, skip the gate, or interpret zero action outputs as zero dependency risk.
+
+The independent NuGet, npm, and Python audits remain useful baseline checks, but they do not replace pull-request dependency diff review.
 
 ## Handling a secret finding
 

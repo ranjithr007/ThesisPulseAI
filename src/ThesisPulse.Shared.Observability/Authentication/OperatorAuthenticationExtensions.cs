@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Http;
 using Microsoft.IdentityModel.Tokens;
 
 namespace ThesisPulse.Shared.Observability.Authentication;
@@ -19,6 +20,9 @@ public static class OperatorAuthenticationExtensions
         this IServiceCollection services)
     {
         services.AddSingleton<LocalOperatorTokenService>();
+        services.AddSingleton<InternalServiceTokenProvider>();
+        services.AddTransient<InternalServiceAuthenticationHandler>();
+        services.AddSingleton<IHttpMessageHandlerBuilderFilter, InternalServiceAuthenticationFilter>();
         services.AddHostedService<OperatorAuthenticationStartupValidator>();
 
         services
@@ -92,10 +96,10 @@ public static class OperatorAuthenticationExtensions
             "/api/v1/auth/session",
             (ClaimsPrincipal principal) =>
             {
-                var subject = principal.FindFirstValue(JwtRegisteredClaimNames.Sub)
-                    ?? principal.FindFirstValue(ClaimTypes.NameIdentifier)
+                var subject = principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+                    ?? principal.FindFirst(ClaimTypes.NameIdentifier)?.Value
                     ?? "unknown";
-                var displayName = principal.FindFirstValue("name")
+                var displayName = principal.FindFirst("name")?.Value
                     ?? principal.Identity?.Name
                     ?? subject;
 

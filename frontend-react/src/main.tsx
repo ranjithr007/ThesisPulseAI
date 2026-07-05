@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { AuthenticatedApp } from "./auth/AuthenticatedApp";
 import "./auth/auth.css";
 import { installAuthenticatedFetch } from "./auth/authSession";
+import "./execution/execution-acceptance.css";
 import "./styles.css";
 import "./signals/signal-scanner.css";
 import "./pages.css";

@@ -15,10 +15,68 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
       - name: Review dependency changes
+        id: review
+        continue-on-error: true
         uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
           deny-licenses: AGPL-3.0-only, AGPL-3.0-or-later, SSPL-1.0
           retry-on-snapshot-warnings: true
           retry-on-snapshot-warnings-timeout: 120
+
+      - name: Summarize dependency policy findings
+        if: always()
+        shell: python
+        env:
+          VULNERABLE_CHANGES: ${{ steps.review.outputs.vulnerable-changes }}
+          INVALID_LICENSE_CHANGES: ${{ steps.review.outputs.invalid-license-changes }}
+          DENIED_CHANGES: ${{ steps.review.outputs.denied-changes }}
+          REVIEW_OUTCOME: ${{ steps.review.outcome }}
+        run: |
+          import json
+          import os
+
+          print(f"Dependency review outcome: {os.environ.get('REVIEW_OUTCOME', 'unknown')}")
+          for label, variable in (
+              ("vulnerable", "VULNERABLE_CHANGES"),
+              ("invalid-license", "INVALID_LICENSE_CHANGES"),
+              ("denied", "DENIED_CHANGES"),
+          ):
+              raw = os.environ.get(variable, "").strip()
+              if not raw:
+                  print(f"{label}: 0 reported changes")
+                  continue
+              try:
+                  items = json.loads(raw)
+              except json.JSONDecodeError:
+                  print(f"{label}: output was not valid JSON")
+                  continue
+              if not isinstance(items, list):
+                  items = [items]
+              print(f"{label}: {len(items)} reported change(s)")
+              for item in items:
+                  if not isinstance(item, dict):
+                      continue
+                  package = (
+                      item.get("package_url")
+                      or item.get("packageUrl")
+                      or item.get("name")
+                      or item.get("dependencyName")
+                      or "unknown-package"
+                  )
+                  advisory = (
+                      item.get("ghsa_id")
+                      or item.get("ghsaId")
+                      or item.get("advisory_id")
+                      or item.get("license")
+                      or "no-advisory-or-license-id"
+                  )
+                  print(f"  - {package}: {advisory}")
+
+      - name: Enforce dependency review result
+        if: steps.review.outcome == 'failure'
+        run: |
+          echo "Dependency review failed. See the action summary and sanitized diagnostic step."
+          exit 1

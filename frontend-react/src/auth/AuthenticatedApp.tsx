@@ -1,4 +1,4 @@
-import { createContext, FormEvent, ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, FormEvent, useContext, useEffect, useMemo, useState } from "react";
 
 import { App } from "../App";
 import {
@@ -176,8 +176,4 @@ function OperatorSignIn({ onAuthenticated }: OperatorSignInProps) {
       </section>
     </main>
   );
-}
-
-export function AuthBoundary({ children }: { children: ReactNode }) {
-  return <>{children}</>;
 }

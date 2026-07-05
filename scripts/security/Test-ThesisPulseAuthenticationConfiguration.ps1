@@ -131,15 +131,15 @@ Assert-Contains $project 'Microsoft.AspNetCore.Authentication.JwtBearer" Version
 
 $launcher = Read-RepositoryFile "scripts/dev/Start-ThesisPulse.ps1"
 Assert-Contains $launcher "RandomNumberGenerator" "The launcher must generate cryptographic credentials."
-Assert-Contains $launcher "Authentication__Mode = \"LocalDevelopment\"" `
+Assert-Contains $launcher 'Authentication__Mode = "LocalDevelopment"' `
     "The launcher must explicitly select local Development authentication."
 Assert-Contains $launcher "Authentication__Local__SigningKeyBase64" `
     "The launcher must inject the ephemeral signing key."
-Assert-Contains $launcher "Authentication__Local__Permissions__0 = \"thesispulse.read\"" `
+Assert-Contains $launcher 'Authentication__Local__Permissions__0 = "thesispulse.read"' `
     "The local operator must remain read-only by default."
 Assert-Contains $launcher "The generated password is not persisted" `
     "The launcher must state that generated passwords are not persisted."
-Assert-NotContains $launcher "Password = \"password\"" "The launcher must not contain a default password."
+Assert-NotContains $launcher 'Password = "password"' "The launcher must not contain a default password."
 
 $session = Read-RepositoryFile "frontend-react/src/auth/authSession.ts"
 Assert-Contains $session "window.sessionStorage" "Operator tokens must use session storage."

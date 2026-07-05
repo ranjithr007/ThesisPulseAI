@@ -1,7 +1,10 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { App } from "./App";
+import { AuthenticatedApp } from "./auth/AuthenticatedApp";
+import "./auth/auth.css";
+import { installAuthenticatedFetch } from "./auth/authSession";
+import "./execution/execution-acceptance.css";
 import "./styles.css";
 import "./signals/signal-scanner.css";
 import "./pages.css";
@@ -12,8 +15,10 @@ if (!rootElement) {
   throw new Error("Root element was not found");
 }
 
+installAuthenticatedFetch();
+
 createRoot(rootElement).render(
   <StrictMode>
-    <App />
+    <AuthenticatedApp />
   </StrictMode>,
 );

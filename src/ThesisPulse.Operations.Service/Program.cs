@@ -37,8 +37,8 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 app.UseExceptionHandler();
-app.UseThesisPulsePlatformFoundation();
 app.UseCors(frontendCorsPolicy);
+app.UseThesisPulsePlatformFoundation();
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Operations.Service");
 app.MapPaperWorkflowEndpoints();
 app.MapAutomaticPaperWorkflowIntake();

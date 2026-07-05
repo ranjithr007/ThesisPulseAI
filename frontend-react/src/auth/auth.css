@@ -1,0 +1,132 @@
+.auth-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 2rem;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(34, 211, 238, 0.13), transparent 30rem),
+    radial-gradient(circle at 85% 80%, rgba(59, 130, 246, 0.12), transparent 34rem),
+    #07111f;
+}
+
+.auth-card {
+  width: min(100%, 31rem);
+  padding: clamp(1.5rem, 5vw, 2.5rem);
+  border: 1px solid #203248;
+  border-radius: 1rem;
+  background: linear-gradient(145deg, rgba(17, 36, 57, 0.97), rgba(9, 23, 40, 0.97));
+  box-shadow: 0 2rem 6rem rgba(0, 0, 0, 0.38);
+}
+
+.auth-card h1 {
+  margin: 0.55rem 0 0;
+  font-size: clamp(2rem, 6vw, 3.2rem);
+  line-height: 1;
+}
+
+.auth-intro,
+.auth-help {
+  color: #aebed0;
+  line-height: 1.6;
+}
+
+.auth-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 0.45rem;
+  color: #cbd5e1;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.auth-form input {
+  width: 100%;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid #334a64;
+  border-radius: 0.65rem;
+  color: #f8fafc;
+  background: #081522;
+  font: inherit;
+}
+
+.auth-form input:focus {
+  border-color: #22d3ee;
+  outline: 2px solid rgba(34, 211, 238, 0.18);
+}
+
+.auth-form button,
+.operator-sign-out {
+  padding: 0.75rem 1rem;
+  border: 1px solid #22d3ee;
+  border-radius: 0.65rem;
+  color: #ecfeff;
+  background: rgba(8, 145, 178, 0.25);
+  cursor: pointer;
+}
+
+.auth-form button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.auth-error {
+  padding: 0.8rem;
+  border: 1px solid #fb7185;
+  border-radius: 0.65rem;
+  color: #ffe4e6;
+  background: rgba(159, 18, 57, 0.25);
+  line-height: 1.45;
+}
+
+.auth-help {
+  margin: 1.35rem 0 0;
+  font-size: 0.82rem;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+.operator-session {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 13rem;
+  padding: 0.72rem 0.85rem;
+  border: 1px solid #334a64;
+  border-radius: 0.75rem;
+  background: rgba(15, 35, 55, 0.76);
+}
+
+.operator-session span {
+  color: #94a3b8;
+  font-size: 0.74rem;
+}
+
+.operator-session strong {
+  color: #f8fafc;
+  font-size: 0.9rem;
+}
+
+.operator-sign-out {
+  align-self: center;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .topbar-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .operator-session,
+  .environment-badge {
+    flex: 1 1 14rem;
+  }
+}

@@ -1,3 +1,4 @@
+import { useOperatorAuth } from "./auth/AuthenticatedApp";
 import { ExecutionLifecycleWorkspace } from "./execution/ExecutionLifecycleWorkspace";
 import { MarketCommandCenter } from "./market/MarketCommandCenter";
 import { OperationsDashboard } from "./operations/OperationsDashboard";
@@ -22,6 +23,7 @@ const navigation = [
 
 export function App() {
   const { route, navigate } = useExpandedAppRoute();
+  const { operator, expiresAtUtc, signOut } = useOperatorAuth();
   const activeNavigation =
     route.page === "market"
       ? "Market"
@@ -39,6 +41,11 @@ export function App() {
                   ? "Operations"
                   : "Signals";
 
+  const expiresAt = new Date(expiresAtUtc);
+  const permissionSummary = operator.permissions.length
+    ? operator.permissions.map((permission) => permission.replace("thesispulse.", "")).join(", ")
+    : "no permissions";
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -46,9 +53,21 @@ export function App() {
           <p className="eyebrow">THESISPULSE AI</p>
           <h1>Intelligent signals. Validated theses. Adaptive decisions.</h1>
         </div>
-        <div className="environment-badge" role="status" aria-label="Paper trading environment">
-          <strong>PAPER TRADING</strong>
-          <span>No real orders will be submitted</span>
+        <div className="topbar-actions">
+          <div className="operator-session" aria-label="Authenticated operator">
+            <strong>{operator.displayName}</strong>
+            <span>{permissionSummary}</span>
+            <span>
+              Session expires {Number.isNaN(expiresAt.getTime()) ? "soon" : expiresAt.toLocaleTimeString()}
+            </span>
+          </div>
+          <div className="environment-badge" role="status" aria-label="Paper trading environment">
+            <strong>PAPER TRADING</strong>
+            <span>No real orders will be submitted</span>
+          </div>
+          <button className="operator-sign-out" type="button" onClick={signOut}>
+            Sign out
+          </button>
         </div>
       </header>
 
@@ -77,7 +96,7 @@ export function App() {
           </nav>
           <div className="connection-status">
             <span className="status-dot" aria-hidden="true" />
-            Phase 5 · PAPER only
+            Phase 6 · Authenticated PAPER
           </div>
         </aside>
 

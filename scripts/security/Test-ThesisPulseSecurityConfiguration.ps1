@@ -57,10 +57,12 @@ Assert-Contains $codeql "github/codeql-action/init@v3" "CodeQL init action must 
 Assert-Contains $codeql "github/codeql-action/analyze@v3" "CodeQL analyze action must use v3."
 
 $dependencyReview = Read-RepositoryFile ".github/workflows/security-dependency-review.yml"
-Assert-Contains $dependencyReview "actions/dependency-review-action@v4" "Dependency review action must use v4."
+Assert-Contains $dependencyReview "actions/dependency-review-action@v5" "Dependency review action must use v5."
 Assert-Contains $dependencyReview "fail-on-severity: high" "Dependency review must fail on high severity findings."
-Assert-Contains $dependencyReview "AGPL-3.0" "Dependency review must deny AGPL dependencies."
+Assert-Contains $dependencyReview "AGPL-3.0-only" "Dependency review must deny AGPL-3.0-only dependencies."
+Assert-Contains $dependencyReview "AGPL-3.0-or-later" "Dependency review must deny AGPL-3.0-or-later dependencies."
 Assert-Contains $dependencyReview "SSPL-1.0" "Dependency review must deny SSPL dependencies."
+Assert-Contains $dependencyReview "retry-on-snapshot-warnings: true" "Dependency review must retry bounded snapshot warnings."
 Assert-Contains $dependencyReview "contents: read" "Dependency review must use read-only contents permission."
 Assert-NotContains $dependencyReview "security-events: write" "Dependency review does not need security-events write permission."
 

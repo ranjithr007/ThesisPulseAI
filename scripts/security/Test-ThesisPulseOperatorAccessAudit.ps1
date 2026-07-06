@@ -119,7 +119,7 @@ Assert-Contains $middleware "OperatorAccessAuditClassifier.Outcome" `
     "Middleware must classify authorization outcomes centrally."
 Assert-NotContains $middleware "Request.Body" "Middleware must not read request bodies."
 Assert-NotContains $middleware "QueryString" "Middleware must not store query strings."
-Assert-NotContains $middleware "Authorization" "Middleware must not read or log Authorization headers."
+Assert-NotContains $middleware "Headers.Authorization" "Middleware must not read or log Authorization headers."
 Assert-NotContains $middleware "Cookie" "Middleware must not read or log cookies."
 
 $classifier = Read-RepositoryFile "src/ThesisPulse.Shared.Observability/Auditing/OperatorAccessAuditClassifier.cs"

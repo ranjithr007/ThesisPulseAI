@@ -1,0 +1,89 @@
+name: Phase 6.2 Security Headers and CORS CI
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [phase62-security-headers-cors-hardening]
+
+permissions:
+  contents: read
+
+jobs:
+  security-headers-cors:
+    name: Security headers, CORS, and regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend-react/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: ai-python/pyproject.toml
+
+      - name: Validate security headers and CORS structure
+        shell: pwsh
+        run: ./scripts/security/Test-ThesisPulseSecurityHeadersCors.ps1
+
+      - name: Validate authentication configuration remains intact
+        shell: pwsh
+        run: ./scripts/security/Test-ThesisPulseAuthenticationConfiguration.ps1
+
+      - name: Validate operator access audit remains intact
+        shell: pwsh
+        run: ./scripts/security/Test-ThesisPulseOperatorAccessAudit.ps1
+
+      - name: Restore .NET solution and security tests
+        run: |
+          dotnet restore ThesisPulseAI.sln
+          dotnet restore tests/phase62-security-headers-cors/dotnet/ThesisPulse.Phase62SecurityHeadersCors.Tests.csproj
+          dotnet restore tests/phase61-operator-access-audit/dotnet/ThesisPulse.Phase61OperatorAccessAudit.Tests.csproj
+          dotnet restore tests/phase60-auth/dotnet/ThesisPulse.Phase60Authentication.Tests.csproj
+
+      - name: Build .NET solution
+        run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore --verbosity minimal
+
+      - name: Run security headers and CORS tests
+        run: dotnet run --project tests/phase62-security-headers-cors/dotnet/ThesisPulse.Phase62SecurityHeadersCors.Tests.csproj --configuration Release --no-restore
+
+      - name: Run operator access audit tests
+        run: dotnet run --project tests/phase61-operator-access-audit/dotnet/ThesisPulse.Phase61OperatorAccessAudit.Tests.csproj --configuration Release --no-restore
+
+      - name: Run authentication regression tests
+        run: dotnet run --project tests/phase60-auth/dotnet/ThesisPulse.Phase60Authentication.Tests.csproj --configuration Release --no-restore
+
+      - name: Install Python project
+        run: python -m pip install --upgrade pip && python -m pip install -e "./ai-python[dev]"
+
+      - name: Lint Python
+        working-directory: ai-python
+        run: ruff check app tests
+
+      - name: Test Python
+        working-directory: ai-python
+        run: pytest
+
+      - name: Install frontend dependencies
+        working-directory: frontend-react
+        run: npm ci
+
+      - name: Typecheck frontend
+        working-directory: frontend-react
+        run: npm run typecheck
+
+      - name: Build frontend
+        working-directory: frontend-react
+        run: npm run build

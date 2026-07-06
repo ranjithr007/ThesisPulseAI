@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Http;
 using Microsoft.IdentityModel.Tokens;
+using ThesisPulse.Shared.Observability.Auditing;
 
 namespace ThesisPulse.Shared.Observability.Authentication;
 
@@ -59,6 +60,7 @@ public static class OperatorAuthenticationExtensions
         this IApplicationBuilder app)
     {
         app.UseAuthentication();
+        app.UseThesisPulseOperatorAccessAudit();
         app.UseAuthorization();
         return app;
     }

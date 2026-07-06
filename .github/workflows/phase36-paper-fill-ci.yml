@@ -42,7 +42,7 @@ jobs:
         run: dotnet run --project tests/database/dotnet/ThesisPulse.DatabaseMigrator.Tests.csproj --configuration Release
       - name: Upload Phase 3.6 diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: phase36-paper-fill-log
           path: phase36-tests.log

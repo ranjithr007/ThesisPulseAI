@@ -53,7 +53,7 @@ jobs:
 
       - name: Upload Phase 4.1 build diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: phase41-option-chain-persistence-build-log
           path: |
@@ -83,7 +83,7 @@ jobs:
 
       - name: Upload Phase 4.1 acceptance diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: phase41-option-chain-persistence-acceptance-log
           path: phase41-tests.log

@@ -38,7 +38,7 @@ jobs:
         run: dotnet run --project tests/database/dotnet/ThesisPulse.DatabaseMigrator.Tests.csproj --configuration Release
       - name: Upload Phase 3.5 diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: phase35-paper-submission-log
           path: phase35-tests.log

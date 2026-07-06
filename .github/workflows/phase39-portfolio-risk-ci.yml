@@ -33,7 +33,7 @@ jobs:
           exit 0
       - name: Upload Phase 3.9 build diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: phase39-portfolio-risk-build-log
           path: |
@@ -61,7 +61,7 @@ jobs:
         run: dotnet run --project tests/database/dotnet/ThesisPulse.DatabaseMigrator.Tests.csproj --configuration Release
       - name: Upload Phase 3.9 diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: phase39-portfolio-risk-log
           path: phase39-tests.log

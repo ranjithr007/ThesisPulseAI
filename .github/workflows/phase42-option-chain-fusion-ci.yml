@@ -50,7 +50,7 @@ jobs:
 
       - name: Upload Phase 4.2 build diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: phase42-option-chain-fusion-build-log
           path: |
@@ -80,7 +80,7 @@ jobs:
 
       - name: Upload Phase 4.2 acceptance diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: phase42-option-chain-fusion-acceptance-log
           path: phase42-tests.log

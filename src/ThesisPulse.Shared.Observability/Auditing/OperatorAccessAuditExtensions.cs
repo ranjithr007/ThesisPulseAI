@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using ThesisPulse.Shared.Infrastructure.Time;
 using ThesisPulse.Shared.Observability.Authentication;
 
@@ -10,21 +8,6 @@ namespace ThesisPulse.Shared.Observability.Auditing;
 
 public static class OperatorAccessAuditExtensions
 {
-    public static IServiceCollection AddThesisPulseOperatorAccessAudit(
-        this IServiceCollection services,
-        IConfiguration configuration)
-    {
-        var options = configuration
-            .GetSection(OperatorAccessAuditOptions.SectionName)
-            .Get<OperatorAccessAuditOptions>()
-            ?? new OperatorAccessAuditOptions();
-        options.Validate();
-
-        services.AddSingleton(options);
-        services.AddSingleton<IOperatorAccessAuditStore, InMemoryOperatorAccessAuditStore>();
-        return services;
-    }
-
     public static IApplicationBuilder UseThesisPulseOperatorAccessAudit(
         this IApplicationBuilder app)
     {

@@ -12,6 +12,7 @@ using ThesisPulse.Shared.Infrastructure.Time;
 using ThesisPulse.Shared.Observability.Auditing;
 using ThesisPulse.Shared.Observability.Authentication;
 using ThesisPulse.Shared.Observability.Correlation;
+using ThesisPulse.Shared.Observability.Security;
 
 namespace ThesisPulse.Shared.Observability.Hosting;
 
@@ -23,8 +24,21 @@ public static class PlatformFoundationExtensions
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton(new PlatformRuntime(DateTimeOffset.UtcNow));
         services.AddHealthChecks();
+        services.AddThesisPulseSecurityHeaders();
         services.AddThesisPulseOperatorAccessAudit();
         services.AddThesisPulseOperatorAuthentication();
+        return services;
+    }
+
+    public static IServiceCollection AddThesisPulseSecurityHeaders(
+        this IServiceCollection services)
+    {
+        services.AddSingleton(sp =>
+        {
+            var configuration = sp.GetRequiredService<IConfiguration>();
+            var environment = sp.GetRequiredService<IHostEnvironment>();
+            return SecurityHeadersOptions.Resolve(configuration, environment);
+        });
         return services;
     }
 
@@ -49,6 +63,7 @@ public static class PlatformFoundationExtensions
     public static IApplicationBuilder UseThesisPulsePlatformFoundation(
         this IApplicationBuilder app)
     {
+        app.UseThesisPulseSecurityHeaders();
         app.UseMiddleware<CorrelationIdMiddleware>();
         app.UseThesisPulseOperatorAuthentication();
         return app;

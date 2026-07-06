@@ -1,4 +1,4 @@
-﻿################################################################################
+################################################################################
 # This .gitignore file was automatically created by Microsoft(R) Visual Studio.
 ################################################################################
 
@@ -71,3 +71,31 @@
 /.thesispulse-dev/
 /frontend-react/.env.local
 /frontend-react/.env.*.local
+
+# Local secret/config hygiene. Keep real credentials outside source control.
+/.env
+/.env.*
+!/frontend-react/.env.development
+*.pfx
+*.pem
+*.key
+*.cer
+*.crt
+*.p12
+*.jks
+*.keystore
+*.snk
+*.dump
+*.bak
+*.log
+*.trace
+*.dmp
+/secrets/
+/.secrets/
+/local-secrets/
+/appsettings.Local.json
+/appsettings.*.Local.json
+/src/**/appsettings.Local.json
+/src/**/appsettings.*.Local.json
+*.user
+*.suo

@@ -106,7 +106,7 @@ static void ValidCredentialsIssueExpectedClaims()
             claim.Type == OperatorAuthenticationConstants.PermissionClaim &&
             claim.Value == OperatorAuthenticationConstants.ReadPermission),
         "Expected explicit read permission claim.");
-    AssertTrue(jwt.ValidTo > TestClock.UtcDateTime,
+    AssertTrue(jwt.ValidTo > TestClock().UtcDateTime,
         "Token must expire after the fixed test clock, independent of wall-clock date.");
 }
 
@@ -166,10 +166,11 @@ static LocalOperatorTokenService CreateTokenService()
     return new LocalOperatorTokenService(
         BuildConfiguration(ValidLocalValues()),
         NewEnvironment(Environments.Development),
-        new FixedClock(TestClock));
+        new FixedClock(TestClock()));
 }
 
-static readonly DateTimeOffset TestClock = new(2026, 7, 5, 3, 30, 0, TimeSpan.Zero);
+static DateTimeOffset TestClock() =>
+    new(2026, 7, 5, 3, 30, 0, TimeSpan.Zero);
 
 static Dictionary<string, string?> ValidLocalValues() => new(StringComparer.OrdinalIgnoreCase)
 {

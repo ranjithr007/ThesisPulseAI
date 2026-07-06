@@ -46,6 +46,7 @@ jobs:
         run: |
           dotnet restore ThesisPulseAI.sln
           dotnet restore tests/phase61-operator-access-audit/dotnet/ThesisPulse.Phase61OperatorAccessAudit.Tests.csproj
+          dotnet restore tests/phase60-auth/dotnet/ThesisPulse.Phase60Authentication.Tests.csproj
 
       - name: Build .NET solution
         run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore --verbosity minimal

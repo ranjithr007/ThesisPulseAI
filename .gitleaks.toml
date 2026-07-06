@@ -1,0 +1,12 @@
+title = "ThesisPulse AI secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Documented non-secret local development placeholders"
+regexTarget = "match"
+regexes = [
+  '''<approved-local-sql-connection-string>''',
+  '''Server=\(localdb\)\\MSSQLLocalDB;Database=ThesisPulseAI;Integrated Security=true;Encrypt=false''',
+]

@@ -8,6 +8,7 @@ $ErrorActionPreference = "Stop"
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $failures = New-Object System.Collections.Generic.List[string]
+$forbiddenCorsHelper = "Allow" + "AnyOrigin"
 
 function Read-RepositoryFile {
     param([Parameter(Mandatory = $true)][string]$RelativePath)
@@ -64,8 +65,8 @@ foreach ($programFile in $programFiles) {
         "$programFile must activate shared security headers through platform foundation."
     Assert-Contains $program "MapThesisPulsePlatformEndpoints" `
         "$programFile must map platform endpoints."
-    Assert-NotContains $program "AllowAnyOrigin" `
-        "$programFile must not use AllowAnyOrigin."
+    Assert-NotContains $program $forbiddenCorsHelper `
+        "$programFile must not use wildcard CORS helpers."
     Assert-NotContains $program '"*"' `
         "$programFile must not hard-code wildcard origins."
 }
@@ -154,8 +155,9 @@ $allTextFiles = Get-ChildItem -LiteralPath $repositoryRoot -Recurse -File |
 foreach ($file in $allTextFiles) {
     $content = Get-Content -LiteralPath $file.FullName -Raw
     $relativePath = $file.FullName.Substring($repositoryRoot.Length + 1)
-    if ($content.IndexOf("AllowAnyOrigin", [StringComparison]::OrdinalIgnoreCase) -ge 0) {
-        $failures.Add("AllowAnyOrigin is forbidden: $relativePath")
+    if ($relativePath -notlike "scripts/security/Test-ThesisPulseSecurityHeadersCors.ps1" -and
+        $content.IndexOf($forbiddenCorsHelper, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        $failures.Add("Wildcard CORS helper is forbidden: $relativePath")
     }
     if ($relativePath -notlike "docs/*" -and
         $relativePath -notlike "scripts/security/Test-ThesisPulseSecurityHeadersCors.ps1" -and

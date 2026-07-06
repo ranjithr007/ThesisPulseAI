@@ -4,10 +4,12 @@ namespace ThesisPulse.Shared.Observability.Auditing;
 
 public static class OperatorAccessAuditClassifier
 {
-    public static bool ShouldAudit(PathString path) =>
-        Classify(path, method: null) is not
-            OperatorAccessAuditContract.RequestClassPlatformObservability and not
-            OperatorAccessAuditContract.RequestClassAuthentication;
+    public static bool ShouldAudit(PathString path)
+    {
+        var requestClass = Classify(path, method: null);
+        return requestClass != OperatorAccessAuditContract.RequestClassPlatformObservability &&
+            requestClass != OperatorAccessAuditContract.RequestClassAuthentication;
+    }
 
     public static string Classify(PathString path, string? method)
     {

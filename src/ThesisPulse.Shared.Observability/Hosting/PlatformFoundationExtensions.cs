@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ThesisPulse.Shared.Contracts.Api.V1;
 using ThesisPulse.Shared.Infrastructure.Time;
+using ThesisPulse.Shared.Observability.Auditing;
 using ThesisPulse.Shared.Observability.Authentication;
 using ThesisPulse.Shared.Observability.Correlation;
 
@@ -22,7 +23,26 @@ public static class PlatformFoundationExtensions
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton(new PlatformRuntime(DateTimeOffset.UtcNow));
         services.AddHealthChecks();
+        services.AddThesisPulseOperatorAccessAudit();
         services.AddThesisPulseOperatorAuthentication();
+        return services;
+    }
+
+    public static IServiceCollection AddThesisPulseOperatorAccessAudit(
+        this IServiceCollection services)
+    {
+        services.AddOptions<OperatorAccessAuditOptions>();
+        services.AddSingleton(sp =>
+        {
+            var configuration = sp.GetRequiredService<IConfiguration>();
+            var options = configuration
+                .GetSection(OperatorAccessAuditOptions.SectionName)
+                .Get<OperatorAccessAuditOptions>()
+                ?? new OperatorAccessAuditOptions();
+            options.Validate();
+            return options;
+        });
+        services.AddSingleton<IOperatorAccessAuditStore, InMemoryOperatorAccessAuditStore>();
         return services;
     }
 
@@ -78,6 +98,8 @@ public static class PlatformFoundationExtensions
                         CurrentTimeUtc: clock.UtcNow));
                 })
             .AllowAnonymous();
+
+        endpoints.MapThesisPulseOperatorAccessAudit();
 
         return endpoints;
     }

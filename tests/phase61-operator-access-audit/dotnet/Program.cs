@@ -98,19 +98,20 @@ static void StoreRetainsBoundedRecentEntries()
 {
     var store = new InMemoryOperatorAccessAuditStore(new OperatorAccessAuditOptions
     {
-        Capacity = 3,
-        MaximumReadLimit = 2,
+        Capacity = 10,
+        MaximumReadLimit = 3,
     });
 
-    store.Record(NewEntry("/api/v1/one"));
-    store.Record(NewEntry("/api/v1/two"));
-    store.Record(NewEntry("/api/v1/three"));
-    store.Record(NewEntry("/api/v1/four"));
+    for (var index = 1; index <= 12; index++)
+    {
+        store.Record(NewEntry($"/api/v1/{index}"));
+    }
 
     var recent = store.GetRecent(10);
-    AssertEqual(2, recent.Count);
-    AssertEqual("/api/v1/four", recent[0].Path);
-    AssertEqual("/api/v1/three", recent[1].Path);
+    AssertEqual(3, recent.Count);
+    AssertEqual("/api/v1/12", recent[0].Path);
+    AssertEqual("/api/v1/11", recent[1].Path);
+    AssertEqual("/api/v1/10", recent[2].Path);
 }
 
 static void MiddlewareCapturesAllowedRequestWithoutQueryString()

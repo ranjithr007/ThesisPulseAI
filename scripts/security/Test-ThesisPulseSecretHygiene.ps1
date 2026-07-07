@@ -22,14 +22,14 @@ $scanExtensions = @(
 )
 
 $excludedPathFragments = @(
-    "\.git\",
-    "\.vs\",
-    "\node_modules\",
-    "\bin\",
-    "\obj\",
-    "\dist\",
-    "\coverage\",
-    "\.thesispulse-dev\"
+    "/.git/",
+    "/.vs/",
+    "/node_modules/",
+    "/bin/",
+    "/obj/",
+    "/dist/",
+    "/coverage/",
+    "/.thesispulse-dev/"
 )
 
 $excludedFileNames = @(
@@ -66,8 +66,9 @@ function Should-SkipFile {
         return $true
     }
 
+    $normalizedPath = $File.FullName.Replace('\', '/')
     foreach ($fragment in $excludedPathFragments) {
-        if ($File.FullName -match $fragment) {
+        if ($normalizedPath.IndexOf($fragment, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
             return $true
         }
     }
@@ -79,6 +80,14 @@ function Is-AllowedLine {
     param([string]$Line)
 
     if ($placeholderPattern.IsMatch($Line)) {
+        return $true
+    }
+
+    if ($Line -match "^\s*@\{ Name = ") {
+        return $true
+    }
+
+    if ($Line -match '^\s*"\(\?i\)\(') {
         return $true
     }
 

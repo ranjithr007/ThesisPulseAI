@@ -18,6 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate repository hygiene remains intact
+        shell: pwsh
+        run: ./scripts/security/Test-ThesisPulseSecretHygiene.ps1
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
@@ -45,10 +49,6 @@ jobs:
       - name: Validate repository security configuration remains intact
         shell: pwsh
         run: ./scripts/security/Test-ThesisPulseSecurityConfiguration.ps1
-
-      - name: Validate secret hygiene remains intact
-        shell: pwsh
-        run: ./scripts/security/Test-ThesisPulseSecretHygiene.ps1
 
       - name: Restore .NET solution
         run: dotnet restore ThesisPulseAI.sln

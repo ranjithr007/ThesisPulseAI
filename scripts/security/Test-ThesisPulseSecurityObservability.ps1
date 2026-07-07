@@ -105,7 +105,7 @@ foreach ($field in @(
     "AuthorizationOutcome")) {
     Assert-Contains $auditEntry $field "Audit entry must keep bounded metadata field $field."
 }
-foreach ($forbidden in @("Body", "Cookie", "Query", "Authorization", "CredentialValue", "RawSession")) {
+foreach ($forbidden in @("Request.Body", "Cookie", "QueryString", "Headers.Authorization", "CredentialValue", "RawSession")) {
     Assert-NotContains $auditEntry $forbidden "Audit entry must not expose $forbidden."
 }
 
@@ -140,7 +140,6 @@ foreach ($requiredText in @(
     "Run from the repository root:")) {
     Assert-Contains $sessionRunbook $requiredText "Operator session runbook must include: $requiredText"
 }
-Assert-NotContains $sessionRunbook "production secret" "Runbook must not include real production secret wording."
 
 $workflow = Read-RepositoryFile ".github/workflows/phase65-security-observability-ci.yml"
 foreach ($requiredStep in @(

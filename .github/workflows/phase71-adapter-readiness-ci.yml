@@ -1,0 +1,37 @@
+name: Phase 7.1 Adapter Readiness CI
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [phase71-readiness]
+
+permissions:
+  contents: read
+
+jobs:
+  adapter-readiness:
+    name: Adapter readiness contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Validate Phase 7.1 adapter readiness
+        shell: pwsh
+        run: ./scripts/phase71/Check-AdapterReadiness.ps1
+
+      - name: Validate Phase 7.0 readiness remains intact
+        shell: pwsh
+        run: ./scripts/security/Test-ThesisPulseShadowReadiness.ps1
+
+      - name: Restore .NET solution
+        run: dotnet restore ThesisPulseAI.sln
+
+      - name: Build .NET solution
+        run: dotnet build ThesisPulseAI.sln --configuration Release --no-restore --verbosity minimal

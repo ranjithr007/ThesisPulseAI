@@ -87,7 +87,7 @@ function Is-AllowedLine {
         return $true
     }
 
-    if ($Line -match "^\s*\"\(\?i\)\(") {
+    if ($Line -match '^\s*"\(\?i\)\(') {
         return $true
     }
 

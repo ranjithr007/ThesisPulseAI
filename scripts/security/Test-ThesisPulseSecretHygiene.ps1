@@ -67,6 +67,11 @@ function Should-SkipFile {
     }
 
     $normalizedPath = $File.FullName.Replace('\', '/')
+    $relativeNormalizedPath = $normalizedPath.Substring($repositoryRoot.Replace('\', '/').Length + 1)
+    if ($relativeNormalizedPath -eq "scripts/security/Test-ThesisPulseSecretHygiene.ps1") {
+        return $true
+    }
+
     foreach ($fragment in $excludedPathFragments) {
         if ($normalizedPath.IndexOf($fragment, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
             return $true

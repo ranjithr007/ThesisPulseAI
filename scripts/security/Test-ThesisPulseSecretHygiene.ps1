@@ -144,7 +144,7 @@ foreach ($file in $files) {
             $value = $assignment.Groups[2].Value
             if ($value.Length -ge 12 -and
                 $value -notmatch "(?i)(placeholder|redacted|example|sample|dummy|test|local|generated|unversioned|your_|_here|localhost)" -and
-                $value -notmatch "(?i)^(self\.)?(internal_api_key|api_key|api_secret|client_secret|signing_key|password|passwd|pwd|access_token|refresh_token|bearer_token|connection_string|database_connection_string)$" -and
+                $value -notmatch "(?i)^(self\.)?(internal_key|internal_api_key|api_key|api_secret|client_secret|signing_key|password|passwd|pwd|access_token|refresh_token|bearer_token|connection_string|database_connection_string)$" -and
                 $value -notmatch "^[A-Z_]+$" -and
                 $value -notmatch "^\$") {
                 Add-Finding -RelativePath $relativePath -LineNumber ($index + 1) -RuleName "SecretLikeAssignment"

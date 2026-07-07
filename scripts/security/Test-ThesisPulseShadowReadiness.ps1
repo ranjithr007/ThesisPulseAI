@@ -69,7 +69,7 @@ Assert-Contains $executionProgram "liveExecutionAuthority = false" `
 
 $options = Read-RepositoryFile "src/ThesisPulse.Execution.Service/ShadowReadinessOptions.cs"
 foreach ($required in @(
-    "SectionName = \"ShadowReadiness\"",
+    'SectionName = "ShadowReadiness"',
     "public bool Enabled",
     "public string Mode",
     "public string Environment",

@@ -122,9 +122,15 @@ if (fillOptions.Enabled &&
         "Automatic PAPER fill simulation requires SQL Server persistence.");
 }
 
+var shadowReadinessOptions = builder.Configuration
+    .GetSection(ShadowReadinessOptions.SectionName)
+    .Get<ShadowReadinessOptions>() ?? new ShadowReadinessOptions();
+shadowReadinessOptions.Validate();
+
 builder.Services.AddSingleton(automaticOptions);
 builder.Services.AddSingleton(submissionOptions);
 builder.Services.AddSingleton(fillOptions);
+builder.Services.AddSingleton(shadowReadinessOptions);
 builder.Services.AddSingleton<AutomaticPaperExecutionWorkerState>();
 builder.Services.AddSingleton<AutomaticPaperSubmissionWorkerState>();
 builder.Services.AddSingleton<AutomaticPaperFillWorkerState>();
@@ -189,6 +195,7 @@ app.UseCors(frontendCorsPolicy);
 app.MapThesisPulsePlatformEndpoints("ThesisPulse.Execution.Service");
 app.MapPaperTradeLifecycleEndpoints();
 app.MapPaperTradeLifecycleAcceptanceEndpoints();
+app.MapShadowReadinessEndpoints(liveExecutionEnabled);
 app.MapGet("/api/v1/status", (
     AutomaticPaperExecutionWorkerState automaticState,
     AutomaticPaperSubmissionWorkerState submissionState,
@@ -230,6 +237,8 @@ app.MapGet("/api/v1/status", (
     paperGateway = "INTERNAL_DETERMINISTIC",
     brokerSubmissionAuthority = false,
     liveExecutionAuthority = false,
+    shadowReadinessStatusAvailable = true,
+    shadowReadinessAuthority = false,
     idempotencyRequired = true,
 }));
 app.MapGet(

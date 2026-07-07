@@ -73,6 +73,10 @@ Assert-Contains $dependencyReview "dependency-graph-api.json" "Dependency graph 
 Assert-Contains $dependencyReview "steps.graph.outputs.available != 'true'" "Dependency graph unavailability must fail closed."
 Assert-Contains $dependencyReview "steps.review.outcome == 'failure'" "Dependency policy findings must fail closed."
 Assert-Contains $dependencyReview "Dependency graph is unavailable" "Dependency graph failures must provide an actionable owner message."
+Assert-Contains $dependencyReview "Security > Code security and analysis" "Dependency graph failures must include the repository settings path."
+Assert-Contains $dependencyReview "docs/security/repository-security.md#handling-an-unavailable-dependency-graph" "Dependency graph failures must link the runbook anchor."
+Assert-Contains $dependencyReview "Issue: #166 Phase 6.4" "Dependency review failures must reference the Phase 6.4 tracking issue."
+Assert-Contains $dependencyReview "This gate is intentionally fail-closed" "Dependency graph failures must clearly state fail-closed behavior."
 Assert-Contains $dependencyReview "exit 1" "Dependency review enforcement must return a non-zero exit code."
 Assert-Contains $dependencyReview "contents: read" "Dependency review must use read-only contents permission."
 Assert-NotContains $dependencyReview "warn-only: true" "Dependency review must never convert findings into warnings only."
@@ -105,6 +109,12 @@ foreach ($ecosystem in @("nuget", "npm", "pip", "github-actions")) {
 Assert-NotContains $dependabot "auto-merge" "Dependabot configuration must not enable automatic merging."
 Assert-Contains $dependabot "open-pull-requests-limit: 5" "Dependabot pull-request volume must remain bounded."
 
+$repositorySecurity = Read-RepositoryFile "docs/security/repository-security.md"
+Assert-Contains $repositorySecurity "Phase 6.4 hardens the dependency and supply-chain operator path" "Repository security runbook must mention Phase 6.4 scope."
+Assert-Contains $repositorySecurity "Dependabot package-bump review path" "Repository security runbook must document Dependabot review steps."
+Assert-Contains $repositorySecurity "A version bump is not safe merely because it is automated" "Repository security runbook must warn against blind dependency bump approval."
+Assert-Contains $repositorySecurity "Do not add `warn-only`, skip the gate" "Repository security runbook must prohibit dependency-review bypass."
+
 $pythonProject = Read-RepositoryFile "ai-python/pyproject.toml"
 Assert-Contains $pythonProject '"pip-audit==2.10.1"' "The Python audit tool must be pinned in the development dependency set."
 
@@ -123,13 +133,13 @@ foreach ($relativePath in $workflowFiles) {
 }
 
 if ($failures.Count -gt 0) {
-    [Console]::Error.WriteLine("Phase 5.9 security configuration validation failed:")
+    [Console]::Error.WriteLine("Phase 6.4 security configuration validation failed:")
     foreach ($failure in $failures) {
         [Console]::Error.WriteLine("- $failure")
     }
     exit 1
 }
 
-Write-Host "Phase 5.9 security configuration validation passed."
-Write-Host "Validated CodeQL language coverage, least-privilege permissions, dependency audits, secret scanning, and Dependabot ecosystems."
+Write-Host "Phase 6.4 security configuration validation passed."
+Write-Host "Validated CodeQL language coverage, least-privilege permissions, dependency audits, secret scanning, Dependabot ecosystems, fail-closed dependency review diagnostics, and supply-chain runbook coverage."
 exit 0

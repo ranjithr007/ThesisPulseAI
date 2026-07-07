@@ -113,7 +113,7 @@ $repositorySecurity = Read-RepositoryFile "docs/security/repository-security.md"
 Assert-Contains $repositorySecurity "Phase 6.4 hardens the dependency and supply-chain operator path" "Repository security runbook must mention Phase 6.4 scope."
 Assert-Contains $repositorySecurity "Dependabot package-bump review path" "Repository security runbook must document Dependabot review steps."
 Assert-Contains $repositorySecurity "A version bump is not safe merely because it is automated" "Repository security runbook must warn against blind dependency bump approval."
-Assert-Contains $repositorySecurity "Do not add `warn-only`, skip the gate" "Repository security runbook must prohibit dependency-review bypass."
+Assert-Contains $repositorySecurity 'Do not add `warn-only`, skip the gate' "Repository security runbook must prohibit dependency-review bypass."
 
 $pythonProject = Read-RepositoryFile "ai-python/pyproject.toml"
 Assert-Contains $pythonProject '"pip-audit==2.10.1"' "The Python audit tool must be pinned in the development dependency set."

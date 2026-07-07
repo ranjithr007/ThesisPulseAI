@@ -28,6 +28,8 @@ jobs:
               message: null,
               documentationUrl: null,
               changeCount: null,
+              remediation: 'Enable repository Settings > Security > Code security and analysis > Dependency graph, then rerun failed jobs.',
+              runbook: 'docs/security/repository-security.md#handling-an-unavailable-dependency-graph',
             };
             try {
               const response = await github.request(
@@ -54,9 +56,13 @@ jobs:
             }
             const available = report.httpStatus === 200;
             core.setOutput('available', available ? 'true' : 'false');
+            core.setOutput('http_status', String(report.httpStatus ?? 'unknown'));
+            core.setOutput('api_message', report.message ?? 'none');
             core.info(`Dependency graph API status: ${report.httpStatus}`);
             core.info(`Dependency graph API message: ${report.message ?? 'none'}`);
             core.info(`Dependency graph change count: ${report.changeCount}`);
+            core.info(`Dependency graph remediation: ${report.remediation}`);
+            core.info(`Dependency graph runbook: ${report.runbook}`);
             fs.writeFileSync(
               'dependency-graph-api.json',
               JSON.stringify(report, null, 2),
@@ -85,12 +91,16 @@ jobs:
           COMMENT_CONTENT: ${{ steps.review.outputs.comment-content }}
           REVIEW_OUTCOME: ${{ steps.review.outcome }}
           GRAPH_AVAILABLE: ${{ steps.graph.outputs.available }}
+          GRAPH_HTTP_STATUS: ${{ steps.graph.outputs.http_status }}
+          GRAPH_API_MESSAGE: ${{ steps.graph.outputs.api_message }}
         run: |
           import json
           import os
 
           report = {
               "graphAvailable": os.environ.get("GRAPH_AVAILABLE", "false") == "true",
+              "graphHttpStatus": os.environ.get("GRAPH_HTTP_STATUS", "unknown"),
+              "graphApiMessage": os.environ.get("GRAPH_API_MESSAGE", "none"),
               "reviewOutcome": os.environ.get("REVIEW_OUTCOME", "skipped"),
               "dependencyChangeCount": 0,
               "commentContent": os.environ.get("COMMENT_CONTENT", "")[:4000],
@@ -113,6 +123,8 @@ jobs:
               ("denied", "DENIED_CHANGES"),
           )
           print(f"Dependency graph available: {report['graphAvailable']}")
+          print(f"Dependency graph HTTP status: {report['graphHttpStatus']}")
+          print(f"Dependency graph API message: {report['graphApiMessage']}")
           print(f"Dependency review outcome: {report['reviewOutcome']}")
           print(f"Dependency changes reported: {report['dependencyChangeCount']}")
           for label, variable in mappings:
@@ -168,8 +180,23 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ steps.graph.outputs.available }}" != "true" ]]; then
-            echo "Dependency graph is unavailable. Enable it under repository Settings > Security > Code security and analysis > Dependency graph, then rerun this workflow."
+            cat <<'EOF'
+          Dependency graph is unavailable, so dependency review cannot prove that this pull request is safe.
+
+          Required owner action:
+            1. Open repository Settings.
+            2. Open Security > Code security and analysis.
+            3. Enable Dependency graph.
+            4. Re-run failed jobs for Security Dependency Review.
+
+          Runbook: docs/security/repository-security.md#handling-an-unavailable-dependency-graph
+          Issue: #166 Phase 6.4 dependency and supply-chain policy hardening
+
+          This gate is intentionally fail-closed. Do not add warn-only, skip this job, or treat skipped dependency-review outputs as a pass.
+          EOF
           else
             echo "Dependency review found a vulnerability or disallowed license. See the action summary and sanitized diagnostic artifact."
+            echo "Runbook: docs/security/repository-security.md#handling-a-dependency-finding"
+            echo "Issue: #166 Phase 6.4 dependency and supply-chain policy hardening"
           fi
           exit 1

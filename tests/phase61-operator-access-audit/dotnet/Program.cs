@@ -118,7 +118,7 @@ static void MiddlewareCapturesAllowedRequestWithoutQueryString()
 {
     var store = CreateStore();
     var context = NewContext("GET", "/api/v1/signals", StatusCodes.Status200OK);
-    context.Request.QueryString = new QueryString("?token=secret&password=hidden");
+    context.Request.QueryString = new QueryString("?token=REDACTED&password=REDACTED");
     context.User = PrincipalWith(
         subject: "local:operator",
         name: "Local PAPER Operator",

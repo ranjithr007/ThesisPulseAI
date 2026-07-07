@@ -1,6 +1,6 @@
 # Repository security and supply-chain controls
 
-Phase 5.9 establishes repository-level security gates for ThesisPulse AI before runtime authentication, shadow trading, or restricted-live work begins.
+Phase 5.9 establishes repository-level security gates for ThesisPulse AI before runtime authentication, shadow trading, or restricted-live work begins. Phase 6.4 hardens the dependency and supply-chain operator path so dependency review failures are actionable without weakening fail-closed behavior.
 
 ## Required repository setting
 
@@ -33,6 +33,8 @@ It runs for pull requests to `main`, pushes to `main`, manual dispatch, and a we
 
 The workflow first confirms that GitHub's dependency graph comparison endpoint is available. It then runs the dependency policy review and uploads bounded diagnostics containing only HTTP status, API message, dependency counts, package identifiers, advisory identifiers, and license identifiers. Tokens and dependency contents are not written to artifacts.
 
+The workflow prints the repository setting path, this runbook anchor, and the Phase 6.4 tracking issue when the dependency graph is unavailable. The failure is intentional and must be fixed through repository settings, not workflow bypass.
+
 The workflow does not approve, merge, or update dependencies automatically.
 
 ### Ecosystem audits
@@ -62,6 +64,8 @@ NuGet findings fail for any reported vulnerable package. npm fails at high sever
 
 Minor and patch updates are grouped, open pull requests are bounded, and automatic merge is intentionally disabled.
 
+Dependabot pull requests must still pass the relevant build and security gates. A version bump is not safe merely because it is automated.
+
 ## Local validation
 
 From the repository root:
@@ -70,7 +74,7 @@ From the repository root:
 .\scripts\security\Test-ThesisPulseSecurityConfiguration.ps1
 ```
 
-The command validates security workflow presence, CodeQL language coverage, least-privilege permissions, dependency-graph preflight behavior, audit thresholds, Gitleaks configuration, Dependabot ecosystems, and the pinned Python audit tool.
+The command validates security workflow presence, CodeQL language coverage, least-privilege permissions, dependency-graph preflight behavior, audit thresholds, Gitleaks configuration, Dependabot ecosystems, bounded dependency-review diagnostics, and the pinned Python audit tool.
 
 Manual ecosystem checks can also be run independently:
 
@@ -88,6 +92,18 @@ pip-audit .\ai-python --strict --progress-spinner off
 ```
 
 These commands inspect dependencies only. They do not update or fix packages automatically.
+
+## Dependabot package-bump review path
+
+Use this path for NuGet, npm, Python and GitHub Actions dependency PRs:
+
+1. Confirm the PR changes only the intended manifest or lockfile plus expected generated metadata.
+2. Read release notes for direct dependencies and check for breaking changes, especially auth, serialization, networking, broker, database and build-tool packages.
+3. Confirm **Security Dependency Review** completed successfully after Dependency graph preflight.
+4. Confirm ecosystem audits completed for the affected package ecosystem.
+5. Confirm relevant application build and test workflows stayed green.
+6. Prefer a dedicated follow-up PR for code changes required by a dependency bump.
+7. Do not enable auto-merge for dependency updates that touch execution, broker, portfolio, risk, authentication or configuration boundaries.
 
 ## Handling a dependency finding
 

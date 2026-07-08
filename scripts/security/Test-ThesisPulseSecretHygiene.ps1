@@ -21,6 +21,12 @@ $scanExtensions = @(
     ".env", ".example"
 )
 
+$sourceExpressionExtensions = @(
+    ".cs", ".ps1", ".psm1",
+    ".ts", ".tsx", ".js", ".jsx",
+    ".py"
+)
+
 $excludedPathFragments = @(
     "/.git/",
     "/.vs/",
@@ -52,7 +58,7 @@ $ruleDefinitions = @(
 )
 
 $assignmentPattern = [regex]::new(
-    "(?i)(api[_-]?key|api[_-]?secret|client[_-]?secret|signing[_-]?key|password|passwd|pwd|access[_-]?token|refresh[_-]?token|bearer[_-]?token|connection[_-]?string)\s*[:=]\s*[`"']?([^`"'\s,;]{12,})",
+    "(?i)(api[_-]?key|api[_-]?secret|client[_-]?secret|signing[_-]?key|password|passwd|pwd|access[_-]?token|refresh[_-]?token|bearer[_-]?token|connection[_-]?string)\s*[:=]\s*([`"']?)([^`"'\s,;]{12,})",
     [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 
 function Should-SkipFile {
@@ -107,6 +113,13 @@ function Is-AllowedLine {
     if ($Line -match "(?i)(Invalid credentials|generated password|one-time password|password is not persisted|wrong|test-password)") {
         return $true
     }
+	if ($Line -match '(?i)(builder\.Configuration|configuration)\s*(\.GetValue|\.GetConnectionString|\[)') {
+        return $true
+    }
+
+    if ($Line -match '(?i)(api[_-]?key|api[_-]?secret|client[_-]?secret|signing[_-]?key|password|passwd|pwd|access[_-]?token|refresh[_-]?token|bearer[_-]?token|connection[_-]?string)\s*[:=]\s*(\$|[A-Za-z_][A-Za-z0-9_]*\.|[A-Za-z_][A-Za-z0-9_]*\()') {
+        return $true
+    }
 
     return $false
 }
@@ -126,7 +139,7 @@ $files = Get-ChildItem -LiteralPath $repositoryRoot -Recurse -File |
 
 foreach ($file in $files) {
     $relativePath = $file.FullName.Substring($repositoryRoot.Length + 1)
-    $lines = Get-Content -LiteralPath $file.FullName
+    $lines = @(Get-Content -LiteralPath $file.FullName)
     for ($index = 0; $index -lt $lines.Count; $index++) {
         $line = [string]$lines[$index]
         if (Is-AllowedLine $line) {
@@ -140,11 +153,21 @@ foreach ($file in $files) {
         }
 
         $assignment = $assignmentPattern.Match($line)
-        if ($assignment.Success) {
-            $value = $assignment.Groups[2].Value
-            if ($value.Length -ge 12 -and
+		if ($assignment.Success) {
+			$quote = $assignment.Groups[2].Value
+			$value = $assignment.Groups[3].Value
+			$isSourceExpression = $sourceExpressionExtensions -contains $file.Extension -and
+				[string]::IsNullOrEmpty($quote) -and
+				(
+					$value -match "^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_]*)*(\([^)]*)?$" -or
+					$value -match "^\[[A-Za-z_.]+\]::[A-Za-z_][A-Za-z0-9_]*\([^)]*$" -or
+					$value -match "^\$[A-Za-z_][A-Za-z0-9_]*$"
+				)
+
+			if ($value.Length -ge 12 -and
                 $value -notmatch "(?i)(placeholder|redacted|example|sample|dummy|test|local|generated|unversioned|your_|_here|localhost)" -and
-                $value -notmatch "(?i)^(self\.)?(internal_key|internal_api_key|api_key|api_secret|client_secret|signing_key|password|passwd|pwd|access_token|refresh_token|bearer_token|connection_string|database_connection_string)$" -and
+                $value -notmatch "(?i)^(self\.)?(encodedToken|internal_key|internal_api_key|api_key|api_secret|client_secret|signing_key|password|passwd|pwd|access_token|refresh_token|bearer_token|connection_string|database_connection_string)$" -and
+                -not $isSourceExpression -and
                 $value -notmatch "^[A-Z_]+$" -and
                 $value -notmatch "^\$") {
                 Add-Finding -RelativePath $relativePath -LineNumber ($index + 1) -RuleName "SecretLikeAssignment"

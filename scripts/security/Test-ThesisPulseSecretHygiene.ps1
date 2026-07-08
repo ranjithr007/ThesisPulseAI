@@ -21,6 +21,12 @@ $scanExtensions = @(
     ".env", ".example"
 )
 
+$sourceExpressionExtensions = @(
+    ".cs", ".ps1", ".psm1",
+    ".ts", ".tsx", ".js", ".jsx",
+    ".py"
+)
+
 $excludedPathFragments = @(
     "/.git/",
     "/.vs/",
@@ -142,10 +148,13 @@ foreach ($file in $files) {
         $assignment = $assignmentPattern.Match($line)
         if ($assignment.Success) {
             $value = $assignment.Groups[2].Value
+            $isSourceExpression = $sourceExpressionExtensions -contains $file.Extension -and
+                $value -match "^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*(\([^)]*\))?$"
+
             if ($value.Length -ge 12 -and
                 $value -notmatch "(?i)(placeholder|redacted|example|sample|dummy|test|local|generated|unversioned|your_|_here|localhost)" -and
                 $value -notmatch "(?i)^(self\.)?(encodedToken|internal_key|internal_api_key|api_key|api_secret|client_secret|signing_key|password|passwd|pwd|access_token|refresh_token|bearer_token|connection_string|database_connection_string)$" -and
-                $value -notmatch "^string\.IsNullOrWhiteSpace\(" -and
+                -not $isSourceExpression -and
                 $value -notmatch "^[A-Z_]+$" -and
                 $value -notmatch "^\$") {
                 Add-Finding -RelativePath $relativePath -LineNumber ($index + 1) -RuleName "SecretLikeAssignment"

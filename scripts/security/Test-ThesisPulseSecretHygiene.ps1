@@ -30,6 +30,8 @@ $sourceExpressionExtensions = @(
 $excludedPathFragments = @(
     "/.git/",
     "/.vs/",
+    "/.venv/",
+    "/venv/",
     "/node_modules/",
     "/bin/",
     "/obj/",
@@ -37,7 +39,6 @@ $excludedPathFragments = @(
     "/coverage/",
     "/.thesispulse-dev/"
 )
-
 $excludedFileNames = @(
     "package-lock.json",
     "project.assets.json",

@@ -99,3 +99,8 @@
 /src/**/appsettings.*.Local.json
 *.user
 *.suo
+
+# Python local virtual environments
+.venv/
+venv/
+/ai-python/.venv/

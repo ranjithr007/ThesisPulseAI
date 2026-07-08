@@ -104,3 +104,15 @@
 .venv/
 venv/
 /ai-python/.venv/
+/src/ThesisPulse.Execution.Service/bin/Release/net8.0
+/src/ThesisPulse.Infrastructure.Brokers.Upstox/bin/Release/net8.0
+/src/ThesisPulse.MarketData.Service/bin/Release/net8.0
+/src/ThesisPulse.Operations.Service/bin/Release/net8.0
+/src/ThesisPulse.Portfolio.Service/bin/Release/net8.0
+/src/ThesisPulse.Risk.Service/bin/Release/net8.0
+/src/ThesisPulse.Shared.Contracts/bin/Release/net8.0
+/src/ThesisPulse.Shared.Infrastructure/bin/Release/net8.0
+/src/ThesisPulse.Shared.Observability/bin/Release/net8.0
+/src/ThesisPulse.Signal.Service/bin/Release/net8.0
+/src/ThesisPulse.Thesis.Service/bin/Release/net8.0
+/src/ThesisPulse.Trading.Api/bin/Release/net8.0

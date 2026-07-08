@@ -291,7 +291,7 @@ static AutomaticPaperSubmissionProcessor CreateProcessor(
             MaximumAttempts = maximumAttempts,
             MaximumOperationalSnapshotAgeSeconds = 30,
             OperationsServiceBaseUrl = "http://localhost:59485",
-            InternalApiKey = "acceptance-key",
+            InternalApiKey = "test-acceptance-key",
             TimeoutSeconds = 10,
         },
         queue,

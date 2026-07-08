@@ -214,7 +214,7 @@ static AutomaticPaperExecutionProcessor CreateProcessor(
             BatchSize = 10,
             MaximumAttempts = maximumAttempts,
             OperationsServiceBaseUrl = "http://localhost:59485",
-            InternalApiKey = "acceptance-key",
+            InternalApiKey = "test-acceptance-key",
             TimeoutSeconds = 10,
         },
         queue,

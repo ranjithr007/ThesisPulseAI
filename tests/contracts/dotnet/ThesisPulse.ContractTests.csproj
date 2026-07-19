@@ -8,6 +8,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="JsonSchema.Net" Version="9.2.2" />
+    <PackageReference Include="JsonSchema.Net" Version="9.3.0" />
   </ItemGroup>
 </Project>
